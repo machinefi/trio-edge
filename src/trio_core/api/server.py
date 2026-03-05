@@ -1,0 +1,245 @@
+"""FastAPI server for TrioCore."""
+
+from __future__ import annotations
+
+import json
+import logging
+import time
+import uuid
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+
+from trio_core.api.models import (
+    ChatCompletionChunk,
+    ChatCompletionChoice,
+    ChatCompletionRequest,
+    ChatCompletionResponse,
+    ChatMessage,
+    ContentPart,
+    DeltaContent,
+    HealthResponse,
+    InferenceMetricsResponse,
+    ModelInfo,
+    ModelListResponse,
+    StreamChoice,
+    Usage,
+    VideoAnalyzeRequest,
+    VideoAnalyzeResponse,
+)
+from trio_core.config import EngineConfig
+from trio_core.engine import TrioCore
+
+logger = logging.getLogger(__name__)
+
+_engine: TrioCore | None = None
+
+
+def get_engine() -> TrioCore:
+    if _engine is None or not _engine._loaded:
+        raise HTTPException(503, "Engine not loaded")
+    return _engine
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global _engine
+    config = app.state.config if hasattr(app.state, "config") else EngineConfig()
+    backend = getattr(app.state, "backend", None)
+    _engine = TrioCore(config, backend=backend)
+    logger.info("Loading model: %s", config.model)
+    _engine.load()
+    logger.info("Engine ready: backend=%s", _engine._backend.backend_name if _engine._backend else "none")
+    yield
+    logger.info("Shutting down")
+
+
+def create_app(config: EngineConfig | None = None, backend: str | None = None) -> FastAPI:
+    """Create and configure the FastAPI app."""
+    app = FastAPI(
+        title="TrioCore",
+        description="Portable video inference engine for VLMs",
+        version="0.1.0",
+        lifespan=lifespan,
+    )
+    app.state.config = config or EngineConfig()
+    app.state.backend = backend
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    _register_routes(app)
+    return app
+
+
+def _register_routes(app: FastAPI) -> None:
+
+    @app.get("/health", response_model=HealthResponse)
+    async def health():
+        if _engine is None:
+            return HealthResponse(status="not_loaded", model="none", loaded=False)
+        return HealthResponse(**_engine.health())
+
+    @app.get("/v1/models", response_model=ModelListResponse)
+    async def list_models():
+        engine = get_engine()
+        return ModelListResponse(
+            data=[ModelInfo(id=engine.config.model)]
+        )
+
+    @app.post("/v1/video/analyze")
+    async def analyze_video(request: VideoAnalyzeRequest):
+        engine = get_engine()
+
+        if request.stream:
+            return StreamingResponse(
+                _stream_video_analyze(engine, request),
+                media_type="text/event-stream",
+            )
+
+        result = engine.analyze_video(
+            video=request.video,
+            prompt=request.prompt,
+            max_tokens=request.max_tokens,
+            temperature=request.temperature,
+        )
+
+        return VideoAnalyzeResponse(
+            text=result.text,
+            model=engine.config.model,
+            metrics=InferenceMetricsResponse(**result.metrics.__dict__),
+        )
+
+    @app.post("/v1/chat/completions")
+    async def chat_completions(request: ChatCompletionRequest):
+        engine = get_engine()
+
+        # Extract video and text from messages
+        videos, prompt = _extract_from_messages(request.messages)
+
+        if not videos:
+            raise HTTPException(400, "No video content found in messages. Use content parts with type='video'.")
+
+        max_tokens = request.max_tokens or engine.config.max_tokens
+        temperature = request.temperature if request.temperature is not None else engine.config.temperature
+
+        if request.stream:
+            return StreamingResponse(
+                _stream_chat_completion(engine, videos[0], prompt, request, max_tokens, temperature),
+                media_type="text/event-stream",
+            )
+
+        result = engine.analyze_video(
+            video=videos[0],
+            prompt=prompt,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+
+        return ChatCompletionResponse(
+            model=engine.config.model,
+            choices=[ChatCompletionChoice(
+                message={"role": "assistant", "content": result.text},
+            )],
+            usage=Usage(
+                prompt_tokens=result.metrics.prompt_tokens,
+                completion_tokens=result.metrics.completion_tokens,
+                total_tokens=result.metrics.prompt_tokens + result.metrics.completion_tokens,
+            ),
+        )
+
+
+def _extract_from_messages(messages: list[ChatMessage]) -> tuple[list[str], str]:
+    """Extract video paths and text prompt from chat messages."""
+    videos: list[str] = []
+    texts: list[str] = []
+
+    for msg in messages:
+        if isinstance(msg.content, str):
+            texts.append(msg.content)
+            continue
+        for part in msg.content:
+            if part.type == "video":
+                src = part.video or (part.video_url or {}).get("url")
+                if src:
+                    videos.append(src)
+            elif part.type == "text" and part.text:
+                texts.append(part.text)
+
+    return videos, " ".join(texts) if texts else "Describe this video."
+
+
+async def _stream_video_analyze(
+    engine: TrioCore, request: VideoAnalyzeRequest
+) -> AsyncIterator[str]:
+    """Stream /v1/video/analyze response as SSE."""
+    async for chunk in engine.stream_analyze(
+        video=request.video,
+        prompt=request.prompt,
+        max_tokens=request.max_tokens,
+        temperature=request.temperature,
+    ):
+        if chunk.get("metrics"):
+            data = {"text": "", "finished": True, "metrics": chunk["metrics"].__dict__}
+        else:
+            data = {"text": chunk["text"], "finished": chunk["finished"]}
+        yield f"data: {json.dumps(data)}\n\n"
+    yield "data: [DONE]\n\n"
+
+
+async def _stream_chat_completion(
+    engine: TrioCore,
+    video: str,
+    prompt: str,
+    request: ChatCompletionRequest,
+    max_tokens: int,
+    temperature: float,
+) -> AsyncIterator[str]:
+    """Stream OpenAI-compatible SSE for /v1/chat/completions."""
+    response_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
+    model = engine.config.model
+
+    # First chunk: role
+    first = ChatCompletionChunk(
+        id=response_id,
+        model=model,
+        choices=[StreamChoice(delta=DeltaContent(role="assistant"))],
+    )
+    yield f"data: {first.model_dump_json(exclude_none=True)}\n\n"
+
+    # Content chunks
+    async for chunk in engine.stream_analyze(
+        video=video,
+        prompt=prompt,
+        max_tokens=max_tokens,
+        temperature=temperature,
+    ):
+        if chunk.get("finished") and chunk.get("metrics"):
+            # Final chunk with finish_reason
+            final = ChatCompletionChunk(
+                id=response_id,
+                model=model,
+                choices=[StreamChoice(
+                    delta=DeltaContent(content=""),
+                    finish_reason="stop",
+                )],
+            )
+            yield f"data: {final.model_dump_json(exclude_none=True)}\n\n"
+            break
+
+        if chunk.get("text"):
+            content_chunk = ChatCompletionChunk(
+                id=response_id,
+                model=model,
+                choices=[StreamChoice(delta=DeltaContent(content=chunk["text"]))],
+            )
+            yield f"data: {content_chunk.model_dump_json(exclude_none=True)}\n\n"
+
+    yield "data: [DONE]\n\n"
