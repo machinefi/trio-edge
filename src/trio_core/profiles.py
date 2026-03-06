@@ -237,6 +237,103 @@ PROFILES: dict[str, ModelProfile] = {
         model_size_gb=2.5,
         inference_memory_gb=3.5,
     ),
+    # ── Gemma 3 ─────────────────────────────────────────────────────────
+    "gemma3-4b": ModelProfile(
+        family="gemma3",
+        param_size="4B",
+        spatial_patch=14,       # SigLIP ViT-SO400M: patch=14
+        temporal_patch=1,       # No temporal patching (image model)
+        spatial_merge=1,        # No PatchMerger, uses MLP projector
+        context_window=128_000,
+        max_visual_tokens=256,  # Fixed 256 tokens per 896x896 crop
+        default_visual_ratio=0.002,
+        recommended_fps=1.0,    # Image-oriented, low FPS for video
+        min_frames=1,
+        max_frames=16,
+        has_deltanet=False,
+        deltanet_layers=0,
+        full_attn_layers=26,
+        kv_heads=4,
+        model_size_gb=2.5,
+        inference_memory_gb=3.5,
+    ),
+    "gemma3-12b": ModelProfile(
+        family="gemma3",
+        param_size="12B",
+        spatial_patch=14,
+        temporal_patch=1,
+        spatial_merge=1,
+        context_window=128_000,
+        max_visual_tokens=256,
+        default_visual_ratio=0.002,
+        recommended_fps=1.0,
+        min_frames=1,
+        max_frames=16,
+        has_deltanet=False,
+        deltanet_layers=0,
+        full_attn_layers=48,
+        kv_heads=8,
+        model_size_gb=7.0,
+        inference_memory_gb=10.0,
+    ),
+    # ── SmolVLM ─────────────────────────────────────────────────────────
+    "smolvlm-256m": ModelProfile(
+        family="smolvlm",
+        param_size="256M",
+        spatial_patch=16,       # SigLIP-B/16
+        temporal_patch=1,
+        spatial_merge=1,        # Pixel shuffle + MLP projection
+        context_window=8_192,
+        max_visual_tokens=64,   # 64 tokens per 512x512 crop
+        default_visual_ratio=0.008,
+        recommended_fps=1.0,
+        min_frames=1,
+        max_frames=16,
+        has_deltanet=False,
+        deltanet_layers=0,
+        full_attn_layers=24,
+        kv_heads=3,
+        model_size_gb=0.3,
+        inference_memory_gb=0.5,
+    ),
+    "smolvlm-500m": ModelProfile(
+        family="smolvlm",
+        param_size="500M",
+        spatial_patch=16,
+        temporal_patch=1,
+        spatial_merge=1,
+        context_window=8_192,
+        max_visual_tokens=64,
+        default_visual_ratio=0.008,
+        recommended_fps=1.0,
+        min_frames=1,
+        max_frames=16,
+        has_deltanet=False,
+        deltanet_layers=0,
+        full_attn_layers=24,
+        kv_heads=3,
+        model_size_gb=0.5,
+        inference_memory_gb=0.8,
+    ),
+    "smolvlm-2.2b": ModelProfile(
+        family="smolvlm",
+        param_size="2.2B",
+        spatial_patch=14,       # SigLIP-SO400M for 2.2B
+        temporal_patch=1,
+        spatial_merge=1,
+        context_window=16_384,
+        max_visual_tokens=256,
+        default_visual_ratio=0.016,
+        recommended_fps=1.0,
+        min_frames=1,
+        max_frames=32,
+        has_deltanet=False,
+        deltanet_layers=0,
+        full_attn_layers=24,
+        kv_heads=4,
+        model_size_gb=1.5,
+        inference_memory_gb=2.0,
+    ),
 }
 
 # Aliases for common HuggingFace model IDs
@@ -255,10 +352,19 @@ _PATTERNS: list[tuple[str, str]] = [
     (r"qwen3.*vl.*4b", "qwen3-vl-4b"),
     (r"qwen2\.?5.*vl.*3b", "qwen2.5-vl-3b"),
     (r"qwen2\.?5.*vl.*7b", "qwen2.5-vl-7b"),
+    # Gemma 3
+    (r"gemma.*3.*12b", "gemma3-12b"),
+    (r"gemma.*3.*4b", "gemma3-4b"),
+    # SmolVLM
+    (r"smolvlm.*2\.?2b", "smolvlm-2.2b"),
+    (r"smolvlm.*500m", "smolvlm-500m"),
+    (r"smolvlm.*256m", "smolvlm-256m"),
     # Broader fallbacks
     (r"qwen3\.?5", "qwen3.5-0.8b"),
     (r"qwen3.*vl", "qwen3-vl-4b"),
     (r"qwen2\.?5.*vl", "qwen2.5-vl-3b"),
+    (r"gemma.*3", "gemma3-4b"),
+    (r"smolvlm", "smolvlm-2.2b"),
 ]
 
 
