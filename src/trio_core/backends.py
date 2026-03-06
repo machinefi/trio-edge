@@ -246,6 +246,10 @@ class MLXBackend(BaseBackend):
         import cv2
 
         t, c, h, w = frames.shape
+        # mlx_vlm requires at least 2 frames in a video
+        if t < 2:
+            frames = np.concatenate([frames, frames[-1:]], axis=0)
+            t = frames.shape[0]
         tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
         writer = cv2.VideoWriter(
             tmp.name, cv2.VideoWriter_fourcc(*"mp4v"), 2.0, (w, h),
