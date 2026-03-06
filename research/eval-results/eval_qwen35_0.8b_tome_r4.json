@@ -1,0 +1,322 @@
+{
+  "model": "mlx-community/Qwen3.5-0.8B-MLX-4bit",
+  "device": "Apple M3 Pro",
+  "timestamp": "2026-03-05 21:28:39",
+  "cases": [
+    {
+      "name": "solid",
+      "complexity": "solid",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 2,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 319,
+          "std": 0.0,
+          "min": 319,
+          "max": 319
+        },
+        "completion_tokens": {
+          "mean": 31,
+          "std": 0.0,
+          "min": 31,
+          "max": 31
+        },
+        "prefill_ms": {
+          "mean": 668.0563956033438,
+          "std": 728.2685719075259,
+          "min": 153.09274988248944,
+          "max": 1183.0200413241982
+        },
+        "decode_ms": {
+          "mean": 390.1807917281985,
+          "std": 171.49295826724668,
+          "min": 268.9169580116868,
+          "max": 511.44462544471025
+        },
+        "inference_ms": {
+          "mean": 1751.0365629568696,
+          "std": 1665.0446373123345,
+          "min": 573.6722089350224,
+          "max": 2928.400916978717
+        },
+        "latency_ms": {
+          "mean": 1752.3477079812437,
+          "std": 1664.370794486159,
+          "min": 575.459832791239,
+          "max": 2929.2355831712484
+        },
+        "prompt_tps": {
+          "mean": 1176.6765083416658,
+          "std": 1282.7308083072705,
+          "min": 269.64885535069334,
+          "max": 2083.7041613326383
+        },
+        "generation_tps": {
+          "mean": 87.94492248344068,
+          "std": 38.65370935987816,
+          "min": 60.61262247705692,
+          "max": 115.27722248982445
+        },
+        "peak_memory_gb": {
+          "mean": 1.178524449,
+          "std": 0.01580851477798378,
+          "min": 1.167346141,
+          "max": 1.189702757
+        },
+        "output_text": "The video begins with a completely dark gray, featureless screen, which remains static for the entire duration. There are no characters, objects, or any visual elements"
+      }
+    },
+    {
+      "name": "gradient",
+      "complexity": "gradient",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 2,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 319,
+          "std": 0.0,
+          "min": 319,
+          "max": 319
+        },
+        "completion_tokens": {
+          "mean": 31,
+          "std": 0.0,
+          "min": 31,
+          "max": 31
+        },
+        "prefill_ms": {
+          "mean": 131.18679146282375,
+          "std": 0.21054030119686926,
+          "min": 131.03791698813438,
+          "max": 131.3356659375131
+        },
+        "decode_ms": {
+          "mean": 219.50387535616755,
+          "std": 11.775743863157755,
+          "min": 211.17716701701283,
+          "max": 227.83058369532228
+        },
+        "inference_ms": {
+          "mean": 468.07433338835835,
+          "std": 9.835678986630251,
+          "min": 461.1194580793381,
+          "max": 475.02920869737864
+        },
+        "latency_ms": {
+          "mean": 469.2596246022731,
+          "std": 8.924158886445273,
+          "min": 462.94929133728147,
+          "max": 475.56995786726475
+        },
+        "prompt_tps": {
+          "mean": 2431.6503762524835,
+          "std": 3.9025301016433063,
+          "min": 2428.890870753827,
+          "max": 2434.4098817511403
+        },
+        "generation_tps": {
+          "mean": 141.43109497191293,
+          "std": 7.587366491697751,
+          "min": 136.06601667428586,
+          "max": 146.79617326954
+        },
+        "peak_memory_gb": {
+          "mean": 1.189704565,
+          "std": 2.2627416986059448e-08,
+          "min": 1.189704549,
+          "max": 1.189704581
+        },
+        "output_text": "The image displays a smooth, gradient-colored background that transitions from a bright, saturated green on the left side to a deep magenta or pinkish-red on the"
+      }
+    },
+    {
+      "name": "scene",
+      "complexity": "scene",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 2,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 319,
+          "std": 0.0,
+          "min": 319,
+          "max": 319
+        },
+        "completion_tokens": {
+          "mean": 31,
+          "std": 0.0,
+          "min": 31,
+          "max": 31
+        },
+        "prefill_ms": {
+          "mean": 130.91612490825355,
+          "std": 0.8026837664396909,
+          "min": 130.3485417738557,
+          "max": 131.48370804265141
+        },
+        "decode_ms": {
+          "mean": 241.60483316518366,
+          "std": 1.3219362328164452,
+          "min": 240.67008309066296,
+          "max": 242.53958323970437
+        },
+        "inference_ms": {
+          "mean": 500.04629185423255,
+          "std": 4.393490880263347,
+          "min": 496.9396246597171,
+          "max": 503.152959048748
+        },
+        "latency_ms": {
+          "mean": 501.6176663339138,
+          "std": 5.378372509365347,
+          "min": 497.81458266079426,
+          "max": 505.42075000703335
+        },
+        "prompt_tps": {
+          "mean": 2436.7204296665473,
+          "std": 14.94022171536174,
+          "min": 2426.1560975791845,
+          "max": 2447.28476175391
+        },
+        "generation_tps": {
+          "mean": 128.31061210954022,
+          "std": 0.7020490649145674,
+          "min": 127.81418845501346,
+          "max": 128.807035764067
+        },
+        "peak_memory_gb": {
+          "mean": 1.189704637,
+          "std": 0.0,
+          "min": 1.189704637,
+          "max": 1.189704637
+        },
+        "output_text": "```json\n{\n  \"description\": \"The image displays a simple geometric composition with a light gray background. On the left side, there are three colorful"
+      }
+    },
+    {
+      "name": "medium",
+      "complexity": "medium",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 2,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 319,
+          "std": 0.0,
+          "min": 319,
+          "max": 319
+        },
+        "completion_tokens": {
+          "mean": 31,
+          "std": 0.0,
+          "min": 31,
+          "max": 31
+        },
+        "prefill_ms": {
+          "mean": 131.09108293429017,
+          "std": 0.4549054239572549,
+          "min": 130.76941622421145,
+          "max": 131.4127496443689
+        },
+        "decode_ms": {
+          "mean": 237.50547948293388,
+          "std": 10.054322677997828,
+          "min": 230.39599973708394,
+          "max": 244.61495922878385
+        },
+        "inference_ms": {
+          "mean": 495.87045796215534,
+          "std": 10.08899932688244,
+          "min": 488.73645812273026,
+          "max": 503.00445780158043
+        },
+        "latency_ms": {
+          "mean": 497.1703125629574,
+          "std": 9.155883576647184,
+          "min": 490.69612519815564,
+          "max": 503.64449992775917
+        },
+        "prompt_tps": {
+          "mean": 2433.4372221072135,
+          "std": 8.444386654055752,
+          "min": 2427.4661390411698,
+          "max": 2439.4083051732578
+        },
+        "generation_tps": {
+          "mean": 130.64036367517136,
+          "std": 5.530400283903944,
+          "min": 126.72978013174686,
+          "max": 134.55094721859584
+        },
+        "peak_memory_gb": {
+          "mean": 1.189704669,
+          "std": 4.5254833972118895e-08,
+          "min": 1.189704637,
+          "max": 1.189704701
+        },
+        "output_text": "The image displays a vibrant, colorful, and highly pixelated grid of 16x16 squares, each filled with a distinct, saturated color. The"
+      }
+    },
+    {
+      "name": "high",
+      "complexity": "high",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 2,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 319,
+          "std": 0.0,
+          "min": 319,
+          "max": 319
+        },
+        "completion_tokens": {
+          "mean": 31,
+          "std": 0.0,
+          "min": 31,
+          "max": 31
+        },
+        "prefill_ms": {
+          "mean": 130.51574979908764,
+          "std": 1.07191520054925,
+          "min": 129.75779129192233,
+          "max": 131.27370830625296
+        },
+        "decode_ms": {
+          "mean": 240.13429158367217,
+          "std": 7.1835566046736075,
+          "min": 235.05474999547005,
+          "max": 245.21383317187428
+        },
+        "inference_ms": {
+          "mean": 512.752978829667,
+          "std": 7.030202662188688,
+          "min": 507.78187485411763,
+          "max": 517.7240828052163
+        },
+        "latency_ms": {
+          "mean": 514.2471250146627,
+          "std": 8.16619951172072,
+          "min": 508.47274996340275,
+          "max": 520.0215000659227
+        },
+        "prompt_tps": {
+          "mean": 2444.231898850925,
+          "std": 20.074277089767687,
+          "min": 2430.037241393333,
+          "max": 2458.426556308518
+        },
+        "generation_tps": {
+          "mean": 129.1522207517956,
+          "std": 3.863556022220819,
+          "min": 126.42027408898912,
+          "max": 131.88416741460205
+        },
+        "peak_memory_gb": {
+          "mean": 1.189704701,
+          "std": 0.0,
+          "min": 1.189704701,
+          "max": 1.189704701
+        },
+        "output_text": "The image displays a static, noisy, and abstract visual pattern that resembles digital static or a corrupted screen. It is characterized by a dense, chaotic mix of small"
+      }
+    }
+  ]
+}
