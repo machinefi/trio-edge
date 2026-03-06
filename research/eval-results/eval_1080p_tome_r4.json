@@ -1,0 +1,322 @@
+{
+  "model": "mlx-community/Qwen2.5-VL-3B-Instruct-4bit",
+  "device": "Apple M3 Pro",
+  "timestamp": "2026-03-05 20:13:28",
+  "cases": [
+    {
+      "name": "solid",
+      "complexity": "solid",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 242,
+          "std": 0.0,
+          "min": 242,
+          "max": 242
+        },
+        "completion_tokens": {
+          "mean": 26,
+          "std": 0.0,
+          "min": 26,
+          "max": 26
+        },
+        "prefill_ms": {
+          "mean": 457.65123640497524,
+          "std": 15.484214131510326,
+          "min": 446.9667091034353,
+          "max": 475.4088753834367
+        },
+        "decode_ms": {
+          "mean": 545.4966663382947,
+          "std": 15.320167100299884,
+          "min": 529.5330411754549,
+          "max": 560.0799578242004
+        },
+        "inference_ms": {
+          "mean": 2260.496402780215,
+          "std": 102.63019635822694,
+          "min": 2197.1352924592793,
+          "max": 2378.906332887709
+        },
+        "latency_ms": {
+          "mean": 2267.18523632735,
+          "std": 102.53932897220244,
+          "min": 2205.466666724533,
+          "max": 2385.5512500740588
+        },
+        "prompt_tps": {
+          "mean": 529.1835430006056,
+          "std": 17.58309895716111,
+          "min": 509.0355113896793,
+          "max": 541.4273481025571
+        },
+        "generation_tps": {
+          "mean": 47.688163304455976,
+          "std": 1.3448745243097893,
+          "min": 46.42194321861622,
+          "max": 49.09986342360304
+        },
+        "peak_memory_gb": {
+          "mean": 3.850998371333333,
+          "std": 1.0739869707421066e-05,
+          "min": 3.85098597,
+          "max": 3.851004572
+        },
+        "output_text": "I'm sorry, but I'm not sure what you're referring to. Could you please provide more context or clarify your question?"
+      }
+    },
+    {
+      "name": "gradient",
+      "complexity": "gradient",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 242,
+          "std": 0.0,
+          "min": 242,
+          "max": 242
+        },
+        "completion_tokens": {
+          "mean": 63,
+          "std": 0.0,
+          "min": 63,
+          "max": 63
+        },
+        "prefill_ms": {
+          "mean": 526.5739718452096,
+          "std": 136.6969523713418,
+          "min": 446.8812909908592,
+          "max": 684.4154996797442
+        },
+        "decode_ms": {
+          "mean": 1317.8765132712822,
+          "std": 52.7569726251368,
+          "min": 1286.5414158441126,
+          "max": 1378.786541055888
+        },
+        "inference_ms": {
+          "mean": 3039.4059026924274,
+          "std": 112.51179860296297,
+          "min": 2934.0258333832026,
+          "max": 3157.9000828787684
+        },
+        "latency_ms": {
+          "mean": 3049.7796943721673,
+          "std": 120.13283884090062,
+          "min": 2939.2877500504255,
+          "max": 3177.658624947071
+        },
+        "prompt_tps": {
+          "mean": 478.26122672976544,
+          "std": 107.9756071689707,
+          "min": 353.58638153758653,
+          "max": 541.5308380071566
+        },
+        "generation_tps": {
+          "mean": 47.85414756638471,
+          "std": 1.872468695789932,
+          "min": 45.69235202408779,
+          "max": 48.96849741806802
+        },
+        "peak_memory_gb": {
+          "mean": 3.851004572,
+          "std": 0.0,
+          "min": 3.851004572,
+          "max": 3.851004572
+        },
+        "output_text": "The image you provided is a gradient background that transitions from a bright green at the top to a bright pink at the bottom. The gradient is smooth and continuous, creating a visually appealing and vibrant effect. There are no other objects, text, or images present in the image. The background appears to be a solid color with"
+      }
+    },
+    {
+      "name": "scene",
+      "complexity": "scene",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 242,
+          "std": 0.0,
+          "min": 242,
+          "max": 242
+        },
+        "completion_tokens": {
+          "mean": 29,
+          "std": 0.0,
+          "min": 29,
+          "max": 29
+        },
+        "prefill_ms": {
+          "mean": 447.42763896162313,
+          "std": 0.48881761617626945,
+          "min": 446.8669588677585,
+          "max": 447.7642909623683
+        },
+        "decode_ms": {
+          "mean": 619.900889073809,
+          "std": 6.016950957233614,
+          "min": 615.8487917855382,
+          "max": 626.8145833164454
+        },
+        "inference_ms": {
+          "mean": 2282.193180949738,
+          "std": 29.48636257561862,
+          "min": 2260.4437093250453,
+          "max": 2315.754166804254
+        },
+        "latency_ms": {
+          "mean": 2291.262694324056,
+          "std": 34.145542382479746,
+          "min": 2266.289500053972,
+          "max": 2330.172250047326
+        },
+        "prompt_tps": {
+          "mean": 540.8700124981408,
+          "std": 0.5912548507182549,
+          "min": 540.4629285642131,
+          "max": 541.548206233827
+        },
+        "generation_tps": {
+          "mean": 46.78459470368807,
+          "std": 0.45168747117490676,
+          "min": 46.2656753238931,
+          "max": 47.089481033030744
+        },
+        "peak_memory_gb": {
+          "mean": 3.851004572,
+          "std": 0.0,
+          "min": 3.851004572,
+          "max": 3.851004572
+        },
+        "output_text": "I'm sorry, but you haven't provided any image or text for me to describe. Could you please provide more information or clarify your request?"
+      }
+    },
+    {
+      "name": "medium",
+      "complexity": "medium",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 242,
+          "std": 0.0,
+          "min": 242,
+          "max": 242
+        },
+        "completion_tokens": {
+          "mean": 63,
+          "std": 0.0,
+          "min": 63,
+          "max": 63
+        },
+        "prefill_ms": {
+          "mean": 515.3140691109002,
+          "std": 115.45038181065875,
+          "min": 448.1006660498678,
+          "max": 648.6231251619756
+        },
+        "decode_ms": {
+          "mean": 1352.4563473959763,
+          "std": 86.34309841102618,
+          "min": 1277.95987483114,
+          "max": 1447.0878331921995
+        },
+        "inference_ms": {
+          "mean": 3069.370014127344,
+          "std": 163.0384904531972,
+          "min": 2920.2592498622835,
+          "max": 3243.4544591233134
+        },
+        "latency_ms": {
+          "mean": 3076.9815693298974,
+          "std": 157.5883973872132,
+          "min": 2935.8891658484936,
+          "max": 3247.045625001192
+        },
+        "prompt_tps": {
+          "mean": 483.95622605370136,
+          "std": 96.00837867306397,
+          "min": 373.09801425838344,
+          "max": 540.0572200289221
+        },
+        "generation_tps": {
+          "mean": 46.706308326820555,
+          "std": 2.9242047007604786,
+          "min": 43.53571259114612,
+          "max": 49.29732242831516
+        },
+        "peak_memory_gb": {
+          "mean": 3.851006312,
+          "std": 0.0,
+          "min": 3.851006312,
+          "max": 3.851006312
+        },
+        "output_text": "The image you've provided is a grid of squares, each filled with a different color. The colors range from bright and vibrant to more subdued and muted tones. Here's a detailed description of the colors present in the grid:\n\n1. **Top Row:**\n   - The first square is bright yellow.\n   - The"
+      }
+    },
+    {
+      "name": "high",
+      "complexity": "high",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 242,
+          "std": 0.0,
+          "min": 242,
+          "max": 242
+        },
+        "completion_tokens": {
+          "mean": 63,
+          "std": 0.0,
+          "min": 63,
+          "max": 63
+        },
+        "prefill_ms": {
+          "mean": 469.4787225065132,
+          "std": 36.26747755936372,
+          "min": 447.7075422182679,
+          "max": 511.34562492370605
+        },
+        "decode_ms": {
+          "mean": 1273.4097917564213,
+          "std": 45.601697552676605,
+          "min": 1234.3764579854906,
+          "max": 1323.5338754020631
+        },
+        "inference_ms": {
+          "mean": 2994.6563336998224,
+          "std": 36.534256792070046,
+          "min": 2958.699292037636,
+          "max": 3031.74166707322
+        },
+        "latency_ms": {
+          "mean": 3002.5180558053157,
+          "std": 36.07940419825859,
+          "min": 2965.1709999889135,
+          "max": 3037.179750390351
+        },
+        "prompt_tps": {
+          "mean": 517.4362303483957,
+          "std": 38.270041025684385,
+          "min": 473.26111382317384,
+          "max": 540.5314344291733
+        },
+        "generation_tps": {
+          "mean": 49.51529915312089,
+          "std": 1.7523797742694198,
+          "min": 47.59983946830364,
+          "max": 51.03791439996868
+        },
+        "peak_memory_gb": {
+          "mean": 3.851006312,
+          "std": 0.0,
+          "min": 3.851006312,
+          "max": 3.851006312
+        },
+        "output_text": "The image appears to be a black and white photograph with a textured background. The texture is somewhat grainy or noisy, suggesting it might be an older photograph or one with a specific filter applied. The background is predominantly dark with some lighter areas, possibly indicating a scene with a significant contrast or a specific lighting condition.\n\nThe"
+      }
+    }
+  ]
+}

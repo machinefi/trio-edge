@@ -1,0 +1,322 @@
+{
+  "model": "mlx-community/Qwen2.5-VL-3B-Instruct-4bit",
+  "device": "Apple M3 Pro",
+  "timestamp": "2026-03-05 19:12:46",
+  "cases": [
+    {
+      "name": "solid",
+      "complexity": "solid",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 1,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 143,
+          "std": 0.0,
+          "min": 143,
+          "max": 143
+        },
+        "completion_tokens": {
+          "mean": 58,
+          "std": 0.0,
+          "min": 58,
+          "max": 58
+        },
+        "prefill_ms": {
+          "mean": 420.2439170330763,
+          "std": 0.0,
+          "min": 420.2439170330763,
+          "max": 420.2439170330763
+        },
+        "decode_ms": {
+          "mean": 1109.9065830931067,
+          "std": 0.0,
+          "min": 1109.9065830931067,
+          "max": 1109.9065830931067
+        },
+        "inference_ms": {
+          "mean": 2075.604457873851,
+          "std": 0.0,
+          "min": 2075.604457873851,
+          "max": 2075.604457873851
+        },
+        "latency_ms": {
+          "mean": 2076.430582907051,
+          "std": 0.0,
+          "min": 2076.430582907051,
+          "max": 2076.430582907051
+        },
+        "prompt_tps": {
+          "mean": 340.27857204830127,
+          "std": 0.0,
+          "min": 340.27857204830127,
+          "max": 340.27857204830127
+        },
+        "generation_tps": {
+          "mean": 52.256650139297854,
+          "std": 0.0,
+          "min": 52.256650139297854,
+          "max": 52.256650139297854
+        },
+        "peak_memory_gb": {
+          "mean": 3.505012908,
+          "std": 0.0,
+          "min": 3.505012908,
+          "max": 3.505012908
+        },
+        "output_text": "I'm sorry, but as an AI language model, I do not have the ability to see or perceive images. However, if you provide me with more information or context about what you are describing, I may be able to assist you with answering your question or providing you with more information."
+      }
+    },
+    {
+      "name": "gradient",
+      "complexity": "gradient",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 1,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 143,
+          "std": 0.0,
+          "min": 143,
+          "max": 143
+        },
+        "completion_tokens": {
+          "mean": 63,
+          "std": 0.0,
+          "min": 63,
+          "max": 63
+        },
+        "prefill_ms": {
+          "mean": 301.5933339484036,
+          "std": 0.0,
+          "min": 301.5933339484036,
+          "max": 301.5933339484036
+        },
+        "decode_ms": {
+          "mean": 1213.4608747437596,
+          "std": 0.0,
+          "min": 1213.4608747437596,
+          "max": 1213.4608747437596
+        },
+        "inference_ms": {
+          "mean": 1952.4527918547392,
+          "std": 0.0,
+          "min": 1952.4527918547392,
+          "max": 1952.4527918547392
+        },
+        "latency_ms": {
+          "mean": 1953.9827909320593,
+          "std": 0.0,
+          "min": 1953.9827909320593,
+          "max": 1953.9827909320593
+        },
+        "prompt_tps": {
+          "mean": 474.14841080162716,
+          "std": 0.0,
+          "min": 474.14841080162716,
+          "max": 474.14841080162716
+        },
+        "generation_tps": {
+          "mean": 51.917619522181454,
+          "std": 0.0,
+          "min": 51.917619522181454,
+          "max": 51.917619522181454
+        },
+        "peak_memory_gb": {
+          "mean": 3.505027046,
+          "std": 0.0,
+          "min": 3.505027046,
+          "max": 3.505027046
+        },
+        "output_text": "The image you provided is a gradient background that transitions from a bright green at the top to a bright pink at the bottom. The gradient appears smooth and continuous, creating a visually appealing and simple design. There are no other objects, text, or patterns present in the image. The colors are vibrant and the gradient effect is"
+      }
+    },
+    {
+      "name": "scene",
+      "complexity": "scene",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 1,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 143,
+          "std": 0.0,
+          "min": 143,
+          "max": 143
+        },
+        "completion_tokens": {
+          "mean": 63,
+          "std": 0.0,
+          "min": 63,
+          "max": 63
+        },
+        "prefill_ms": {
+          "mean": 334.7284160554409,
+          "std": 0.0,
+          "min": 334.7284160554409,
+          "max": 334.7284160554409
+        },
+        "decode_ms": {
+          "mean": 1261.4372917450964,
+          "std": 0.0,
+          "min": 1261.4372917450964,
+          "max": 1261.4372917450964
+        },
+        "inference_ms": {
+          "mean": 2036.284000147134,
+          "std": 0.0,
+          "min": 2036.284000147134,
+          "max": 2036.284000147134
+        },
+        "latency_ms": {
+          "mean": 2038.1014999002218,
+          "std": 0.0,
+          "min": 2038.1014999002218,
+          "max": 2038.1014999002218
+        },
+        "prompt_tps": {
+          "mean": 427.212011711354,
+          "std": 0.0,
+          "min": 427.212011711354,
+          "max": 427.212011711354
+        },
+        "generation_tps": {
+          "mean": 49.94302959986588,
+          "std": 0.0,
+          "min": 49.94302959986588,
+          "max": 49.94302959986588
+        },
+        "peak_memory_gb": {
+          "mean": 3.505027046,
+          "std": 0.0,
+          "min": 3.505027046,
+          "max": 3.505027046
+        },
+        "output_text": "The image appears to be a simple bar chart with five horizontal bars of varying lengths. The bars are colored differently, with the following colors and lengths:\n\n1. The first bar is green and extends to about two-thirds of the length of the chart.\n2. The second bar is purple and extends to about half the length"
+      }
+    },
+    {
+      "name": "medium",
+      "complexity": "medium",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 1,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 143,
+          "std": 0.0,
+          "min": 143,
+          "max": 143
+        },
+        "completion_tokens": {
+          "mean": 63,
+          "std": 0.0,
+          "min": 63,
+          "max": 63
+        },
+        "prefill_ms": {
+          "mean": 301.83150013908744,
+          "std": 0.0,
+          "min": 301.83150013908744,
+          "max": 301.83150013908744
+        },
+        "decode_ms": {
+          "mean": 1233.9515420608222,
+          "std": 0.0,
+          "min": 1233.9515420608222,
+          "max": 1233.9515420608222
+        },
+        "inference_ms": {
+          "mean": 1974.1625413298607,
+          "std": 0.0,
+          "min": 1974.1625413298607,
+          "max": 1974.1625413298607
+        },
+        "latency_ms": {
+          "mean": 1977.005542255938,
+          "std": 0.0,
+          "min": 1977.005542255938,
+          "max": 1977.005542255938
+        },
+        "prompt_tps": {
+          "mean": 473.7742745011834,
+          "std": 0.0,
+          "min": 473.7742745011834,
+          "max": 473.7742745011834
+        },
+        "generation_tps": {
+          "mean": 51.05548950065228,
+          "std": 0.0,
+          "min": 51.05548950065228,
+          "max": 51.05548950065228
+        },
+        "peak_memory_gb": {
+          "mean": 3.505027046,
+          "std": 0.0,
+          "min": 3.505027046,
+          "max": 3.505027046
+        },
+        "output_text": "The image appears to be a grid of colored squares arranged in a pattern. The squares are rectangular and vary in color, including shades of red, blue, green, yellow, and purple. The grid is composed of several rows and columns, with each square having a distinct color. The colors are not uniform; instead,"
+      }
+    },
+    {
+      "name": "high",
+      "complexity": "high",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 1,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 143,
+          "std": 0.0,
+          "min": 143,
+          "max": 143
+        },
+        "completion_tokens": {
+          "mean": 63,
+          "std": 0.0,
+          "min": 63,
+          "max": 63
+        },
+        "prefill_ms": {
+          "mean": 302.8151667676866,
+          "std": 0.0,
+          "min": 302.8151667676866,
+          "max": 302.8151667676866
+        },
+        "decode_ms": {
+          "mean": 1268.6467077583075,
+          "std": 0.0,
+          "min": 1268.6467077583075,
+          "max": 1268.6467077583075
+        },
+        "inference_ms": {
+          "mean": 2014.5104588009417,
+          "std": 0.0,
+          "min": 2014.5104588009417,
+          "max": 2014.5104588009417
+        },
+        "latency_ms": {
+          "mean": 2017.5674590282142,
+          "std": 0.0,
+          "min": 2017.5674590282142,
+          "max": 2017.5674590282142
+        },
+        "prompt_tps": {
+          "mean": 472.23526326772986,
+          "std": 0.0,
+          "min": 472.23526326772986,
+          "max": 472.23526326772986
+        },
+        "generation_tps": {
+          "mean": 49.65921529983765,
+          "std": 0.0,
+          "min": 49.65921529983765,
+          "max": 49.65921529983765
+        },
+        "peak_memory_gb": {
+          "mean": 3.505027046,
+          "std": 0.0,
+          "min": 3.505027046,
+          "max": 3.505027046
+        },
+        "output_text": "The image appears to be a digital noise or glitch effect, characterized by a chaotic and random distribution of colors and patterns. The pixels are not aligned in any coherent manner, and the overall appearance is disordered and visually disruptive. This type of image is often seen in digital artifacts or when a device is experiencing technical issues."
+      }
+    }
+  ]
+}

@@ -1,0 +1,322 @@
+{
+  "model": "mlx-community/Qwen3-VL-4B-Instruct-4bit",
+  "device": "Apple M3 Pro",
+  "timestamp": "2026-03-05 20:29:37",
+  "cases": [
+    {
+      "name": "solid",
+      "complexity": "solid",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 1,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 303,
+          "std": 0.0,
+          "min": 303,
+          "max": 303
+        },
+        "completion_tokens": {
+          "mean": 63,
+          "std": 0.0,
+          "min": 63,
+          "max": 63
+        },
+        "prefill_ms": {
+          "mean": 622.5651670247316,
+          "std": 0.0,
+          "min": 622.5651670247316,
+          "max": 622.5651670247316
+        },
+        "decode_ms": {
+          "mean": 1549.5385001413524,
+          "std": 0.0,
+          "min": 1549.5385001413524,
+          "max": 1549.5385001413524
+        },
+        "inference_ms": {
+          "mean": 2637.427750043571,
+          "std": 0.0,
+          "min": 2637.427750043571,
+          "max": 2637.427750043571
+        },
+        "latency_ms": {
+          "mean": 2638.9841246418655,
+          "std": 0.0,
+          "min": 2638.9841246418655,
+          "max": 2638.9841246418655
+        },
+        "prompt_tps": {
+          "mean": 486.696037698433,
+          "std": 0.0,
+          "min": 486.696037698433,
+          "max": 486.696037698433
+        },
+        "generation_tps": {
+          "mean": 40.657266659881635,
+          "std": 0.0,
+          "min": 40.657266659881635,
+          "max": 40.657266659881635
+        },
+        "peak_memory_gb": {
+          "mean": 3.678184181,
+          "std": 0.0,
+          "min": 3.678184181,
+          "max": 3.678184181
+        },
+        "output_text": "The image provided is a solid, uniform dark gray screen. There are no discernible objects, patterns, text, or other visual elements present. The entire frame is filled with this consistent dark gray color, suggesting either a blank or unrendered image, a placeholder, or perhaps a technical error or loading screen. There"
+      }
+    },
+    {
+      "name": "gradient",
+      "complexity": "gradient",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 1,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 303,
+          "std": 0.0,
+          "min": 303,
+          "max": 303
+        },
+        "completion_tokens": {
+          "mean": 63,
+          "std": 0.0,
+          "min": 63,
+          "max": 63
+        },
+        "prefill_ms": {
+          "mean": 572.0215840265155,
+          "std": 0.0,
+          "min": 572.0215840265155,
+          "max": 572.0215840265155
+        },
+        "decode_ms": {
+          "mean": 1567.079042084515,
+          "std": 0.0,
+          "min": 1567.079042084515,
+          "max": 1567.079042084515
+        },
+        "inference_ms": {
+          "mean": 2435.857624746859,
+          "std": 0.0,
+          "min": 2435.857624746859,
+          "max": 2435.857624746859
+        },
+        "latency_ms": {
+          "mean": 2437.1179998852313,
+          "std": 0.0,
+          "min": 2437.1179998852313,
+          "max": 2437.1179998852313
+        },
+        "prompt_tps": {
+          "mean": 529.7002918441531,
+          "std": 0.0,
+          "min": 529.7002918441531,
+          "max": 529.7002918441531
+        },
+        "generation_tps": {
+          "mean": 40.20218400483357,
+          "std": 0.0,
+          "min": 40.20218400483357,
+          "max": 40.20218400483357
+        },
+        "peak_memory_gb": {
+          "mean": 3.708711593,
+          "std": 0.0,
+          "min": 3.708711593,
+          "max": 3.708711593
+        },
+        "output_text": "The image presents a smooth, digital gradient background that transitions from a vibrant green to a deep pink, with a subtle brownish hue in the middle. The gradient is not abrupt but rather flows seamlessly, creating a soft, almost organic transition. The green dominates the top-left and bottom-left corners, while the pink occupies the"
+      }
+    },
+    {
+      "name": "scene",
+      "complexity": "scene",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 1,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 303,
+          "std": 0.0,
+          "min": 303,
+          "max": 303
+        },
+        "completion_tokens": {
+          "mean": 63,
+          "std": 0.0,
+          "min": 63,
+          "max": 63
+        },
+        "prefill_ms": {
+          "mean": 571.7494580894709,
+          "std": 0.0,
+          "min": 571.7494580894709,
+          "max": 571.7494580894709
+        },
+        "decode_ms": {
+          "mean": 1516.3913746364415,
+          "std": 0.0,
+          "min": 1516.3913746364415,
+          "max": 1516.3913746364415
+        },
+        "inference_ms": {
+          "mean": 2373.8029156811535,
+          "std": 0.0,
+          "min": 2373.8029156811535,
+          "max": 2373.8029156811535
+        },
+        "latency_ms": {
+          "mean": 2375.860916916281,
+          "std": 0.0,
+          "min": 2375.860916916281,
+          "max": 2375.860916916281
+        },
+        "prompt_tps": {
+          "mean": 529.9524043494322,
+          "std": 0.0,
+          "min": 529.9524043494322,
+          "max": 529.9524043494322
+        },
+        "generation_tps": {
+          "mean": 41.54600260444267,
+          "std": 0.0,
+          "min": 41.54600260444267,
+          "max": 41.54600260444267
+        },
+        "peak_memory_gb": {
+          "mean": 3.708711593,
+          "std": 0.0,
+          "min": 3.708711593,
+          "max": 3.708711593
+        },
+        "output_text": "This is a minimalist, abstract digital illustration featuring a flat, two-dimensional scene with geometric shapes on a plain background. The image is composed of a light gray upper half and a darker brown lower half, which appears to represent a ground or floor.\n\nIn the upper portion of the image, there are three large, light blue"
+      }
+    },
+    {
+      "name": "medium",
+      "complexity": "medium",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 1,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 303,
+          "std": 0.0,
+          "min": 303,
+          "max": 303
+        },
+        "completion_tokens": {
+          "mean": 63,
+          "std": 0.0,
+          "min": 63,
+          "max": 63
+        },
+        "prefill_ms": {
+          "mean": 575.1907504163682,
+          "std": 0.0,
+          "min": 575.1907504163682,
+          "max": 575.1907504163682
+        },
+        "decode_ms": {
+          "mean": 1561.4070417359474,
+          "std": 0.0,
+          "min": 1561.4070417359474,
+          "max": 1561.4070417359474
+        },
+        "inference_ms": {
+          "mean": 2438.8738330453634,
+          "std": 0.0,
+          "min": 2438.8738330453634,
+          "max": 2438.8738330453634
+        },
+        "latency_ms": {
+          "mean": 2441.7137908749282,
+          "std": 0.0,
+          "min": 2441.7137908749282,
+          "max": 2441.7137908749282
+        },
+        "prompt_tps": {
+          "mean": 526.7817672322874,
+          "std": 0.0,
+          "min": 526.7817672322874,
+          "max": 526.7817672322874
+        },
+        "generation_tps": {
+          "mean": 40.348223311429166,
+          "std": 0.0,
+          "min": 40.348223311429166,
+          "max": 40.348223311429166
+        },
+        "peak_memory_gb": {
+          "mean": 3.708711913,
+          "std": 0.0,
+          "min": 3.708711913,
+          "max": 3.708711913
+        },
+        "output_text": "The image is a 10x10 grid composed of 100 individual square tiles, each filled with a distinct color. The tiles are arranged in a uniform grid pattern, with no discernible theme or order beyond the variety of hues. The colors range from bright and saturated tones like magenta, lime"
+      }
+    },
+    {
+      "name": "high",
+      "complexity": "high",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 1,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 303,
+          "std": 0.0,
+          "min": 303,
+          "max": 303
+        },
+        "completion_tokens": {
+          "mean": 63,
+          "std": 0.0,
+          "min": 63,
+          "max": 63
+        },
+        "prefill_ms": {
+          "mean": 572.0190829597414,
+          "std": 0.0,
+          "min": 572.0190829597414,
+          "max": 572.0190829597414
+        },
+        "decode_ms": {
+          "mean": 1572.408082894981,
+          "std": 0.0,
+          "min": 1572.408082894981,
+          "max": 1572.408082894981
+        },
+        "inference_ms": {
+          "mean": 2435.8303328044713,
+          "std": 0.0,
+          "min": 2435.8303328044713,
+          "max": 2435.8303328044713
+        },
+        "latency_ms": {
+          "mean": 2437.9071253351867,
+          "std": 0.0,
+          "min": 2437.9071253351867,
+          "max": 2437.9071253351867
+        },
+        "prompt_tps": {
+          "mean": 529.7026078784247,
+          "std": 0.0,
+          "min": 529.7026078784247,
+          "max": 529.7026078784247
+        },
+        "generation_tps": {
+          "mean": 40.06593497281563,
+          "std": 0.0,
+          "min": 40.06593497281563,
+          "max": 40.06593497281563
+        },
+        "peak_memory_gb": {
+          "mean": 3.708711913,
+          "std": 0.0,
+          "min": 3.708711913,
+          "max": 3.708711913
+        },
+        "output_text": "The image depicts a classic television static or \u201csnow\u201d pattern, often referred to as \u201cTV static\u201d or \u201cnoise.\u201d It is a uniform field of randomly distributed dots and specks in varying shades of gray, with subtle hints of other colors like blue, green, and red intermixed. The pattern is not structured"
+      }
+    }
+  ]
+}

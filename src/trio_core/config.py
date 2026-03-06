@@ -44,6 +44,14 @@ class EngineConfig(BaseSettings):
     temperature: float = Field(default=0.0, description="Sampling temperature")
     top_p: float = Field(default=1.0, description="Top-p sampling")
 
+    # ToMe (Token Merging)
+    tome_enabled: bool = Field(default=False, description="Enable Token Merging in vision encoder")
+    tome_r: int = Field(default=4, description="Number of tokens merged per layer")
+    tome_metric: str = Field(default="hidden", description="Similarity metric: 'keys' or 'hidden'")
+    tome_min_keep_ratio: float = Field(
+        default=0.3, description="Min fraction of tokens to keep (0.0-1.0]"
+    )
+
     # Cache (Phase 2)
     cache_enabled: bool = Field(default=False, description="Enable video cache")
     cache_max_entries: int = Field(default=50, description="Max cache entries")

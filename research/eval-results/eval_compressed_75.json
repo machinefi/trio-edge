@@ -1,0 +1,322 @@
+{
+  "model": "mlx-community/Qwen2.5-VL-3B-Instruct-4bit",
+  "device": "Apple M3 Pro",
+  "timestamp": "2026-03-05 18:17:49",
+  "cases": [
+    {
+      "name": "solid",
+      "complexity": "solid",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 321,
+          "std": 0.0,
+          "min": 321,
+          "max": 321
+        },
+        "completion_tokens": {
+          "mean": 25,
+          "std": 0.0,
+          "min": 25,
+          "max": 25
+        },
+        "prefill_ms": {
+          "mean": 438.8064310575525,
+          "std": 19.1169867627743,
+          "min": 426.7194592393935,
+          "max": 460.84641711786384
+        },
+        "decode_ms": {
+          "mean": 500.00233327349025,
+          "std": 2.967985237788518,
+          "min": 497.9238328523934,
+          "max": 503.40141681954265
+        },
+        "inference_ms": {
+          "mean": 1488.438013785829,
+          "std": 104.95621354642977,
+          "min": 1426.6388332471251,
+          "max": 1609.6230000257492
+        },
+        "latency_ms": {
+          "mean": 1489.3918195739388,
+          "std": 105.1360132607988,
+          "min": 1427.612583618611,
+          "max": 1610.78599980101
+        },
+        "prompt_tps": {
+          "mean": 732.4341979914449,
+          "std": 31.137758269922962,
+          "min": 696.5444193046695,
+          "max": 752.2506720742634
+        },
+        "generation_tps": {
+          "mean": 50.000937491417005,
+          "std": 0.29586335983039685,
+          "min": 49.66215661042111,
+          "max": 50.20848240339422
+        },
+        "peak_memory_gb": {
+          "mean": 3.8288887766666666,
+          "std": 0.0007095092099088274,
+          "min": 3.828069506,
+          "max": 3.829298412
+        },
+        "output_text": "I'm sorry, but I'm not sure what you're asking. Could you please provide more context or clarify your question?"
+      }
+    },
+    {
+      "name": "gradient",
+      "complexity": "gradient",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 321,
+          "std": 0.0,
+          "min": 321,
+          "max": 321
+        },
+        "completion_tokens": {
+          "mean": 58,
+          "std": 0.0,
+          "min": 58,
+          "max": 58
+        },
+        "prefill_ms": {
+          "mean": 428.11379162594676,
+          "std": 2.840700970771935,
+          "min": 424.8681250028312,
+          "max": 430.14749977737665
+        },
+        "decode_ms": {
+          "mean": 1181.4219858497381,
+          "std": 17.38686412034826,
+          "min": 1163.820874877274,
+          "max": 1198.5863749869168
+        },
+        "inference_ms": {
+          "mean": 2120.3592498786747,
+          "std": 19.030367981490343,
+          "min": 2099.1728329099715,
+          "max": 2136.002874933183
+        },
+        "latency_ms": {
+          "mean": 2121.896111095945,
+          "std": 19.60901427851812,
+          "min": 2100.2926672808826,
+          "max": 2138.5699580423534
+        },
+        "prompt_tps": {
+          "mean": 749.8227375396057,
+          "std": 4.992725977495001,
+          "min": 746.2556452522308,
+          "max": 755.5285537079557
+        },
+        "generation_tps": {
+          "mean": 49.100475401237446,
+          "std": 0.7230851596279082,
+          "min": 48.39033816034585,
+          "max": 49.835847811301846
+        },
+        "peak_memory_gb": {
+          "mean": 3.829298412,
+          "std": 0.0,
+          "min": 3.829298412,
+          "max": 3.829298412
+        },
+        "output_text": "The image you provided is a gradient background that transitions from a bright green at the top to a bright pink at the bottom. The gradient appears smooth and continuous, creating a visually appealing and vibrant effect. The colors blend seamlessly into each other, giving the impression of a bright, colorful backdrop."
+      }
+    },
+    {
+      "name": "scene",
+      "complexity": "scene",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 321,
+          "std": 0.0,
+          "min": 321,
+          "max": 321
+        },
+        "completion_tokens": {
+          "mean": 63,
+          "std": 0.0,
+          "min": 63,
+          "max": 63
+        },
+        "prefill_ms": {
+          "mean": 429.3954862902562,
+          "std": 4.118541231869329,
+          "min": 424.7405417263508,
+          "max": 432.56616685539484
+        },
+        "decode_ms": {
+          "mean": 1266.431153131028,
+          "std": 13.010289248917417,
+          "min": 1251.9881669431925,
+          "max": 1277.2328332066536
+        },
+        "inference_ms": {
+          "mean": 2196.6380000424883,
+          "std": 10.48539628568694,
+          "min": 2184.6257080323994,
+          "max": 2203.956459183246
+        },
+        "latency_ms": {
+          "mean": 2198.0573193480573,
+          "std": 11.28491936810943,
+          "min": 2185.3352077305317,
+          "max": 2206.8597502075136
+        },
+        "prompt_tps": {
+          "mean": 747.6086455770045,
+          "std": 7.203287139876823,
+          "min": 742.0830027774896,
+          "max": 755.7554988636142
+        },
+        "generation_tps": {
+          "mean": 49.74960585116303,
+          "std": 0.5131417834580319,
+          "min": 49.32538403497707,
+          "max": 50.319964408144884
+        },
+        "peak_memory_gb": {
+          "mean": 3.829298412,
+          "std": 0.0,
+          "min": 3.829298412,
+          "max": 3.829298412
+        },
+        "output_text": "The image shows a simple bar graph with four bars of different colors and lengths. The bars are colored as follows:\n\n1. Green\n2. Purple\n3. Yellow\n4. Blue\n\nThe bars are arranged vertically, with the green bar being the shortest, followed by the purple and yellow bars, and the blue"
+      }
+    },
+    {
+      "name": "medium",
+      "complexity": "medium",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 321,
+          "std": 0.0,
+          "min": 321,
+          "max": 321
+        },
+        "completion_tokens": {
+          "mean": 63,
+          "std": 0.0,
+          "min": 63,
+          "max": 63
+        },
+        "prefill_ms": {
+          "mean": 430.0382916505138,
+          "std": 1.151853990529743,
+          "min": 428.74916596338153,
+          "max": 430.96637492999434
+        },
+        "decode_ms": {
+          "mean": 1276.098638928185,
+          "std": 6.2574223111348,
+          "min": 1270.5095829442143,
+          "max": 1282.8589170239866
+        },
+        "inference_ms": {
+          "mean": 2210.415430677434,
+          "std": 6.795925989215649,
+          "min": 2202.5754172354937,
+          "max": 2214.627416804433
+        },
+        "latency_ms": {
+          "mean": 2211.6811390345297,
+          "std": 7.276440927458609,
+          "min": 2203.3521672710776,
+          "max": 2216.803625226021
+        },
+        "prompt_tps": {
+          "mean": 746.4487309409475,
+          "std": 2.0016331018146403,
+          "min": 744.8376919246724,
+          "max": 748.6895030541374
+        },
+        "generation_tps": {
+          "mean": 49.370014703630325,
+          "std": 0.2417697600977215,
+          "min": 49.10906348622437,
+          "max": 49.5864028463343
+        },
+        "peak_memory_gb": {
+          "mean": 3.829298412,
+          "std": 0.0,
+          "min": 3.829298412,
+          "max": 3.829298412
+        },
+        "output_text": "The image you've uploaded appears to be a grid of colored squares, each with a different hue. The colors range from bright and vibrant to more subdued and muted tones. The grid seems to be composed of a variety of colors, including but not limited to:\n\n1. Bright and vibrant colors such as red, blue,"
+      }
+    },
+    {
+      "name": "high",
+      "complexity": "high",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 321,
+          "std": 0.0,
+          "min": 321,
+          "max": 321
+        },
+        "completion_tokens": {
+          "mean": 63,
+          "std": 0.0,
+          "min": 63,
+          "max": 63
+        },
+        "prefill_ms": {
+          "mean": 426.8330416331689,
+          "std": 2.1714133273642653,
+          "min": 424.5348749682307,
+          "max": 428.85037511587143
+        },
+        "decode_ms": {
+          "mean": 1266.2562225013971,
+          "std": 11.8218907602848,
+          "min": 1253.0489591881633,
+          "max": 1275.848708115518
+        },
+        "inference_ms": {
+          "mean": 2211.6090420943997,
+          "std": 19.888263375874615,
+          "min": 2189.3593752756715,
+          "max": 2227.65904199332
+        },
+        "latency_ms": {
+          "mean": 2212.8471806645393,
+          "std": 19.385214351579837,
+          "min": 2191.2520420737565,
+          "max": 2228.746125008911
+        },
+        "prompt_tps": {
+          "mean": 752.0634828768217,
+          "std": 3.8297076423648266,
+          "min": 748.512811521428,
+          "max": 756.1216261067397
+        },
+        "generation_tps": {
+          "mean": 49.7558663447797,
+          "std": 0.4663455200531042,
+          "min": 49.37889547503923,
+          "max": 50.27736509259543
+        },
+        "peak_memory_gb": {
+          "mean": 3.829298412,
+          "std": 0.0,
+          "min": 3.829298412,
+          "max": 3.829298412
+        },
+        "output_text": "The image you've uploaded appears to be a piece of abstract art. It consists of a grid-like pattern with a multitude of small, colorful dots scattered across the canvas. The dots vary in size and color, creating a vibrant and chaotic visual effect. The overall effect is somewhat reminiscent of a digital glitch or a piece of"
+      }
+    }
+  ]
+}

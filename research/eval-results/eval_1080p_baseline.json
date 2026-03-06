@@ -1,0 +1,322 @@
+{
+  "model": "mlx-community/Qwen2.5-VL-3B-Instruct-4bit",
+  "device": "Apple M3 Pro",
+  "timestamp": "2026-03-05 20:12:29",
+  "cases": [
+    {
+      "name": "solid",
+      "complexity": "solid",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 748,
+          "std": 0.0,
+          "min": 748,
+          "max": 748
+        },
+        "completion_tokens": {
+          "mean": 16,
+          "std": 0.0,
+          "min": 16,
+          "max": 16
+        },
+        "prefill_ms": {
+          "mean": 1827.8948476848502,
+          "std": 54.34737497015306,
+          "min": 1796.3102501817048,
+          "max": 1890.6493340618908
+        },
+        "decode_ms": {
+          "mean": 254.33943032597503,
+          "std": 8.993076371997542,
+          "min": 248.90645826235414,
+          "max": 264.7199579514563
+        },
+        "inference_ms": {
+          "mean": 2300.543694601705,
+          "std": 269.6638242115908,
+          "min": 2134.0488330461085,
+          "max": 2611.6686668246984
+        },
+        "latency_ms": {
+          "mean": 2307.474458279709,
+          "std": 271.46580176088537,
+          "min": 2138.6903328821063,
+          "max": 2620.6188341602683
+        },
+        "prompt_tps": {
+          "mean": 409.45114380354613,
+          "std": 11.968456969826397,
+          "min": 395.6312715023621,
+          "max": 416.4091364085555
+        },
+        "generation_tps": {
+          "mean": 62.95948892905291,
+          "std": 2.181772822196006,
+          "min": 60.441230513243134,
+          "max": 64.28117659822055
+        },
+        "peak_memory_gb": {
+          "mean": 4.02054999,
+          "std": 0.0,
+          "min": 4.02054999,
+          "max": 4.02054999
+        },
+        "output_text": "The image is completely black with no visible content, characters, or objects."
+      }
+    },
+    {
+      "name": "gradient",
+      "complexity": "gradient",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 748,
+          "std": 0.0,
+          "min": 748,
+          "max": 748
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 1796.3101109489799,
+          "std": 0.7107938661765845,
+          "min": 1795.7275421358645,
+          "max": 1797.1020829863846
+        },
+        "decode_ms": {
+          "mean": 1031.4291530909638,
+          "std": 8.414908456809341,
+          "min": 1025.4588341340423,
+          "max": 1041.0533752292395
+        },
+        "inference_ms": {
+          "mean": 2915.9643057112894,
+          "std": 13.086206851753841,
+          "min": 2904.9832499586046,
+          "max": 2930.444334167987
+        },
+        "latency_ms": {
+          "mean": 2925.535944135239,
+          "std": 13.117472620332952,
+          "min": 2910.5458329431713,
+          "max": 2934.912624768913
+        },
+        "prompt_tps": {
+          "mean": 416.409212144069,
+          "std": 0.16474542328570416,
+          "min": 416.22565967815814,
+          "max": 416.544259888289
+        },
+        "generation_tps": {
+          "mean": 62.05256821295071,
+          "std": 0.5040846511012689,
+          "min": 61.47619471086891,
+          "max": 62.41108650065448
+        },
+        "peak_memory_gb": {
+          "mean": 4.02054999,
+          "std": 0.0,
+          "min": 4.02054999,
+          "max": 4.02054999
+        },
+        "output_text": "The image is a gradient background that transitions from a bright green at the top to a bright pink at the bottom. The gradient is smooth and gradual, creating a visually appealing and vibrant effect. The colors blend seamlessly into each other, forming a gradient effect that is both pleasing to the eye and easy on the eyes."
+      }
+    },
+    {
+      "name": "scene",
+      "complexity": "scene",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 748,
+          "std": 0.0,
+          "min": 748,
+          "max": 748
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 1813.8443334028125,
+          "std": 19.055748330188607,
+          "min": 1798.082042019814,
+          "max": 1835.0215000100434
+        },
+        "decode_ms": {
+          "mean": 1105.7192087173462,
+          "std": 44.481501612205435,
+          "min": 1068.950042128563,
+          "max": 1155.1622091792524
+        },
+        "inference_ms": {
+          "mean": 3013.7944443461797,
+          "std": 27.570383570737516,
+          "min": 2994.5701668038964,
+          "max": 3045.3826249577105
+        },
+        "latency_ms": {
+          "mean": 3023.563389045497,
+          "std": 30.827010059265202,
+          "min": 2998.896916862577,
+          "max": 3058.122250251472
+        },
+        "prompt_tps": {
+          "mean": 412.414011313567,
+          "std": 4.315074737379521,
+          "min": 407.6246518070257,
+          "max": 415.998815693504
+        },
+        "generation_tps": {
+          "mean": 57.942438529379785,
+          "std": 2.295700366203005,
+          "min": 55.40347450032344,
+          "max": 59.87183448962595
+        },
+        "peak_memory_gb": {
+          "mean": 4.02054999,
+          "std": 0.0,
+          "min": 4.02054999,
+          "max": 4.02054999
+        },
+        "output_text": "The image appears to be a simple, abstract composition with a gradient background transitioning from light blue at the top to a darker shade at the bottom. There are several rectangular shapes scattered across the image:\n\n1. **Top Left Corner**: A small, dark blue rectangle.\n2. **Top Center**: A small, green rectangle"
+      }
+    },
+    {
+      "name": "medium",
+      "complexity": "medium",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 748,
+          "std": 0.0,
+          "min": 748,
+          "max": 748
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 1803.2520548440516,
+          "std": 3.885095290327367,
+          "min": 1799.3497080169618,
+          "max": 1807.1196656674147
+        },
+        "decode_ms": {
+          "mean": 1061.0914858989418,
+          "std": 4.182935435067485,
+          "min": 1057.3026249185205,
+          "max": 1065.5802078545094
+        },
+        "inference_ms": {
+          "mean": 2967.0271108237407,
+          "std": 3.5302206484977843,
+          "min": 2963.085333351046,
+          "max": 2969.897583127022
+        },
+        "latency_ms": {
+          "mean": 2976.8391667554774,
+          "std": 6.427971813961983,
+          "min": 2972.9321249760687,
+          "max": 2984.258041251451
+        },
+        "prompt_tps": {
+          "mean": 414.80741020137447,
+          "std": 0.8937278694628336,
+          "min": 413.91835538668926,
+          "max": 415.7057389496344
+        },
+        "generation_tps": {
+          "mean": 60.315875936999326,
+          "std": 0.2375446773796643,
+          "min": 60.06117561892473,
+          "max": 60.53139232954432
+        },
+        "peak_memory_gb": {
+          "mean": 4.02054999,
+          "std": 0.0,
+          "min": 4.02054999,
+          "max": 4.02054999
+        },
+        "output_text": "The image is a grid of squares, each filled with a different color. The colors range from bright and vibrant to more muted and subdued tones. The grid is organized into rows and columns, with each square occupying a uniform space. The colors include shades of red, blue, green, yellow, purple, and various other"
+      }
+    },
+    {
+      "name": "high",
+      "complexity": "high",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 748,
+          "std": 0.0,
+          "min": 748,
+          "max": 748
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 1803.7808894490202,
+          "std": 6.297401140645285,
+          "min": 1798.6351670697331,
+          "max": 1810.803291853517
+        },
+        "decode_ms": {
+          "mean": 1034.0564859410126,
+          "std": 10.19196590636832,
+          "min": 1024.8154578730464,
+          "max": 1044.9879998341203
+        },
+        "inference_ms": {
+          "mean": 3015.8187223908803,
+          "std": 17.081110704264436,
+          "min": 2999.8280410654843,
+          "max": 3033.8134593330324
+        },
+        "latency_ms": {
+          "mean": 3025.3630694933236,
+          "std": 12.805909311736345,
+          "min": 3017.507125157863,
+          "max": 3040.140208322555
+        },
+        "prompt_tps": {
+          "mean": 414.687878041757,
+          "std": 1.4457164064491015,
+          "min": 413.0763420660429,
+          "max": 415.87088571086525
+        },
+        "generation_tps": {
+          "mean": 61.896169412716894,
+          "std": 0.6086399263142332,
+          "min": 61.24472243715646,
+          "max": 62.450268005157554
+        },
+        "peak_memory_gb": {
+          "mean": 4.02054999,
+          "std": 0.0,
+          "min": 4.02054999,
+          "max": 4.02054999
+        },
+        "output_text": "The image appears to be a black and white photograph with a significant amount of noise or grain, which obscures the details of the scene. The background is predominantly dark, with some lighter areas suggesting the presence of light sources or reflections. There are no clear objects or identifiable features that can be discerned due to the high"
+      }
+    }
+  ]
+}

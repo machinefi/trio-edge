@@ -34,6 +34,7 @@ class GenerationResult:
     text: str
     prompt_tokens: int = 0
     completion_tokens: int = 0
+    prompt_tps: float = 0.0
     generation_tps: float = 0.0
     peak_memory: float = 0.0
 
@@ -165,6 +166,7 @@ class MLXBackend(BaseBackend):
             text=result.text,
             prompt_tokens=getattr(result, "prompt_tokens", 0),
             completion_tokens=getattr(result, "generation_tokens", 0),
+            prompt_tps=getattr(result, "prompt_tps", 0.0),
             generation_tps=getattr(result, "generation_tps", 0.0),
             peak_memory=getattr(result, "peak_memory", 0.0),
         )

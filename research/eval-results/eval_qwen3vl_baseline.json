@@ -1,0 +1,322 @@
+{
+  "model": "mlx-community/Qwen3-VL-4B-Instruct-4bit",
+  "device": "Apple M3 Pro",
+  "timestamp": "2026-03-05 20:27:04",
+  "cases": [
+    {
+      "name": "solid",
+      "complexity": "solid",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 1,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 323,
+          "std": 0.0,
+          "min": 323,
+          "max": 323
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 1765.0575004518032,
+          "std": 0.0,
+          "min": 1765.0575004518032,
+          "max": 1765.0575004518032
+        },
+        "decode_ms": {
+          "mean": 1295.3760828822851,
+          "std": 0.0,
+          "min": 1295.3760828822851,
+          "max": 1295.3760828822851
+        },
+        "inference_ms": {
+          "mean": 3530.4178330115974,
+          "std": 0.0,
+          "min": 3530.4178330115974,
+          "max": 3530.4178330115974
+        },
+        "latency_ms": {
+          "mean": 3531.219583004713,
+          "std": 0.0,
+          "min": 3531.219583004713,
+          "max": 3531.219583004713
+        },
+        "prompt_tps": {
+          "mean": 182.99687115990352,
+          "std": 0.0,
+          "min": 182.99687115990352,
+          "max": 182.99687115990352
+        },
+        "generation_tps": {
+          "mean": 49.40650120511441,
+          "std": 0.0,
+          "min": 49.40650120511441,
+          "max": 49.40650120511441
+        },
+        "peak_memory_gb": {
+          "mean": 3.836492759,
+          "std": 0.0,
+          "min": 3.836492759,
+          "max": 3.836492759
+        },
+        "output_text": "The image provided is a solid, uniform dark gray screen. There are no discernible objects, patterns, text, or actions present. The entire frame is filled with this consistent dark gray color, suggesting either a blank or unrendered video frame, a placeholder, or a technical error. No additional details or context can"
+      }
+    },
+    {
+      "name": "gradient",
+      "complexity": "gradient",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 1,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 323,
+          "std": 0.0,
+          "min": 323,
+          "max": 323
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 837.5653750263153,
+          "std": 0.0,
+          "min": 837.5653750263153,
+          "max": 837.5653750263153
+        },
+        "decode_ms": {
+          "mean": 1306.8687082268298,
+          "std": 0.0,
+          "min": 1306.8687082268298,
+          "max": 1306.8687082268298
+        },
+        "inference_ms": {
+          "mean": 2189.292374998331,
+          "std": 0.0,
+          "min": 2189.292374998331,
+          "max": 2189.292374998331
+        },
+        "latency_ms": {
+          "mean": 2192.275083158165,
+          "std": 0.0,
+          "min": 2192.275083158165,
+          "max": 2192.275083158165
+        },
+        "prompt_tps": {
+          "mean": 385.64153871553214,
+          "std": 0.0,
+          "min": 385.64153871553214,
+          "max": 385.64153871553214
+        },
+        "generation_tps": {
+          "mean": 48.97201960465924,
+          "std": 0.0,
+          "min": 48.97201960465924,
+          "max": 48.97201960465924
+        },
+        "peak_memory_gb": {
+          "mean": 4.065852906,
+          "std": 0.0,
+          "min": 4.065852906,
+          "max": 4.065852906
+        },
+        "output_text": "The image presents a smooth, horizontal gradient that transitions from a vibrant green on the left to a deep pink on the right. The gradient is not abrupt but rather flows gradually, with a subtle shift in hue that includes a warm, earthy brownish tone in the middle section, acting as a bridge between the green and"
+      }
+    },
+    {
+      "name": "scene",
+      "complexity": "scene",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 1,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 323,
+          "std": 0.0,
+          "min": 323,
+          "max": 323
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 833.253875374794,
+          "std": 0.0,
+          "min": 833.253875374794,
+          "max": 833.253875374794
+        },
+        "decode_ms": {
+          "mean": 1298.3879996463656,
+          "std": 0.0,
+          "min": 1298.3879996463656,
+          "max": 1298.3879996463656
+        },
+        "inference_ms": {
+          "mean": 2178.3607080578804,
+          "std": 0.0,
+          "min": 2178.3607080578804,
+          "max": 2178.3607080578804
+        },
+        "latency_ms": {
+          "mean": 2179.311125073582,
+          "std": 0.0,
+          "min": 2179.311125073582,
+          "max": 2179.311125073582
+        },
+        "prompt_tps": {
+          "mean": 387.6369610098915,
+          "std": 0.0,
+          "min": 387.6369610098915,
+          "max": 387.6369610098915
+        },
+        "generation_tps": {
+          "mean": 49.2918911892526,
+          "std": 0.0,
+          "min": 49.2918911892526,
+          "max": 49.2918911892526
+        },
+        "peak_memory_gb": {
+          "mean": 4.065853346,
+          "std": 0.0,
+          "min": 4.065853346,
+          "max": 4.065853346
+        },
+        "output_text": "This is a minimalist, flat-style digital illustration featuring a simple, abstract scene with geometric shapes on a plain background. The image is divided horizontally into two sections: the top half is a light gray, and the bottom half is a dark brown, suggesting a ground or floor.\n\nIn the top section, there are three distinct"
+      }
+    },
+    {
+      "name": "medium",
+      "complexity": "medium",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 1,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 323,
+          "std": 0.0,
+          "min": 323,
+          "max": 323
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 832.6727920211852,
+          "std": 0.0,
+          "min": 832.6727920211852,
+          "max": 832.6727920211852
+        },
+        "decode_ms": {
+          "mean": 1344.164582900703,
+          "std": 0.0,
+          "min": 1344.164582900703,
+          "max": 1344.164582900703
+        },
+        "inference_ms": {
+          "mean": 2220.6158749759197,
+          "std": 0.0,
+          "min": 2220.6158749759197,
+          "max": 2220.6158749759197
+        },
+        "latency_ms": {
+          "mean": 2221.345374826342,
+          "std": 0.0,
+          "min": 2221.345374826342,
+          "max": 2221.345374826342
+        },
+        "prompt_tps": {
+          "mean": 387.90747469479237,
+          "std": 0.0,
+          "min": 387.90747469479237,
+          "max": 387.90747469479237
+        },
+        "generation_tps": {
+          "mean": 47.613217022790614,
+          "std": 0.0,
+          "min": 47.613217022790614,
+          "max": 47.613217022790614
+        },
+        "peak_memory_gb": {
+          "mean": 4.065853346,
+          "std": 0.0,
+          "min": 4.065853346,
+          "max": 4.065853346
+        },
+        "output_text": "The image is a 5x5 grid of 25 colored squares, each square a distinct color or hue, arranged in a uniform grid pattern. The colors are vibrant and varied, ranging from bright and saturated tones to more subdued and muted shades. The grid is composed of a mix of primary, secondary, and"
+      }
+    },
+    {
+      "name": "high",
+      "complexity": "high",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 1,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 323,
+          "std": 0.0,
+          "min": 323,
+          "max": 323
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 833.0625835806131,
+          "std": 0.0,
+          "min": 833.0625835806131,
+          "max": 833.0625835806131
+        },
+        "decode_ms": {
+          "mean": 1313.3990839123726,
+          "std": 0.0,
+          "min": 1313.3990839123726,
+          "max": 1313.3990839123726
+        },
+        "inference_ms": {
+          "mean": 2203.667082823813,
+          "std": 0.0,
+          "min": 2203.667082823813,
+          "max": 2203.667082823813
+        },
+        "latency_ms": {
+          "mean": 2204.5213328674436,
+          "std": 0.0,
+          "min": 2204.5213328674436,
+          "max": 2204.5213328674436
+        },
+        "prompt_tps": {
+          "mean": 387.7259720532679,
+          "std": 0.0,
+          "min": 387.7259720532679,
+          "max": 387.7259720532679
+        },
+        "generation_tps": {
+          "mean": 48.72852492736317,
+          "std": 0.0,
+          "min": 48.72852492736317,
+          "max": 48.72852492736317
+        },
+        "peak_memory_gb": {
+          "mean": 4.065853346,
+          "std": 0.0,
+          "min": 4.065853346,
+          "max": 4.065853346
+        },
+        "output_text": "The image is a static screen filled with a dense, uniform pattern of noise. It appears to be a television or video signal with no discernible image, a common occurrence when a device is turned on but not receiving a proper signal. The noise is composed of a multitude of tiny, flickering dots in various shades of"
+      }
+    }
+  ]
+}

@@ -180,6 +180,25 @@ PROFILES: dict[str, ModelProfile] = {
         model_size_gb=4.5,
         inference_memory_gb=6.0,
     ),
+    "qwen3-vl-4b": ModelProfile(
+        family="qwen3-vl",
+        param_size="4B",
+        spatial_patch=14,
+        temporal_patch=2,
+        spatial_merge=2,
+        context_window=128_000,
+        max_visual_tokens=24_576,
+        default_visual_ratio=0.19,
+        recommended_fps=2.0,
+        min_frames=4,
+        max_frames=768,
+        has_deltanet=False,
+        deltanet_layers=0,
+        full_attn_layers=32,
+        kv_heads=4,
+        model_size_gb=2.5,
+        inference_memory_gb=3.5,
+    ),
 }
 
 # Aliases for common HuggingFace model IDs
@@ -187,15 +206,18 @@ _ALIASES: dict[str, str] = {
     "qwen3.5-0.8b": "qwen3.5-0.8b",
     "qwen2.5-vl-3b": "qwen2.5-vl-3b",
     "qwen2.5-vl-7b": "qwen2.5-vl-7b",
+    "qwen3-vl-4b": "qwen3-vl-4b",
 }
 
 # Patterns to match HuggingFace model IDs
 _PATTERNS: list[tuple[str, str]] = [
     (r"qwen3\.?5.*0\.?8b", "qwen3.5-0.8b"),
+    (r"qwen3.*vl.*4b", "qwen3-vl-4b"),
     (r"qwen2\.?5.*vl.*3b", "qwen2.5-vl-3b"),
     (r"qwen2\.?5.*vl.*7b", "qwen2.5-vl-7b"),
     # Broader fallbacks
     (r"qwen3\.?5", "qwen3.5-0.8b"),
+    (r"qwen3.*vl", "qwen3-vl-4b"),
     (r"qwen2\.?5.*vl", "qwen2.5-vl-3b"),
 ]
 

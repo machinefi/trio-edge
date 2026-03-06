@@ -65,7 +65,10 @@ class InferenceMetrics:
     # Generation stats
     prompt_tokens: int = 0
     completion_tokens: int = 0
-    tokens_per_sec: float = 0.0
+    prompt_tps: float = 0.0        # prefill tokens/sec
+    tokens_per_sec: float = 0.0    # decode tokens/sec
+    prefill_ms: float = 0.0        # prefill latency (derived)
+    decode_ms: float = 0.0         # decode latency (derived)
     peak_memory_gb: float = 0.0
 
 
@@ -128,10 +131,24 @@ class TrioCore(CallbackMixin):
             logger.info("Model already loaded: %s", self.config.model)
             return
 
-        self._backend = auto_backend(
+        backend = auto_backend(
             self.config.model,
             backend=self._backend_override,
         )
+
+        # If ToMe is enabled and we got an MLX backend, swap to ToMeMLXBackend
+        if self.config.tome_enabled and backend.backend_name == "mlx":
+            from trio_core.tome_backend import ToMeMLXBackend
+
+            backend = ToMeMLXBackend(
+                self.config.model,
+                tome_r=self.config.tome_r,
+                metric=self.config.tome_metric,
+                min_keep_ratio=self.config.tome_min_keep_ratio,
+                device_info=backend.device_info,
+            )
+
+        self._backend = backend
         self._backend.load()
         self._loaded = True
         self._profile = get_profile(self.config.model)
@@ -222,8 +239,14 @@ class TrioCore(CallbackMixin):
         with p_post:
             metrics.prompt_tokens = gen_result.prompt_tokens
             metrics.completion_tokens = gen_result.completion_tokens
+            metrics.prompt_tps = gen_result.prompt_tps
             metrics.tokens_per_sec = gen_result.generation_tps
             metrics.peak_memory_gb = gen_result.peak_memory
+            # Derive prefill/decode timing from TPS
+            if gen_result.prompt_tps > 0:
+                metrics.prefill_ms = (gen_result.prompt_tokens / gen_result.prompt_tps) * 1000
+            if gen_result.generation_tps > 0 and gen_result.completion_tokens > 0:
+                metrics.decode_ms = (gen_result.completion_tokens / gen_result.generation_tps) * 1000
 
         metrics.preprocess_ms = p_pre.dt
         metrics.inference_ms = p_inf.dt
