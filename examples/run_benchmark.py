@@ -8,8 +8,11 @@ Usage:
     # POPE with ToMe compression
     python examples/run_benchmark.py --bench pope --samples 100 --tome 8
 
-    # POPE full (3000 samples per split)
-    python examples/run_benchmark.py --bench pope --split random
+    # GQA benchmark (real-world visual reasoning)
+    python examples/run_benchmark.py --bench gqa --samples 100
+
+    # MMBench (multi-ability, 20 dimensions)
+    python examples/run_benchmark.py --bench mmbench --samples 100
 
     # TextVQA benchmark
     python examples/run_benchmark.py --bench textvqa --samples 100
@@ -24,7 +27,7 @@ from pathlib import Path
 
 def main():
     parser = argparse.ArgumentParser(description="VLM benchmark runner")
-    parser.add_argument("--bench", choices=["pope", "textvqa", "custom"],
+    parser.add_argument("--bench", choices=["pope", "textvqa", "gqa", "mmbench", "custom"],
                         default="pope", help="Benchmark to run")
     parser.add_argument("--split", default="random",
                         choices=["random", "popular", "adversarial"],
@@ -71,13 +74,18 @@ def main():
 
     # Setup benchmark
     from trio_core.eval_benchmarks import (
-        POPEBenchmark, TextVQABenchmark, CustomBenchmark, BenchmarkRunner,
+        POPEBenchmark, TextVQABenchmark, GQABenchmark, MMBenchBenchmark,
+        CustomBenchmark, BenchmarkRunner,
     )
 
     if args.bench == "pope":
         benchmark = POPEBenchmark(split=args.split, max_samples=args.samples)
     elif args.bench == "textvqa":
         benchmark = TextVQABenchmark(max_samples=args.samples)
+    elif args.bench == "gqa":
+        benchmark = GQABenchmark(max_samples=args.samples)
+    elif args.bench == "mmbench":
+        benchmark = MMBenchBenchmark(max_samples=args.samples)
     elif args.bench == "custom":
         if not args.custom_path:
             parser.error("--custom-path required for custom benchmark")

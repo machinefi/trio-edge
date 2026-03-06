@@ -52,7 +52,8 @@ def run_benchmarks(args) -> dict:
     """Run all regression benchmarks, return results dict."""
     from trio_core import TrioCore, EngineConfig
     from trio_core.eval_benchmarks import (
-        POPEBenchmark, TextVQABenchmark, BenchmarkRunner,
+        POPEBenchmark, TextVQABenchmark, GQABenchmark, MMBenchBenchmark,
+        BenchmarkRunner,
     )
 
     # Setup engine
@@ -135,6 +136,36 @@ def run_benchmarks(args) -> dict:
     print(f"  Accuracy: {r.accuracy:.1%}")
     print()
 
+    # GQA — real-world visual reasoning (spatial relations, attributes, counting)
+    if not args.skip_gqa:
+        print("=" * 60)
+        print(f"GQA (n={n})")
+        print("=" * 60)
+        gqa = GQABenchmark(max_samples=n)
+        r = runner.run(gqa)
+        results["benchmarks"]["gqa"] = {
+            "accuracy": r.accuracy,
+            "avg_latency_ms": sum(p.latency_ms for p in r.predictions) / len(r.predictions),
+            "n": len(r.predictions),
+        }
+        print(f"  Accuracy: {r.accuracy:.1%}")
+        print()
+
+    # MMBench — multi-ability (20 dimensions, multiple choice)
+    if not args.skip_mmbench:
+        print("=" * 60)
+        print(f"MMBench (n={n})")
+        print("=" * 60)
+        mmbench = MMBenchBenchmark(max_samples=n)
+        r = runner.run(mmbench)
+        results["benchmarks"]["mmbench"] = {
+            "accuracy": r.accuracy,
+            "avg_latency_ms": sum(p.latency_ms for p in r.predictions) / len(r.predictions),
+            "n": len(r.predictions),
+        }
+        print(f"  Accuracy: {r.accuracy:.1%}")
+        print()
+
     return results
 
 
@@ -211,6 +242,10 @@ def main():
                         help=f"Samples per benchmark (default: {DEFAULT_SAMPLES})")
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD,
                         help=f"Max accuracy drop allowed (default: {DEFAULT_THRESHOLD})")
+    parser.add_argument("--skip-gqa", action="store_true",
+                        help="Skip GQA benchmark (large dataset download)")
+    parser.add_argument("--skip-mmbench", action="store_true",
+                        help="Skip MMBench benchmark")
     args = parser.parse_args()
 
     results = run_benchmarks(args)

@@ -3,10 +3,12 @@
 Supports:
   - POPE (Object Hallucination) — yes/no questions, accuracy/F1
   - TextVQA — OCR-based QA, accuracy via exact match
+  - GQA — Real-world visual reasoning (spatial, attributes, counting)
+  - MMBench — Multi-ability benchmark (20 dimensions, multiple choice)
   - Custom QA — user-provided image+question+answer sets
 
 Usage:
-    from trio_core.eval_benchmarks import POPEBenchmark, BenchmarkRunner
+    from trio_core.eval_benchmarks import POPEBenchmark, GQABenchmark, BenchmarkRunner
     bench = POPEBenchmark(split="random", max_samples=100)
     runner = BenchmarkRunner(engine)
     result = runner.run(bench)
@@ -366,6 +368,191 @@ class TextVQABenchmark(Benchmark):
         pred = prediction.strip().lower()
         gt = sample.answer.strip().lower()
         return gt in pred or pred in gt
+
+
+class GQABenchmark(Benchmark):
+    """GQA: Real-World Visual Reasoning and Compositional QA.
+
+    Tests compositional visual reasoning on real-world images (COCO).
+    Dataset: lmms-lab/GQA on HuggingFace.
+    Uses testdev_balanced split (12,578 questions).
+
+    Questions test spatial relations, attributes, counting, comparisons
+    on real-world scenes — the most relevant benchmark for camera/webcam
+    use cases.
+    """
+
+    def __init__(self, max_samples: int | None = None, cache_dir: str | None = None):
+        self.max_samples = max_samples
+        self.cache_dir = cache_dir
+
+    @property
+    def name(self) -> str:
+        n = f" (n={self.max_samples})" if self.max_samples else ""
+        return f"GQA{n}"
+
+    def load(self) -> list[BenchmarkSample]:
+        try:
+            from datasets import load_dataset
+        except ImportError:
+            raise ImportError("Install 'datasets': pip install datasets")
+
+        logger.info("Loading GQA dataset (testdev_balanced)...")
+
+        # GQA has separate image and instruction datasets
+        ds_instructions = load_dataset(
+            "lmms-lab/GQA",
+            "testdev_balanced_instructions",
+            split="testdev",
+            cache_dir=self.cache_dir,
+        )
+        ds_images = load_dataset(
+            "lmms-lab/GQA",
+            "testdev_balanced_images",
+            split="testdev",
+            cache_dir=self.cache_dir,
+        )
+
+        # Build image lookup by id
+        logger.info("Building image index (%d images)...", len(ds_images))
+        image_lookup: dict[str, Any] = {}
+        for img_item in ds_images:
+            image_lookup[img_item["id"]] = img_item["image"]
+
+        samples = []
+        n = self.max_samples or len(ds_instructions)
+        for i in range(min(n, len(ds_instructions))):
+            item = ds_instructions[i]
+            image_id = item["imageId"]
+
+            if image_id not in image_lookup:
+                logger.warning("Image %s not found, skipping", image_id)
+                continue
+
+            pil_img = image_lookup[image_id]
+            img = np.array(pil_img)
+            if img.ndim == 2:
+                img = np.stack([img] * 3, axis=-1)
+            if img.shape[2] == 4:  # RGBA -> RGB
+                img = img[:, :, :3]
+            frames = img.transpose(2, 0, 1).astype(np.float32) / 255.0
+            frames = frames[np.newaxis]
+
+            samples.append(BenchmarkSample(
+                id=str(item["id"]),
+                image=frames,
+                question=item["question"],
+                answer=item["answer"].lower(),
+                category=item.get("types", {}).get("structural", ""),
+            ))
+
+        logger.info("Loaded %d GQA samples", len(samples))
+        return samples
+
+    def judge(self, sample: BenchmarkSample, prediction: str) -> bool:
+        """GQA uses relaxed matching — short answers, case-insensitive."""
+        pred = prediction.strip().lower()
+        gt = sample.answer.strip().lower()
+        # Exact match
+        if pred == gt:
+            return True
+        # GT appears at start of prediction (e.g., gt="yes", pred="yes, it is")
+        if pred.startswith(gt):
+            return True
+        # GT appears as a word in prediction
+        if re.search(r'\b' + re.escape(gt) + r'\b', pred):
+            return True
+        return False
+
+
+class MMBenchBenchmark(Benchmark):
+    """MMBench: Multi-ability Multi-modal Benchmark.
+
+    Tests 20 ability dimensions including spatial reasoning, attribute
+    recognition, object localization, etc. Multiple-choice format.
+    Dataset: lmms-lab/MMBench on HuggingFace (English dev split).
+    """
+
+    OPTION_LETTERS = ["A", "B", "C", "D", "E"]
+
+    def __init__(self, max_samples: int | None = None, cache_dir: str | None = None):
+        self.max_samples = max_samples
+        self.cache_dir = cache_dir
+
+    @property
+    def name(self) -> str:
+        n = f" (n={self.max_samples})" if self.max_samples else ""
+        return f"MMBench{n}"
+
+    def load(self) -> list[BenchmarkSample]:
+        try:
+            from datasets import load_dataset
+        except ImportError:
+            raise ImportError("Install 'datasets': pip install datasets")
+
+        logger.info("Loading MMBench dataset (en/dev)...")
+        ds = load_dataset(
+            "lmms-lab/MMBench",
+            "en",
+            split="dev",
+            cache_dir=self.cache_dir,
+        )
+
+        samples = []
+        n = self.max_samples or len(ds)
+        for i in range(min(n, len(ds))):
+            item = ds[i]
+
+            img = np.array(item["image"])
+            if img.ndim == 2:
+                img = np.stack([img] * 3, axis=-1)
+            if img.shape[2] == 4:
+                img = img[:, :, :3]
+            frames = img.transpose(2, 0, 1).astype(np.float32) / 255.0
+            frames = frames[np.newaxis]
+
+            # Build multiple-choice question
+            options = []
+            for letter in self.OPTION_LETTERS:
+                opt = item.get(letter)
+                if opt and str(opt).strip() and str(opt).strip().lower() != "nan":
+                    options.append(f"{letter}. {opt}")
+            options_text = "\n".join(options)
+
+            hint = item.get("hint", "")
+            hint_text = f"Hint: {hint}\n" if hint and str(hint).strip().lower() != "nan" else ""
+
+            question = f"{hint_text}{item['question']}\n{options_text}\nAnswer with the option letter only."
+            answer = item["answer"]
+
+            samples.append(BenchmarkSample(
+                id=str(item.get("index", i)),
+                image=frames,
+                question=question,
+                answer=answer,
+                category=item.get("category", ""),
+                metadata={"l2_category": item.get("l2-category", "")},
+            ))
+
+        logger.info("Loaded %d MMBench samples", len(samples))
+        return samples
+
+    def judge(self, sample: BenchmarkSample, prediction: str) -> bool:
+        """MMBench: match option letter."""
+        pred = prediction.strip().upper()
+        gt = sample.answer.strip().upper()
+
+        # Direct letter match
+        if pred == gt:
+            return True
+        # First character is the answer letter
+        if pred and pred[0] == gt:
+            return True
+        # Look for pattern like "A." or "(A)" in prediction
+        match = re.match(r'^([A-E])[.\s)\]]', pred)
+        if match and match.group(1) == gt:
+            return True
+        return False
 
 
 class CustomBenchmark(Benchmark):

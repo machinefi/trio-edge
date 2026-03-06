@@ -7,6 +7,7 @@ Research notes on visual token compression for edge VLM inference.
 - [visual-token-compression.md](visual-token-compression.md) — Core research direction: three key papers, prototype results, compatibility analysis with KV cache / batch scheduling / quantization.
 - [tome-implementation-plan.md](tome-implementation-plan.md) — Detailed step-by-step plan for implementing ToMe in Qwen2.5-VL's vision encoder.
 - [native-engine-plan.md](native-engine-plan.md) — Phased plan to replace mlx-vlm dependency: per-stage analysis, core metrics projections, Phase 1/2/3 execution plan.
+- [eval-strategy.md](eval-strategy.md) — Evaluation benchmark selection: research across model reports, compression papers, and eval toolkits. Tiered benchmark suite (Tier 1 regression gate, Tier 2 full eval, Tier 3 video).
 - [eval-results/](eval-results/) — Baseline, compressed, and ToMe eval JSON files.
 
 ## Key Thesis
