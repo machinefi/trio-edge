@@ -90,8 +90,10 @@ See [`examples/`](examples/) for complete scripts:
 | [`webcam_to_text.py`](examples/webcam_to_text.py) | Live laptop camera -> continuous VLM analysis |
 | [`video_analyze.py`](examples/video_analyze.py) | Analyze a video file with detailed metrics |
 | [`stream_monitor.py`](examples/stream_monitor.py) | Monitor RTSP/YouTube stream with motion gating |
+| [`webcam_gui.py`](examples/webcam_gui.py) | Live camera + VLM overlay in GUI window |
 | [`run_benchmark.py`](examples/run_benchmark.py) | POPE/TextVQA benchmarks with A/B comparison |
 | [`run_eval.py`](examples/run_eval.py) | Synthetic perf eval (prefill, decode, memory) |
+| [`run_regression.py`](examples/run_regression.py) | Accuracy regression gate (POPE + TextVQA) |
 
 ```python
 # Webcam -> Text (3 lines of code)
@@ -141,6 +143,64 @@ Live Stream / File / URL
 | CPU-only | Fallback | Transformers (PyTorch) | `Qwen/` |
 
 Memory-based model recommendation: 32GB+ -> 7B, <32GB -> 3B.
+
+## Inference Pipeline
+
+```
+Input → [Vision Encoder + ToMe] → visual tokens → [LLM Prefill] → [KV Cache] → [Decode]
+         ^^^^^^^^^^^^^^^^^^^^      ^^^^^^^^^^      ^^^^^^^^^^^^     ^^^^^^^^^    ^^^^^^^^
+         merge here                fewer tokens    quantization     caching      batching
+```
+
+Every VLM inference decomposes into these 5 stages. Here's what TrioCore controls at each stage — and what it unlocks:
+
+| Stage | What Happens | TrioCore | mlx-vlm | Potential Gain |
+|---|---|---|---|---|
+| **Vision Encoder** | ViT forward pass on image/video patches | **ToMe merging** (monkey-patched) | Model definition + forward | Native ToMe = no patch overhead; progressive per-layer compression |
+| **Visual Tokens** | Encoded patches → token embeddings | Compressed count via ToMe | Raw output, no compression | Adaptive budget per frame (static scene → fewer, complex → more) |
+| **LLM Prefill** | Process all tokens (visual + text) in parallel | Profile-aware token budget | Full-sequence prefill | Cross-frame prompt caching; shared text prefix across video frames |
+| **KV Cache** | Store K/V for each decoded token | _(not yet)_ | Basic single-request cache | **Frame-to-frame KV reuse** — video frames share 80%+ scene context |
+| **Decode** | Auto-regressive token generation | Streaming via backend | Token-by-token sampling | Speculative decoding; early stop on confidence; continuous batching |
+
+### Core Metrics Impact
+
+Building our own inference stack (replacing mlx-vlm) would improve these metrics:
+
+```
+                        Current          With Custom Engine
+                        (mlx-vlm)        (TrioCore native)
+                        ─────────        ─────────────────
+Prefill Latency         ██████████       ████░░░░░░          -40~60%
+                        ToMe helps       + KV reuse across frames
+
+Decode Throughput       ██████████       ████████████████     +30~50%
+                        baseline         + speculative decode + continuous batch
+
+Visual Tokens           ██████░░░░       ████░░░░░░░░        -30~50% more
+                        ToMe r=4         + adaptive r + LLM-layer pruning (AIM)
+
+Peak Memory             ██████████       ████████░░░░        -20~30%
+                        full KV cache    + KV sharing + streaming eviction
+
+Quality (Accuracy)      ██████████       ██████████░░        +1~3%
+                        fixed r          + content-aware adaptive compression
+```
+
+### Independence Roadmap
+
+```
+Phase 1 — Custom generate loop (KV cache + sampling)
+  └─ Unlocks: speculative decoding, frame-to-frame KV reuse, early stopping
+  └─ Still uses: mlx-vlm model loading + ViT forward
+
+Phase 2 — Custom Vision Encoder
+  └─ Unlocks: native ToMe (no monkey-patch), per-layer adaptive r, LLM-layer pruning
+  └─ Still uses: mlx-vlm weight loading
+
+Phase 3 — Custom weight loading + full native engine
+  └─ Unlocks: custom quantization, streaming KV eviction, zero mlx-vlm dependency
+  └─ Uses only: MLX framework (mx.array, nn.Module)
+```
 
 ## Key Technologies
 
@@ -441,10 +501,11 @@ trio-core/                        ~4,800 lines production code
 
 - [x] **v0.1:** Core engine — video pipeline, temporal dedup, motion gating
 - [x] **v0.2:** Visual token compression (ToMe) + eval framework (POPE, TextVQA)
-- [x] **v0.2.1:** Qwen3-VL support, EngineConfig integration, production hardening
-- [ ] **Next:** Adaptive r per layer, KV cache interaction benchmarks
-- [ ] **Phase 3:** VideoCache (KV cache reuse), batch scheduling
-- [ ] **Phase 4:** `/metrics` endpoint, PyPI packaging
+- [x] **v0.2.1:** Qwen3-VL + Qwen3.5 support, multi-model profiles (Gemma 3, SmolVLM)
+- [ ] **v0.3:** Custom generate loop — own KV cache, speculative decoding, frame-to-frame reuse
+- [ ] **v0.4:** Native Vision Encoder — built-in ToMe, adaptive r, LLM-layer pruning
+- [ ] **v0.5:** Full native engine — zero mlx-vlm dependency, custom quantization
+- [ ] **Ongoing:** PyPI packaging, `/metrics` endpoint, continuous batching
 
 ## License
 

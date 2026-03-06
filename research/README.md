@@ -6,6 +6,7 @@ Research notes on visual token compression for edge VLM inference.
 
 - [visual-token-compression.md](visual-token-compression.md) — Core research direction: three key papers, prototype results, compatibility analysis with KV cache / batch scheduling / quantization.
 - [tome-implementation-plan.md](tome-implementation-plan.md) — Detailed step-by-step plan for implementing ToMe in Qwen2.5-VL's vision encoder.
+- [native-engine-plan.md](native-engine-plan.md) — Phased plan to replace mlx-vlm dependency: per-stage analysis, core metrics projections, Phase 1/2/3 execution plan.
 - [eval-results/](eval-results/) — Baseline, compressed, and ToMe eval JSON files.
 
 ## Key Thesis
@@ -99,5 +100,9 @@ Finding: 0.25 is viable (~2% more loss for ~11% more compression). 0.2 is too ag
 - [x] K-matrix v2 with RoPE (implemented, benchmarked — still worse than hidden)
 - [x] High-resolution 1080p benchmark (73% prefill speedup)
 - [x] **Qwen3-VL ToMe — zero quality loss** (91% → 91% on POPE, 31% prefill speedup)
-- [ ] Qwen3.5 architecture study (early fusion — no separate ViT, needs different approach)
-- [ ] KV cache interaction benchmarks
+- [x] Qwen3.5 support verified (uses ToMeQwen3VisionWrapper, 36-50% prefill speedup)
+- [x] Multi-model profiles (Gemma 3, SmolVLM) + generalized Transformers backend
+- [x] mlx-vlm dependency analysis + phased replacement plan (native-engine-plan.md)
+- [ ] **Phase 1: Custom generate loop** — KV cache reuse, prompt caching, early stop
+- [ ] Phase 2: Native Vision Encoder — built-in ToMe, adaptive r
+- [ ] Phase 3: Full native engine — zero mlx-vlm dependency
