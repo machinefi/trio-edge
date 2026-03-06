@@ -121,23 +121,26 @@ def _register_routes(app: FastAPI) -> None:
     async def chat_completions(request: ChatCompletionRequest):
         engine = get_engine()
 
-        # Extract video and text from messages
-        videos, prompt = _extract_from_messages(request.messages)
+        # Extract media (video/image) and text from messages
+        media, prompt = _extract_from_messages(request.messages)
 
-        if not videos:
-            raise HTTPException(400, "No video content found in messages. Use content parts with type='video'.")
+        if not media:
+            raise HTTPException(400, "No visual content found in messages. Use content parts with type='image_url' or 'video'.")
 
         max_tokens = request.max_tokens or engine.config.max_tokens
         temperature = request.temperature if request.temperature is not None else engine.config.temperature
 
+        # Resolve media source: base64 data URI → temp file, or path/URL as-is
+        source = _resolve_media(media[0])
+
         if request.stream:
             return StreamingResponse(
-                _stream_chat_completion(engine, videos[0], prompt, request, max_tokens, temperature),
+                _stream_chat_completion(engine, source, prompt, request, max_tokens, temperature),
                 media_type="text/event-stream",
             )
 
         result = engine.analyze_video(
-            video=videos[0],
+            video=source,
             prompt=prompt,
             max_tokens=max_tokens,
             temperature=temperature,
@@ -157,8 +160,14 @@ def _register_routes(app: FastAPI) -> None:
 
 
 def _extract_from_messages(messages: list[ChatMessage]) -> tuple[list[str], str]:
-    """Extract video paths and text prompt from chat messages."""
-    videos: list[str] = []
+    """Extract video/image paths and text prompt from chat messages.
+
+    Supports:
+    - type="video" with video or video_url.url
+    - type="image_url" with image_url.url (OpenAI format, file path or base64 data URI)
+    - type="image" with image or image_url.url (convenience alias)
+    """
+    media: list[str] = []
     texts: list[str] = []
 
     for msg in messages:
@@ -169,11 +178,40 @@ def _extract_from_messages(messages: list[ChatMessage]) -> tuple[list[str], str]
             if part.type == "video":
                 src = part.video or (part.video_url or {}).get("url")
                 if src:
-                    videos.append(src)
+                    media.append(src)
+            elif part.type in ("image_url", "image"):
+                src = (part.image_url or {}).get("url")
+                if src:
+                    media.append(src)
             elif part.type == "text" and part.text:
                 texts.append(part.text)
 
-    return videos, " ".join(texts) if texts else "Describe this video."
+    return media, " ".join(texts) if texts else "Describe this video."
+
+
+def _resolve_media(source: str) -> str:
+    """Resolve media source to a file path.
+
+    Handles:
+    - base64 data URI (data:image/jpeg;base64,...) → temp file
+    - file path or URL → returned as-is
+    """
+    if source.startswith("data:"):
+        import base64
+        import tempfile
+
+        # Parse data URI: data:<mime>;base64,<data>
+        header, data = source.split(",", 1)
+        mime = header.split(":")[1].split(";")[0]
+        ext = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
+               "video/mp4": ".mp4"}.get(mime, ".bin")
+
+        tmp = tempfile.NamedTemporaryFile(suffix=ext, delete=False)
+        tmp.write(base64.b64decode(data))
+        tmp.close()
+        return tmp.name
+
+    return source
 
 
 async def _stream_video_analyze(
