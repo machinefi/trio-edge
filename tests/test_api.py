@@ -112,3 +112,36 @@ class TestChatCompletions:
         assert resp.status_code == 200
         data = resp.json()
         assert data["choices"][0]["message"]["content"] == "Test analysis result"
+
+    def test_with_image_url(self, client):
+        """OpenAI-compatible image_url content part."""
+        resp = client.post("/v1/chat/completions", json={
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": "/tmp/test.jpg"}},
+                    {"type": "text", "text": "What do you see?"},
+                ],
+            }],
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["choices"][0]["message"]["content"] == "Test analysis result"
+        assert data["object"] == "chat.completion"
+        assert data["usage"]["prompt_tokens"] == 100
+
+    def test_with_base64_image(self, client):
+        """Base64 data URI image."""
+        import base64
+        # 1x1 red PNG
+        pixel = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"\x00" * 50).decode()
+        resp = client.post("/v1/chat/completions", json={
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{pixel}"}},
+                    {"type": "text", "text": "What is this?"},
+                ],
+            }],
+        })
+        assert resp.status_code == 200
