@@ -272,7 +272,11 @@ class MLXBackend(BaseBackend):
 
 
 class TransformersBackend(BaseBackend):
-    """VLM backend using HuggingFace Transformers on CUDA / CPU."""
+    """VLM backend using HuggingFace Transformers on CUDA / CPU.
+
+    Supports any VLM loadable via AutoModelForVision2Seq, including:
+    Qwen2.5-VL, Qwen3-VL, Qwen3.5, Gemma 3, SmolVLM, Phi-4, InternVL, etc.
+    """
 
     @property
     def backend_name(self) -> str:
@@ -280,7 +284,7 @@ class TransformersBackend(BaseBackend):
 
     def load(self) -> None:
         import torch
-        from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
+        from transformers import AutoModelForVision2Seq, AutoProcessor
 
         device = "cuda" if self.device_info.accelerator == "cuda" else "cpu"
         dtype = torch.float16 if device == "cuda" else torch.float32
@@ -288,10 +292,11 @@ class TransformersBackend(BaseBackend):
         logger.info("[Transformers] Loading model: %s (device=%s)", self.model_name, device)
         t0 = time.monotonic()
         self._processor = AutoProcessor.from_pretrained(self.model_name)
-        self._model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+        self._model = AutoModelForVision2Seq.from_pretrained(
             self.model_name, torch_dtype=dtype, device_map=device,
         )
         self._device = device
+        self._is_qwen = "qwen" in self.model_name.lower()
         self._loaded = True
         logger.info("[Transformers] Model loaded in %.1fs", time.monotonic() - t0)
 
@@ -301,23 +306,19 @@ class TransformersBackend(BaseBackend):
     ) -> GenerationResult:
         import torch
 
-        input_ids, pixel_values, mask, kwargs = self._prepare(frames, prompt)
+        inputs = self._prepare(frames, prompt)
 
         t0 = time.monotonic()
+        prompt_len = inputs["input_ids"].shape[1]
         with torch.no_grad():
             outputs = self._model.generate(
-                input_ids=input_ids,
-                pixel_values_videos=pixel_values,
-                attention_mask=mask,
+                **inputs,
                 max_new_tokens=max_tokens,
                 temperature=max(temperature, 1e-6),
                 top_p=top_p,
                 do_sample=temperature > 0,
-                **kwargs,
             )
 
-        # Decode only the new tokens
-        prompt_len = input_ids.shape[1]
         new_tokens = outputs[0][prompt_len:]
         text = self._processor.decode(new_tokens, skip_special_tokens=True)
 
@@ -340,20 +341,17 @@ class TransformersBackend(BaseBackend):
         import torch
         import threading
 
-        input_ids, pixel_values, mask, kwargs = self._prepare(frames, prompt)
+        inputs = self._prepare(frames, prompt)
 
         streamer = TextIteratorStreamer(self._processor, skip_prompt=True, skip_special_tokens=True)
 
         gen_kwargs = dict(
-            input_ids=input_ids,
-            pixel_values_videos=pixel_values,
-            attention_mask=mask,
+            **inputs,
             max_new_tokens=max_tokens,
             temperature=max(temperature, 1e-6),
             top_p=top_p,
             do_sample=temperature > 0,
             streamer=streamer,
-            **kwargs,
         )
 
         thread = threading.Thread(target=self._model.generate, kwargs=gen_kwargs)
@@ -364,8 +362,43 @@ class TransformersBackend(BaseBackend):
 
         thread.join(timeout=300)  # 5 min safety timeout
 
-    def _build_messages(self, frames: np.ndarray, prompt: str) -> list[dict]:
-        return [{
+    def _prepare(self, frames: np.ndarray, prompt: str) -> dict:
+        """Prepare inputs for generate().
+
+        Qwen models use qwen_vl_utils for video processing.
+        All other models get frames converted to PIL images.
+        Returns a dict of tensors ready to pass to model.generate(**inputs).
+        """
+        import torch
+        from PIL import Image
+
+        if self._is_qwen:
+            return self._prepare_qwen(frames, prompt)
+
+        # Generic path: convert frames to PIL images
+        images = self._frames_to_pil(frames)
+
+        messages = [{"role": "user", "content": []}]
+        for img in images:
+            messages[0]["content"].append({"type": "image", "image": img})
+        messages[0]["content"].append({"type": "text", "text": prompt})
+
+        text = self._processor.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True,
+        )
+
+        inputs = self._processor(
+            text=[text], images=images,
+            padding=True, return_tensors="pt",
+        )
+
+        return {k: v.to(self._device) if hasattr(v, "to") else v for k, v in inputs.items()}
+
+    def _prepare_qwen(self, frames: np.ndarray, prompt: str) -> dict:
+        """Qwen-specific preparation using qwen_vl_utils."""
+        import torch
+
+        messages = [{
             "role": "user",
             "content": [
                 {"type": "video", "video": frames},
@@ -373,10 +406,6 @@ class TransformersBackend(BaseBackend):
             ],
         }]
 
-    def _prepare(self, frames: np.ndarray, prompt: str) -> tuple:
-        import torch
-
-        messages = self._build_messages(frames, prompt)
         text = self._processor.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True,
         )
@@ -395,20 +424,19 @@ class TransformersBackend(BaseBackend):
             padding=True, return_tensors="pt",
         )
 
-        device = self._device
-        input_ids = inputs["input_ids"].to(device)
-        pixel_values = inputs.get(
-            "pixel_values_videos", inputs.get("pixel_values", torch.tensor([]))
-        ).to(device)
-        mask = inputs.get("attention_mask", torch.ones_like(inputs["input_ids"])).to(device)
+        return {k: v.to(self._device) if hasattr(v, "to") else v for k, v in inputs.items()}
 
-        kwargs = {}
-        if "video_grid_thw" in inputs:
-            kwargs["video_grid_thw"] = inputs["video_grid_thw"].to(device)
-        if "image_grid_thw" in inputs:
-            kwargs["image_grid_thw"] = inputs["image_grid_thw"].to(device)
+    @staticmethod
+    def _frames_to_pil(frames: np.ndarray) -> list:
+        """Convert (T, C, H, W) float32 numpy to list of PIL Images."""
+        from PIL import Image
 
-        return input_ids, pixel_values, mask, kwargs
+        images = []
+        for i in range(frames.shape[0]):
+            # (C, H, W) float32 [0,1] → (H, W, C) uint8
+            frame = (frames[i].transpose(1, 2, 0) * 255).clip(0, 255).astype(np.uint8)
+            images.append(Image.fromarray(frame))
+        return images
 
 
 # ── Auto Backend Selection ───────────────────────────────────────────────────
