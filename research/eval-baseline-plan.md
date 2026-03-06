@@ -14,15 +14,15 @@ change must not drop accuracy below threshold (default: 3%).
 |---|----------|---------|------|-------|
 | 1 | `mlx-community/Qwen2.5-VL-3B-Instruct-4bit` | qwen2.5-vl-3b | ~2GB | Primary dev model, most benchmarked |
 | 2 | `mlx-community/Qwen3-VL-4B-Instruct-4bit` | qwen3-vl-4b | ~2.5GB | Zero quality loss with ToMe |
-| 3 | `mlx-community/Qwen3.5-VL-0.8B-Instruct-4bit` | qwen3.5-0.8b | ~0.6GB | Smallest, edge target |
+| 3 | `mlx-community/Qwen3.5-0.8B-MLX-4bit` | qwen3.5-0.8b | ~0.6GB | Smallest, edge target |
 
 ### Non-Qwen Family (2-3 models — baseline only, no ToMe)
 
 | # | Model ID | Profile | Size | Notes |
 |---|----------|---------|------|-------|
 | 4 | `mlx-community/gemma-3-4b-it-4bit` | gemma3-4b | ~2.5GB | Google, SigLIP ViT, 256 fixed tokens |
-| 5 | `mlx-community/SmolVLM2-2.2B-Instruct` | smolvlm-2.2b | ~1.2GB | HuggingFace, smallest multi-modal |
-| 6 | `mlx-community/SmolVLM2-256M-Video-Instruct` | smolvlm-256m | ~0.3GB | Ultra-small, stress test (optional) |
+| 5 | `mlx-community/SmolVLM2-2.2B-Instruct-mlx` | smolvlm-2.2b | ~1.2GB | HuggingFace, smallest multi-modal |
+| 6 | `mlx-community/SmolVLM2-256M-Video-Instruct-mlx` | smolvlm-256m | ~0.3GB | Ultra-small, stress test (optional) |
 
 **Total: 5-6 models**
 
