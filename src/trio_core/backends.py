@@ -146,48 +146,141 @@ class MLXBackend(BaseBackend):
         t0 = time.monotonic()
         self._model, self._processor = load(self.model_name)
         self._config = load_config(self.model_name)
+        self._prompt_cache = None  # Lazily created on first generate
         self._loaded = True
         logger.info("[MLX] Model loaded in %.1fs", time.monotonic() - t0)
+
+    def _get_prompt_cache(self):
+        """Get or create the persistent PromptCache."""
+        if self._prompt_cache is None:
+            from trio_core.generate import PromptCache
+            self._prompt_cache = PromptCache(self._model)
+        return self._prompt_cache
 
     def generate(
         self, frames: np.ndarray, prompt: str, *,
         max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
     ) -> GenerationResult:
+        import mlx.core as mx
+        from trio_core.generate import generate_step, _wired_limit
+
         formatted, kwargs = self._prepare(frames, prompt)
 
-        from mlx_vlm import generate as mlx_generate
-        result = mlx_generate(
-            self._model, self._processor, formatted,
-            max_tokens=max_tokens, temp=temperature, top_p=top_p, verbose=False,
-            **kwargs,
+        input_ids = kwargs.pop("input_ids")
+        pixel_values = kwargs.pop("pixel_values")
+        mask = kwargs.pop("mask")
+
+        tokenizer = (
+            self._processor.tokenizer
+            if hasattr(self._processor, "tokenizer")
+            else self._processor
         )
+        detokenizer = self._processor.detokenizer
+        detokenizer.reset()
+
+        # Reset stopping criteria
+        if hasattr(tokenizer, "stopping_criteria"):
+            tokenizer.stopping_criteria.reset(self._model.config.eos_token_id)
+
+        text = ""
+        prompt_tps = 0.0
+        generation_tps = 0.0
+        n_tokens = 0
+
+        with _wired_limit(self._model):
+            tic = time.perf_counter()
+            for n, (token, logprobs) in enumerate(
+                generate_step(
+                    input_ids, self._model, pixel_values, mask,
+                    max_tokens=max_tokens, temperature=temperature, top_p=top_p,
+                    prompt_cache_manager=self._get_prompt_cache(),
+                    **kwargs,
+                )
+            ):
+                if n == 0:
+                    prompt_time = time.perf_counter() - tic
+                    prompt_tps = input_ids.size / max(prompt_time, 1e-9)
+                    tic = time.perf_counter()
+
+                if hasattr(tokenizer, "stopping_criteria") and tokenizer.stopping_criteria(token):
+                    break
+
+                detokenizer.add_token(token)
+                n_tokens = n + 1
+
+            detokenizer.finalize()
+            text = detokenizer.text
+
+            if n_tokens > 0:
+                generation_tps = n_tokens / max(time.perf_counter() - tic, 1e-9)
 
         return GenerationResult(
-            text=result.text,
-            prompt_tokens=getattr(result, "prompt_tokens", 0),
-            completion_tokens=getattr(result, "generation_tokens", 0),
-            prompt_tps=getattr(result, "prompt_tps", 0.0),
-            generation_tps=getattr(result, "generation_tps", 0.0),
-            peak_memory=getattr(result, "peak_memory", 0.0),
+            text=text,
+            prompt_tokens=input_ids.size,
+            completion_tokens=n_tokens,
+            prompt_tps=prompt_tps,
+            generation_tps=generation_tps,
+            peak_memory=mx.get_peak_memory() / 1e9 if hasattr(mx, "get_peak_memory") else 0.0,
         )
 
     def stream_generate(
         self, frames: np.ndarray, prompt: str, *,
         max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
     ) -> Generator[StreamChunk, None, None]:
+        import mlx.core as mx
+        from trio_core.generate import generate_step, _wired_limit
+
         formatted, kwargs = self._prepare(frames, prompt)
 
-        from mlx_vlm import stream_generate as mlx_stream
-        for chunk in mlx_stream(
-            self._model, self._processor, formatted,
-            max_tokens=max_tokens, temp=temperature,
-            **kwargs,
-        ):
-            yield StreamChunk(
-                text=chunk.text,
-                prompt_tokens=getattr(chunk, "prompt_tokens", 0),
-                completion_tokens=getattr(chunk, "generation_tokens", 0),
-            )
+        input_ids = kwargs.pop("input_ids")
+        pixel_values = kwargs.pop("pixel_values")
+        mask = kwargs.pop("mask")
+
+        tokenizer = (
+            self._processor.tokenizer
+            if hasattr(self._processor, "tokenizer")
+            else self._processor
+        )
+        detokenizer = self._processor.detokenizer
+        detokenizer.reset()
+
+        if hasattr(tokenizer, "stopping_criteria"):
+            tokenizer.stopping_criteria.reset(self._model.config.eos_token_id)
+
+        with _wired_limit(self._model):
+            tic = time.perf_counter()
+            for n, (token, logprobs) in enumerate(
+                generate_step(
+                    input_ids, self._model, pixel_values, mask,
+                    max_tokens=max_tokens, temperature=temperature, top_p=top_p,
+                    prompt_cache_manager=self._get_prompt_cache(),
+                    **kwargs,
+                )
+            ):
+                if n == 0:
+                    prompt_time = time.perf_counter() - tic
+                    tic = time.perf_counter()
+
+                if hasattr(tokenizer, "stopping_criteria") and tokenizer.stopping_criteria(token):
+                    break
+
+                detokenizer.add_token(token)
+                yield StreamChunk(
+                    text=detokenizer.last_segment,
+                    prompt_tokens=input_ids.size,
+                    completion_tokens=n + 1,
+                )
+
+            detokenizer.finalize()
+            if detokenizer.last_segment:
+                yield StreamChunk(
+                    text=detokenizer.last_segment,
+                    prompt_tokens=input_ids.size,
+                    completion_tokens=n + 1,
+                    finished=True,
+                )
+
+            mx.clear_cache()
 
     def _prepare(self, frames: np.ndarray, prompt: str) -> tuple[str, dict]:
         """Prepare prompt and pre-processed video tensors for mlx_vlm generate.
