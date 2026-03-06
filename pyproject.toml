@@ -39,6 +39,7 @@ Issues = "https://github.com/machinefi/trio-core/issues"
 [project.optional-dependencies]
 mlx = ["mlx-vlm>=0.3.12"]
 transformers = ["transformers>=4.40", "torch", "accelerate", "qwen-vl-utils"]
+gui = ["opencv-python>=4.8"]
 all = ["trio-core[mlx,transformers]"]
 dev = ["pytest", "pytest-asyncio", "httpx"]
 
