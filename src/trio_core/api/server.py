@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import time
 import uuid
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
@@ -62,7 +61,7 @@ def create_app(config: EngineConfig | None = None, backend: str | None = None) -
     app = FastAPI(
         title="TrioCore",
         description="Portable video inference engine for VLMs",
-        version="0.1.0",
+        version="0.2.1",
         lifespan=lifespan,
     )
     app.state.config = config or EngineConfig()
@@ -200,15 +199,23 @@ def _resolve_media(source: str) -> str:
         import base64
         import tempfile
 
+        if "," not in source:
+            raise HTTPException(400, "Invalid data URI: missing comma separator")
+
         # Parse data URI: data:<mime>;base64,<data>
         header, data = source.split(",", 1)
-        mime = header.split(":")[1].split(";")[0]
+        mime = header.split(":")[1].split(";")[0] if ":" in header else ""
         ext = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
                "video/mp4": ".mp4"}.get(mime, ".bin")
 
         tmp = tempfile.NamedTemporaryFile(suffix=ext, delete=False)
         tmp.write(base64.b64decode(data))
         tmp.close()
+
+        # Register for cleanup
+        from trio_core.video import _TEMP_FILES
+        _TEMP_FILES.append(tmp.name)
+
         return tmp.name
 
     return source

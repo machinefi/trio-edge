@@ -54,6 +54,7 @@ class PromptCache:
         self._kv_cache: Optional[List[Any]] = None
         self._input_hash: Optional[str] = None
         self._first_token: Optional[Tuple[mx.array, mx.array]] = None
+        self._cached_kwargs: Dict[str, Any] = {}  # cross_attention_states etc.
         self._prefill_offset: int = 0  # KV offset after prefill (before decode)
         self._model = model
         self._max_kv_size = max_kv_size
@@ -77,16 +78,18 @@ class PromptCache:
         )
         return self._kv_cache
 
-    def check_hit(self, input_ids: mx.array) -> bool:
+    def check_hit(self, input_ids: mx.array, pixel_values: mx.array = None) -> bool:
         """Check if current input exactly matches cached state."""
-        h = self._hash_input(input_ids)
+        h = self._hash_input(input_ids, pixel_values)
         return self._input_hash is not None and self._input_hash == h
 
     def save_state(self, input_ids: mx.array, first_token: mx.array, first_logprobs: mx.array,
-                   kv_cache: List[Any]):
+                   kv_cache: List[Any], pixel_values: mx.array = None,
+                   kwargs: Optional[Dict[str, Any]] = None):
         """Save the input hash, first token, and prefill offset for reuse."""
-        self._input_hash = self._hash_input(input_ids)
+        self._input_hash = self._hash_input(input_ids, pixel_values)
         self._first_token = (first_token, first_logprobs)
+        self._cached_kwargs = kwargs or {}
         # Record KV offset right after prefill (before decode starts)
         self._prefill_offset = kv_cache[0].offset if kv_cache else 0
 
@@ -100,12 +103,13 @@ class PromptCache:
         self._first_token = None
 
     @staticmethod
-    def _hash_input(input_ids: mx.array) -> str:
-        """Fast hash of input_ids for exact-match detection."""
+    def _hash_input(input_ids: mx.array, pixel_values: mx.array = None) -> str:
+        """Fast hash of input_ids + pixel_values for exact-match detection."""
         import numpy as np
-        return hashlib.md5(
-            np.array(input_ids.flatten(), copy=False).tobytes()
-        ).hexdigest()
+        h = hashlib.md5(np.array(input_ids.flatten(), copy=False).tobytes())
+        if pixel_values is not None and pixel_values.size > 0:
+            h.update(np.array(pixel_values.flatten(), copy=False).tobytes())
+        return h.hexdigest()
 
 # Dedicated stream for generation (matches mlx-vlm)
 _generation_stream = mx.new_stream(mx.default_device())
@@ -196,7 +200,7 @@ def generate_step(
     # Check for exact-match cache hit
     cache_hit = False
     if prompt_cache_manager is not None:
-        cache_hit = prompt_cache_manager.check_hit(original_input_ids)
+        cache_hit = prompt_cache_manager.check_hit(original_input_ids, pixel_values)
         if cache_hit:
             prompt_cache = prompt_cache_manager.kv_cache
             # Trim decode tokens, keep only prefill state
@@ -258,6 +262,8 @@ def generate_step(
         # Exact match — skip ViT + prefill entirely, use cached first token
         cached = prompt_cache_manager.get_cached_first_token()
         y, logprobs = cached
+        # Restore kwargs (cross_attention_states etc.) for encoder-decoder models
+        kwargs = dict(prompt_cache_manager._cached_kwargs)
     else:
         with mx.stream(_generation_stream):
             # Get input embeddings (ViT forward + embedding projection)
@@ -298,7 +304,9 @@ def generate_step(
 
         # Save state for future exact-match detection
         if prompt_cache_manager is not None:
-            prompt_cache_manager.save_state(original_input_ids, y, logprobs, prompt_cache)
+            prompt_cache_manager.save_state(
+                original_input_ids, y, logprobs, prompt_cache, pixel_values, kwargs=kwargs
+            )
 
     mx.async_eval(y)
 
