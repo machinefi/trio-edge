@@ -27,7 +27,7 @@ Stage 5: Decode                      ████░░░░░░  40%   strea
 
 | # | What | Expected Gain | Difficulty | Stage | Status |
 |---|------|---------------|------------|-------|--------|
-| 1 | ~~Frame-to-frame KV reuse~~ | ~~-60~80% video latency~~ | ~~High~~ | ~~4~~ | DONE |
+| 1 | ~~Frame-to-frame KV reuse~~ | ~~-60~80% video latency~~ | ~~High~~ | ~~4~~ | DONE (1.6x Qwen2.5, 1.7x Qwen3) |
 | 2 | ~~Mid-stream FastV (true KV prune)~~ | ~~-30~50% visual tokens~~ | ~~Medium~~ | ~~2~~ | DONE |
 | 3 | ~~Shared text prefix KV~~ | ~~-20~40% prefill~~ | ~~Medium~~ | ~~3~~ | DONE |
 | 4 | ~~Speculative decoding~~ | ~~+30~50% decode TPS~~ | ~~Medium~~ | ~~5~~ | DONE (0% accept for VLM) |
@@ -63,7 +63,8 @@ Stage 5: Decode                      ████░░░░░░  40%   strea
 - Done: persistent KVCache with buffer reuse, quantized KV cache,
   text prefix KV reuse across frames (15 tokens saved per inference),
   frame-to-frame KV reuse via visual embedding similarity gating
-  (four-tier cache: exact hit > visual similarity hit > prefix hit > full miss)
+  (four-tier cache: exact hit > visual similarity hit > prefix hit > full miss,
+  1.6x speedup Qwen2.5, 1.7x speedup Qwen3)
 - TODO: streaming KV eviction for long video
 
 **Stage 5 — Decode** -- 40%
@@ -198,6 +199,18 @@ Note: Qwen's chat template puts visual tokens very early (position 15), so text 
 is only 3.6% of total. Savings scale with prefix length — multi-turn conversations or
 long system prompts before `<|vision_start|>` would see larger gains.
 
+### Visual Similarity KV Reuse (Frame-to-frame, same prompt, 480p, 5-frame sequences)
+
+| Model | Warm Speedup | Warm Savings | Cold Speedup | Output |
+|---|---|---|---|---|
+| Qwen2.5-VL-3B | **1.57x** | **36.4%** | 1.42x | Identical |
+| Qwen3-VL-4B | **1.71x** | **41.5%** | 1.59x | Near-identical |
+| Qwen3.5-0.8B | 1.00x | 0% | 1.00x | N/A (DeltaNet cache not trimmable) |
+
+Settings: threshold=0.95, noise=0.01, 3 runs × 5 frames each.
+"Warm" = frames 2-5 (similar to previous frame, KV reuse triggers).
+"Cold" = frame 1 (always full prefill).
+
 ### mlx-vlm Native Baseline Comparison (4 models × 5 benchmarks, n=50)
 
 trio-core vs raw mlx-vlm.generate() — zero trio-core code in the native path.
@@ -255,8 +268,8 @@ Finding: 0.25 is viable (~2% more loss for ~11% more compression). 0.2 is too ag
 ### Next Optimization Directions
 
 1. **Remove mlx-vlm model loading dep** — zero external dependency (Phase 3)
-2. **Continuous batching** — concurrent request handling for server mode
-3. **Streaming KV eviction** — bounded memory for long video sessions
+2. **Streaming KV eviction** — bounded memory for long video sessions
+3. **Continuous batching** — concurrent request handling for server mode
 
 ## Status
 
@@ -282,7 +295,7 @@ Finding: 0.25 is viable (~2% more loss for ~11% more compression). 0.2 is too ag
 - [x] **Native ToMe ViT** — NativeToMeQwen25Vision / NativeToMeQwen3Vision, proper OO subclass, no monkey-patch
 - [x] **Unified ToMe generate path** — ToMeMLXBackend delegates to generate_step (gets PromptCache, early stopping, speculative, streaming for free). Fixed mx.eval() deepstack bug.
 - [x] **ToMe + FastV compound benchmark** — 85% token reduction too aggressive, recommend using one or the other
-- [x] **Frame-to-frame KV reuse** — visual embedding similarity gating, four-tier cache hierarchy, deferred KV reset
+- [x] **Frame-to-frame KV reuse** — visual embedding similarity gating, four-tier cache hierarchy (1.6x Qwen2.5, 1.7x Qwen3). Input_ids check prevents wrong-answer reuse; p10 cosine for robust visual discrimination.
 - [x] **Content-aware adaptive r** — per-image diversity scoring, dynamic r scaling [0.2, 1.0], stacks with layer-adaptive
 - [ ] Phase 2: Native Vision Encoder — built-in ToMe, adaptive r
 - [ ] Phase 3: Full native engine — zero mlx-vlm dependency
