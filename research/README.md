@@ -33,7 +33,8 @@ Stage 5: Decode                      ████░░░░░░  40%   strea
 | 4 | ~~Speculative decoding~~ | ~~+30~50% decode TPS~~ | ~~Medium~~ | ~~5~~ | DONE (0% accept for VLM) |
 | 5 | Content-aware adaptive r | +quality, same speed | Low | 2 | TODO |
 | 6 | ~~Native ToMe (no monkey-patch)~~ | ~~cleaner arch~~ | ~~Medium~~ | ~~1~~ | DONE |
-| 7 | Remove mlx-vlm load dep | zero dependency | High | 3 | TODO |
+| 7 | ~~Unify ToMe generate path~~ | ~~free features~~ | ~~Low~~ | ~~1/5~~ | DONE |
+| 8 | Remove mlx-vlm load dep | zero dependency | High | 3 | TODO |
 
 ### Stage Details
 
@@ -253,9 +254,8 @@ Finding: 0.25 is viable (~2% more loss for ~11% more compression). 0.2 is too ag
 
 1. **Frame-to-frame KV reuse** — consecutive video frames share 80%+ context (highest ROI, hardest)
 2. **ToMe + FastV compound benchmark** — measure combined visual compression (both done, not measured together)
-3. **Unify ToMe generate path** — ToMeMLXBackend should use generate_step (get prefix cache, speculative, early stop for free)
-4. **Content-aware adaptive r** — quality-preserving compression per image
-5. **Remove mlx-vlm model loading dep** — zero external dependency (Phase 3)
+3. **Content-aware adaptive r** — quality-preserving compression per image
+4. **Remove mlx-vlm model loading dep** — zero external dependency (Phase 3)
 
 ## Status
 
@@ -279,6 +279,7 @@ Finding: 0.25 is viable (~2% more loss for ~11% more compression). 0.2 is too ag
 - [x] **Speculative decoding** — prompt lookup + draft model modes, rejection sampling, KV cache rollback, integrated into generate loop (0% accept for VLM — visual tokens don't match text output)
 - [x] **mlx-vlm native baselines** — 4 models × 5 benchmarks, trio-core matches or beats native on 3B+
 - [x] **Native ToMe ViT** — NativeToMeQwen25Vision / NativeToMeQwen3Vision, proper OO subclass, no monkey-patch
+- [x] **Unified ToMe generate path** — ToMeMLXBackend delegates to generate_step (gets PromptCache, early stopping, speculative, streaming for free). Fixed mx.eval() deepstack bug.
 - [ ] ToMe + FastV compound benchmark — measure combined compression
 - [ ] Phase 2: Native Vision Encoder — built-in ToMe, adaptive r
 - [ ] Phase 3: Full native engine — zero mlx-vlm dependency
