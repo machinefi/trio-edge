@@ -273,6 +273,7 @@ class ToMeMLXBackend(MLXBackend):
                     prompt_cache_manager=self._get_prompt_cache(),
                     early_stop=self._early_stop,
                     speculative_lookahead=self._speculative_lookahead,
+                    visual_similarity_threshold=self._visual_similarity_threshold,
                     **kwargs,
                 )
             ):
@@ -340,6 +341,7 @@ class ToMeMLXBackend(MLXBackend):
                     prompt_cache_manager=self._get_prompt_cache(),
                     early_stop=self._early_stop,
                     speculative_lookahead=self._speculative_lookahead,
+                    visual_similarity_threshold=self._visual_similarity_threshold,
                     **kwargs,
                 )
             ):

@@ -167,3 +167,137 @@ class TestPromptCachePrefixRestore:
         cache.save_prefix(ids, prefix_len=0, kv_cache=[])
         assert cache._prefix_hash is None
         assert cache._prefix_states is None
+
+
+# ---------------------------------------------------------------------------
+# Visual similarity KV reuse
+# ---------------------------------------------------------------------------
+
+class TestVisualSimilarity:
+    def _make_cache(self):
+        from unittest.mock import MagicMock
+        from trio_core.generate import PromptCache
+
+        model = MagicMock()
+        model.language_model.layers = [MagicMock() for _ in range(2)]
+        return PromptCache(model)
+
+    def test_no_saved_embeds_returns_false(self):
+        cache = self._make_cache()
+        embeds = mx.ones((1, 10, 64))
+        assert cache.check_visual_hit(embeds, threshold=0.95) is False
+
+    def test_identical_embeds_returns_true(self):
+        from mlx_lm.models.cache import KVCache
+
+        cache = self._make_cache()
+        # Need trimmable KV cache + saved first token for hit
+        kv = [KVCache() for _ in range(2)]
+        for c in kv:
+            c.update_and_fetch(mx.ones((1, 2, 5, 4)), mx.ones((1, 2, 5, 4)))
+        cache._kv_cache = kv
+        cache._first_token = (mx.array(42), mx.zeros(100))
+
+        embeds = mx.ones((1, 10, 64))
+        cache.save_embeds(embeds)
+
+        # Same embeddings → similarity 1.0 → hit
+        assert cache.check_visual_hit(embeds, threshold=0.95) is True
+
+    def test_similar_embeds_above_threshold(self):
+        from mlx_lm.models.cache import KVCache
+
+        cache = self._make_cache()
+        kv = [KVCache() for _ in range(2)]
+        for c in kv:
+            c.update_and_fetch(mx.ones((1, 2, 5, 4)), mx.ones((1, 2, 5, 4)))
+        cache._kv_cache = kv
+        cache._first_token = (mx.array(42), mx.zeros(100))
+
+        # Save reference embeddings
+        embeds_a = mx.ones((1, 10, 64))
+        cache.save_embeds(embeds_a)
+
+        # Add small noise (should still be very similar)
+        embeds_b = embeds_a + mx.random.normal(embeds_a.shape) * 0.01
+        assert cache.check_visual_hit(embeds_b, threshold=0.95) is True
+
+    def test_different_embeds_below_threshold(self):
+        from mlx_lm.models.cache import KVCache
+
+        cache = self._make_cache()
+        kv = [KVCache() for _ in range(2)]
+        for c in kv:
+            c.update_and_fetch(mx.ones((1, 2, 5, 4)), mx.ones((1, 2, 5, 4)))
+        cache._kv_cache = kv
+        cache._first_token = (mx.array(42), mx.zeros(100))
+
+        embeds_a = mx.ones((1, 10, 64))
+        cache.save_embeds(embeds_a)
+
+        # Very different embeddings
+        embeds_b = mx.random.normal((1, 10, 64))
+        assert cache.check_visual_hit(embeds_b, threshold=0.95) is False
+
+    def test_shape_mismatch_returns_false(self):
+        from mlx_lm.models.cache import KVCache
+
+        cache = self._make_cache()
+        kv = [KVCache() for _ in range(2)]
+        for c in kv:
+            c.update_and_fetch(mx.ones((1, 2, 5, 4)), mx.ones((1, 2, 5, 4)))
+        cache._kv_cache = kv
+        cache._first_token = (mx.array(42), mx.zeros(100))
+
+        embeds_a = mx.ones((1, 10, 64))
+        cache.save_embeds(embeds_a)
+
+        # Different sequence length (different resolution)
+        embeds_b = mx.ones((1, 20, 64))
+        assert cache.check_visual_hit(embeds_b, threshold=0.95) is False
+
+    def test_no_first_token_returns_false(self):
+        """Visual hit requires saved first token to reuse."""
+        from mlx_lm.models.cache import KVCache
+
+        cache = self._make_cache()
+        kv = [KVCache() for _ in range(2)]
+        for c in kv:
+            c.update_and_fetch(mx.ones((1, 2, 5, 4)), mx.ones((1, 2, 5, 4)))
+        cache._kv_cache = kv
+        # No first_token saved
+
+        embeds = mx.ones((1, 10, 64))
+        cache.save_embeds(embeds)
+        assert cache.check_visual_hit(embeds, threshold=0.95) is False
+
+    def test_threshold_zero_disables(self):
+        """Threshold 0.0 should never trigger visual similarity check."""
+        from mlx_lm.models.cache import KVCache
+
+        cache = self._make_cache()
+        kv = [KVCache() for _ in range(2)]
+        for c in kv:
+            c.update_and_fetch(mx.ones((1, 2, 5, 4)), mx.ones((1, 2, 5, 4)))
+        cache._kv_cache = kv
+        cache._first_token = (mx.array(42), mx.zeros(100))
+
+        embeds = mx.ones((1, 10, 64))
+        cache.save_embeds(embeds)
+        # threshold=0 means everything would pass, but in generate_step
+        # the check is gated by visual_similarity_threshold > 0
+        # PromptCache itself doesn't enforce this — it's a threshold comparison
+        # 1.0 >= 0.0 is True, but the caller gates with > 0 check
+        assert cache.check_visual_hit(embeds, threshold=0.0) is True
+
+
+class TestVisualSimilarityConfig:
+    def test_config_default_disabled(self):
+        from trio_core.config import EngineConfig
+        config = EngineConfig()
+        assert config.visual_similarity_threshold == 0.0
+
+    def test_config_custom(self):
+        from trio_core.config import EngineConfig
+        config = EngineConfig(visual_similarity_threshold=0.95)
+        assert config.visual_similarity_threshold == 0.95

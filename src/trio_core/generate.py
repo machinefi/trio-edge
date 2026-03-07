@@ -189,14 +189,17 @@ class EarlyStopConfig:
 class PromptCache:
     """Persistent KV cache manager for cross-request reuse.
 
-    Benefits:
-    1. Buffer reuse: avoids GPU buffer re-allocation between requests
-    2. Exact-match: identical input_ids → skip entire prefill (ViT + LLM)
+    Four-tier cache hierarchy (checked in order):
+    1. Exact-match: identical input_ids + pixel_values → skip entire prefill
+    2. Visual-similarity: similar embeddings (cosine > threshold) → reuse full KV
     3. Prefix-match: same prompt template + resolution → skip text prefix prefill
+    4. Full miss: complete prefill from scratch
 
-    The prefix cache stores KV for the text tokens before visual placeholders.
-    When the same prompt is used with different frames, the prefix KV is
-    reused and only the visual + suffix tokens are re-prefilled.
+    Visual similarity (tier 2) enables frame-to-frame KV reuse for video:
+    consecutive frames with similar content skip LLM prefill entirely,
+    reusing the KV cache built from the previous frame. This is an
+    approximation — the model "sees" the old frame's visual context.
+    Quality vs speed tradeoff controlled by threshold (0.95 typical).
 
     Usage:
         pcache = PromptCache(model)
@@ -220,6 +223,9 @@ class PromptCache:
         self._prefix_len: int = 0
         self._prefix_position_ids = None
         self._prefix_rope_deltas = None
+
+        # Visual similarity: reuse full KV for similar frames
+        self._last_embeds: Optional[mx.array] = None
 
     @property
     def kv_cache(self) -> Optional[List[Any]]:
@@ -287,6 +293,64 @@ class PromptCache:
         """Clear cached state (keeps buffers for reuse)."""
         self._input_hash = None
         self._first_token = None
+
+    # ── Visual similarity ──────────────────────────────────────────
+
+    def check_visual_hit(
+        self, inputs_embeds: mx.array, threshold: float,
+    ) -> bool:
+        """Check if embeddings are similar enough to reuse full KV cache.
+
+        Compares new input embeddings to the cached embeddings from the
+        previous prefill using mean cosine similarity. For same-prompt
+        different-frame calls, text embeddings are identical (similarity=1.0)
+        so the mean is dominated by visual token similarity.
+
+        This is an approximation: on hit, the model uses the OLD frame's
+        visual KV cache, not the new frame's. Acceptable when frames are
+        visually similar (surveillance, slow-moving video).
+
+        Args:
+            inputs_embeds: (1, seq_len, hidden_dim) from ViT + embedding merge.
+            threshold: Cosine similarity threshold (0.95 typical).
+
+        Returns:
+            True if similarity >= threshold and KV cache can be reused.
+        """
+        if self._last_embeds is None:
+            return False
+        if not self.is_trimmable:
+            return False
+        if self._first_token is None:
+            return False
+        if inputs_embeds.shape != self._last_embeds.shape:
+            return False
+
+        # Mean cosine similarity across all token positions
+        a = inputs_embeds.squeeze(0)  # (seq_len, hidden_dim)
+        b = self._last_embeds.squeeze(0)
+        dot = mx.sum(a * b, axis=-1)  # (seq_len,)
+        norm_a = mx.sqrt(mx.sum(a * a, axis=-1) + 1e-8)
+        norm_b = mx.sqrt(mx.sum(b * b, axis=-1) + 1e-8)
+        cos_sim = dot / (norm_a * norm_b)
+        mean_sim = mx.mean(cos_sim).item()
+
+        if mean_sim >= threshold:
+            logger.debug(
+                "Visual similarity %.4f >= %.4f — KV reuse",
+                mean_sim, threshold,
+            )
+            return True
+        else:
+            logger.debug(
+                "Visual similarity %.4f < %.4f — re-prefill",
+                mean_sim, threshold,
+            )
+            return False
+
+    def save_embeds(self, inputs_embeds: mx.array):
+        """Save input embeddings for future visual similarity comparison."""
+        self._last_embeds = inputs_embeds
 
     # ── Prefix caching ──────────────────────────────────────────────
 
@@ -441,6 +505,7 @@ def generate_step(
     speculative_lookahead: int = 0,
     speculative_stats: Optional[dict] = None,
     inputs_embeds: Optional[mx.array] = None,
+    visual_similarity_threshold: float = 0.0,
     **kwargs,
 ) -> Generator[Tuple[mx.array, mx.array], None, None]:
     """Generate tokens with optional persistent cache and early stopping.
@@ -482,8 +547,15 @@ def generate_step(
     tokens = mx.array([], dtype=input_ids.dtype)
 
     # Check for exact-match cache hit, then prefix hit
+    # Note: visual similarity check happens later (after ViT) — we must NOT
+    # trim/reset the KV cache here if visual similarity might apply.
     cache_hit = False
     prefix_hit = False
+    may_visual_hit = (
+        visual_similarity_threshold > 0
+        and prompt_cache_manager is not None
+        and prompt_cache_manager._last_embeds is not None
+    )
     if prompt_cache_manager is not None:
         cache_hit = prompt_cache_manager.check_hit(original_input_ids, pixel_values)
         if cache_hit:
@@ -503,6 +575,12 @@ def generate_step(
                     "Prefix HIT — reusing %d prefix tokens, re-prefilling suffix",
                     prompt_cache_manager._prefix_len,
                 )
+            elif may_visual_hit:
+                # Don't trim KV cache yet — visual similarity check needs it intact.
+                # Use existing cache as-is; visual_hit path will trim decode tokens.
+                # If visual_hit fails, we'll reset the cache before prefill.
+                prompt_cache = prompt_cache_manager.kv_cache or prompt_cache_manager.get_or_create_cache()
+                logger.debug("Cache MISS — deferring reset for visual similarity check")
             else:
                 prompt_cache = prompt_cache_manager.get_or_create_cache()
                 logger.debug("Cache MISS — full prefill (%d tokens)", input_ids.size)
@@ -551,6 +629,8 @@ def generate_step(
 
             return y, logprobs.squeeze(0)
 
+    visual_hit = False
+
     if cache_hit:
         # Exact match — skip ViT + prefill entirely, use cached first token
         cached = prompt_cache_manager.get_cached_first_token()
@@ -579,7 +659,33 @@ def generate_step(
                     }
                 )
 
-            if prefix_hit:
+            # Save full embeddings before chunked prefill may slice them
+            full_inputs_embeds = inputs_embeds
+
+            # Visual similarity check (tier 2: between exact hit and prefix hit)
+            visual_hit = (
+                may_visual_hit
+                and not prefix_hit
+                and prompt_cache_manager.check_visual_hit(
+                    inputs_embeds, visual_similarity_threshold,
+                )
+            )
+
+            if visual_hit:
+                # Reuse full KV cache from previous frame (approximate)
+                prompt_cache = prompt_cache_manager.kv_cache
+                for c in prompt_cache:
+                    if hasattr(c, 'trim'):
+                        decode_tokens = c.offset - prompt_cache_manager._prefill_offset
+                        if decode_tokens > 0:
+                            c.trim(decode_tokens)
+                cached = prompt_cache_manager.get_cached_first_token()
+                y, logprobs = cached
+                kwargs = dict(prompt_cache_manager._cached_kwargs)
+                logger.debug(
+                    "Visual similarity HIT — reusing KV cache (skipping LLM prefill)"
+                )
+            elif prefix_hit:
                 # Prefix cache hit: skip text prefix prefill, only prefill
                 # visual + suffix tokens. The prefix KV is already in cache.
                 prefix_len = prompt_cache_manager._prefix_len
@@ -606,6 +712,10 @@ def generate_step(
                     prefix_len, suffix_ids.shape[1],
                 )
             else:
+                # Visual similarity was deferred but failed — reset cache now
+                if may_visual_hit and prompt_cache_manager is not None:
+                    prompt_cache = prompt_cache_manager.get_or_create_cache()
+
                 # Full prefill (possibly chunked)
                 if prefill_step_size is not None and inputs_embeds.shape[1] > prefill_step_size:
                     while inputs_embeds.shape[1] > 1:
@@ -637,11 +747,13 @@ def generate_step(
                             rope_deltas=lm._rope_deltas,
                         )
 
-        # Save state for future exact-match detection
-        if prompt_cache_manager is not None:
+        # Save state for future exact-match and visual-similarity detection
+        # On visual_hit: keep existing saved state (KV is from original prefill)
+        if prompt_cache_manager is not None and not visual_hit:
             prompt_cache_manager.save_state(
                 original_input_ids, y, logprobs, prompt_cache, pixel_values, kwargs=kwargs
             )
+            prompt_cache_manager.save_embeds(full_inputs_embeds)
 
     mx.async_eval(y)
 

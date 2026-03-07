@@ -146,6 +146,7 @@ class MLXBackend(BaseBackend):
         self._prompt_cache = None  # Lazily created on first generate
         self._early_stop = None   # Set via set_early_stop() after load
         self._speculative_lookahead = 0  # Set via set_speculative() after load
+        self._visual_similarity_threshold = 0.0  # Set via set_visual_similarity() after load
         # Detect if model natively supports video tokens (Qwen2.5-VL, Qwen3-VL, etc.)
         # Models without video support (Gemma 3, SmolVLM2) use the image path instead.
         self._is_video_model = (
@@ -190,6 +191,15 @@ class MLXBackend(BaseBackend):
         if self._speculative_lookahead > 0:
             logger.info("[MLX] Speculative decode enabled: lookahead=%d", self._speculative_lookahead)
 
+    def set_visual_similarity(self, threshold: float) -> None:
+        """Configure visual similarity KV reuse. Called by engine after load()."""
+        self._visual_similarity_threshold = max(0.0, min(1.0, threshold))
+        if self._visual_similarity_threshold > 0:
+            logger.info(
+                "[MLX] Visual similarity KV reuse enabled: threshold=%.2f",
+                self._visual_similarity_threshold,
+            )
+
     def generate(
         self, frames: np.ndarray, prompt: str, *,
         max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
@@ -229,6 +239,7 @@ class MLXBackend(BaseBackend):
                     prompt_cache_manager=self._get_prompt_cache(),
                     early_stop=self._early_stop,
                     speculative_lookahead=self._speculative_lookahead,
+                    visual_similarity_threshold=self._visual_similarity_threshold,
                     **kwargs,
                 )
             ):
@@ -291,6 +302,7 @@ class MLXBackend(BaseBackend):
                     prompt_cache_manager=self._get_prompt_cache(),
                     early_stop=self._early_stop,
                     speculative_lookahead=self._speculative_lookahead,
+                    visual_similarity_threshold=self._visual_similarity_threshold,
                     **kwargs,
                 )
             ):

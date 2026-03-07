@@ -69,6 +69,14 @@ class EngineConfig(BaseSettings):
         default=0, description="Prompt lookup draft tokens (0=disabled, 3-8 typical)"
     )
 
+    # Frame-to-frame KV reuse (visual similarity gating)
+    visual_similarity_threshold: float = Field(
+        default=0.0,
+        description="Visual embedding similarity threshold for KV reuse (0=disabled, 0.95 typical). "
+        "When enabled, consecutive frames with similar visual content skip LLM prefill "
+        "and reuse the KV cache from the previous frame.",
+    )
+
     # Early stopping
     early_stop: bool = Field(default=False, description="Enable EOS-probability early stopping")
     early_stop_threshold: float = Field(
