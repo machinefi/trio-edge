@@ -88,6 +88,17 @@ class EngineConfig(BaseSettings):
         default=0.8, description="P(EOS) threshold to trigger early stop (0.0-1.0)"
     )
 
+    # StreamMem (streaming memory for continuous video)
+    streaming_memory_enabled: bool = Field(
+        default=False, description="Enable bounded KV cache accumulation for continuous streams"
+    )
+    streaming_memory_budget: int = Field(
+        default=6000, description="Max visual tokens in KV cache before eviction"
+    )
+    streaming_memory_prototype_ratio: float = Field(
+        default=0.1, description="Fraction of evicted tokens merged into prototypes (0.0-1.0)"
+    )
+
     # Cache (Phase 2)
     cache_enabled: bool = Field(default=False, description="Enable video cache")
     cache_max_entries: int = Field(default=50, description="Max cache entries")
