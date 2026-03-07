@@ -299,7 +299,8 @@ class PromptCache:
         """
         if self._prefix_hash is None or self._prefix_states is None:
             return False
-        if not self.is_trimmable:
+        # Prefix states must contain real KV data (not all None)
+        if not any(s is not None for s in self._prefix_states):
             return False
         import numpy as np
         h = hashlib.md5(np.array(input_ids.flatten(), copy=False).tobytes()).hexdigest()
@@ -307,6 +308,7 @@ class PromptCache:
 
     def save_prefix(
         self, input_ids: mx.array, prefix_len: int, kv_cache: List[Any],
+        position_ids=None, rope_deltas=None,
     ):
         """Save text prefix KV state for reuse across frames.
 
@@ -314,6 +316,8 @@ class PromptCache:
             input_ids: Full input_ids (hashed for matching).
             prefix_len: Number of text prefix tokens (before first visual token).
             kv_cache: KV cache after full prefill (contains all tokens' KV).
+            position_ids: MRoPE position_ids to restore on prefix hit.
+            rope_deltas: MRoPE rope_deltas to restore after decode.
         """
         import numpy as np
         if prefix_len <= 0:
@@ -322,6 +326,8 @@ class PromptCache:
             np.array(input_ids.flatten(), copy=False).tobytes()
         ).hexdigest()
         self._prefix_len = prefix_len
+        self._prefix_position_ids = position_ids
+        self._prefix_rope_deltas = rope_deltas
         self._prefix_states = []
         for c in kv_cache:
             if hasattr(c, 'keys') and c.keys is not None and c.offset >= prefix_len:
@@ -577,6 +583,7 @@ def generate_step(
                 suffix_ids = input_ids[:, prefix_len:]
 
                 y, logprobs = _step(suffix_ids, inputs_embeds=suffix_embeds)
+                quantize_cache_fn(prompt_cache)
 
                 # Restore rope_deltas for sequential decode phase
                 lm._rope_deltas = saved_rope_deltas
@@ -610,12 +617,12 @@ def generate_step(
                 if prompt_cache_manager is not None:
                     vis_boundary = _find_visual_boundary(original_input_ids, model)
                     if vis_boundary > 0:
+                        lm = model.language_model
                         prompt_cache_manager.save_prefix(
                             original_input_ids, vis_boundary, prompt_cache,
+                            position_ids=lm._position_ids,
+                            rope_deltas=lm._rope_deltas,
                         )
-                        lm = model.language_model
-                        prompt_cache_manager._prefix_position_ids = lm._position_ids
-                        prompt_cache_manager._prefix_rope_deltas = lm._rope_deltas
 
         # Save state for future exact-match detection
         if prompt_cache_manager is not None:
