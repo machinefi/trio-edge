@@ -15,11 +15,7 @@ import numpy as np
 
 from trio_core.backends import MLXBackend, GenerationResult, StreamChunk
 from trio_core.compressed_backend import CompressedMLXBackend
-from trio_core.tome_vision import (
-    BaseToMeVisionWrapper,
-    ToMeQwen25VisionWrapper,
-    ToMeQwen3VisionWrapper,
-)
+from trio_core.native_vision import create_tome_vision
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +48,7 @@ class ToMeMLXBackend(MLXBackend):
         self.tome_metric = metric
         self.tome_min_keep_ratio = min_keep_ratio
         self.tome_adaptive = adaptive
-        self._wrapper: BaseToMeVisionWrapper | None = None
+        self._native_vision = None
         self._is_qwen3: bool = False
 
     @property
@@ -64,27 +60,16 @@ class ToMeMLXBackend(MLXBackend):
 
         # Auto-detect model type from vision_tower
         model_type = getattr(self._model.vision_tower, 'model_type', '')
-        if model_type in ('qwen3_vl', 'qwen3_5', 'qwen3_5_moe'):
-            wrapper_cls = ToMeQwen3VisionWrapper
-            self._is_qwen3 = True
-        else:
-            wrapper_cls = ToMeQwen25VisionWrapper
-            self._is_qwen3 = False
+        self._is_qwen3 = model_type in ('qwen3_vl', 'qwen3_5', 'qwen3_5_moe')
 
-        self._wrapper = wrapper_cls(
+        self._native_vision = create_tome_vision(
             self._model.vision_tower,
-            r=self.tome_r,
+            tome_r=self.tome_r,
             metric=self.tome_metric,
             min_keep_ratio=self.tome_min_keep_ratio,
             adaptive=self.tome_adaptive,
         )
-        self._model.vision_tower = self._wrapper
-
-        logger.info(
-            "[ToMe] Wrapped vision_tower (%s) with r=%d, metric=%s, min_keep=%.0f%%, adaptive=%s",
-            wrapper_cls.__name__, self.tome_r, self.tome_metric,
-            self.tome_min_keep_ratio * 100, self.tome_adaptive,
-        )
+        self._model.vision_tower = self._native_vision
 
     def _get_visual_token_ids(self, model):
         """Get visual token IDs, handling Qwen2.5 vs Qwen3 config differences."""
@@ -139,7 +124,7 @@ class ToMeMLXBackend(MLXBackend):
             "ToMe compression: %d → %d tokens (%.0f%% reduction, %d layers merged)",
             original_count, compressed_count,
             (1 - compressed_count / max(original_count, 1)) * 100,
-            len(self._wrapper._merge_log) if self._wrapper else 0,
+            len(self._native_vision._merge_log) if self._native_vision else 0,
         )
 
         # Step 2: Build compressed input sequence
@@ -350,6 +335,6 @@ class ToMeMLXBackend(MLXBackend):
 
     @property
     def merge_log(self) -> list[dict]:
-        if self._wrapper is None:
+        if self._native_vision is None:
             return []
-        return self._wrapper._merge_log
+        return self._native_vision._merge_log
