@@ -228,9 +228,19 @@ class PromptCache:
         self._last_embeds: Optional[mx.array] = None
         self._last_input_ids: Optional[mx.array] = None
 
+        # StreamMem: bounded KV cache accumulation for continuous streams
+        self._streaming_memory = None
+
     @property
     def kv_cache(self) -> Optional[List[Any]]:
         return self._kv_cache
+
+    @property
+    def streaming_memory(self):
+        return self._streaming_memory
+
+    def set_streaming_memory(self, memory):
+        self._streaming_memory = memory
 
     @property
     def is_trimmable(self) -> bool:
@@ -244,10 +254,19 @@ class PromptCache:
 
         For KVCache (standard attention): reuse buffers, trim to 0.
         For ArraysCache (DeltaNet): must recreate — no trim support.
+        In streaming mode: keep accumulated visual KV, only trim decode tokens.
         """
         if self._kv_cache is not None:
             if self.is_trimmable:
-                # KVCache: reuse buffers — trim all content but keep allocated memory
+                if self._streaming_memory is not None:
+                    # Streaming mode: keep accumulated KV, only trim decode tokens
+                    for c in self._kv_cache:
+                        if hasattr(c, 'trim'):
+                            decode_tokens = c.offset - self._prefill_offset
+                            if decode_tokens > 0:
+                                c.trim(decode_tokens)
+                    return self._kv_cache
+                # Normal mode: trim all content but keep allocated memory
                 for c in self._kv_cache:
                     c.trim(c.offset)
                 return self._kv_cache
@@ -804,6 +823,52 @@ def generate_step(
                 original_input_ids, y, logprobs, prompt_cache, pixel_values, kwargs=kwargs
             )
             prompt_cache_manager.save_embeds(full_inputs_embeds, original_input_ids)
+
+        # StreamMem: register frame + evict if over budget
+        if (
+            prompt_cache_manager is not None
+            and prompt_cache_manager.streaming_memory is not None
+            and not cache_hit
+            and not visual_hit
+        ):
+            import numpy as _np_sm
+
+            sm = prompt_cache_manager.streaming_memory
+
+            # Count visual tokens (model-agnostic: check both _id and _index)
+            img_id = getattr(model.config, 'image_token_id', None)
+            if img_id is None:
+                img_id = getattr(model.config, 'image_token_index', None)
+            vid_id = getattr(model.config, 'video_token_id', None)
+            if vid_id is None:
+                vid_id = getattr(model.config, 'video_token_index', None)
+
+            ids_np = _np_sm.array(original_input_ids[0])
+            n_visual = 0
+            if img_id is not None:
+                n_visual += int((ids_np == img_id).sum())
+            if vid_id is not None:
+                n_visual += int((ids_np == vid_id).sum())
+
+            # Text prefix length = position of first visual token
+            vis_boundary = _find_visual_boundary(original_input_ids, model)
+
+            sm.append_frame(n_visual, text_prefix_len=vis_boundary)
+
+            # Proxy query: last 8 tokens (chat template end tokens)
+            proxy_ids = original_input_ids[:, -8:]
+
+            stats = sm.maybe_evict(prompt_cache, model.language_model, proxy_ids)
+            if stats:
+                logger.info(
+                    "StreamMem: %d→%d tokens (%d prototypes)",
+                    stats.tokens_before, stats.tokens_after, stats.n_prototypes,
+                )
+                # Update prefill_offset for KVCache layers
+                for c in prompt_cache:
+                    if hasattr(c, 'offset'):
+                        prompt_cache_manager._prefill_offset = c.offset
+                        break
 
     mx.async_eval(y)
 
