@@ -41,15 +41,17 @@ def build_config_key(args) -> str:
     # Shorten model name
     model_short = model.split("/")[-1].lower().replace("-instruct", "").replace("-4bit", "")
     parts.append(model_short)
-    if args.fastv is not None:
-        layer_suffix = f"_L{args.fastv_layer}" if args.fastv_layer else ""
-        parts.append(f"fastv_{args.fastv}{layer_suffix}")
-    elif args.tome:
+    has_fastv = args.fastv is not None
+    has_tome = bool(args.tome)
+    if has_tome:
         suffix = f"tome_r{args.tome}"
         if args.tome_adaptive:
             suffix += "_adaptive"
         parts.append(suffix)
-    else:
+    if has_fastv:
+        layer_suffix = f"_L{args.fastv_layer}" if args.fastv_layer else ""
+        parts.append(f"fastv_{args.fastv}{layer_suffix}")
+    if not has_fastv and not has_tome:
         parts.append("baseline")
     return "_".join(parts)
 
