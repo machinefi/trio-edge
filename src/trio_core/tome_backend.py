@@ -1,15 +1,15 @@
 """MLX backend with ToMe (Token Merging) in the vision encoder.
 
-Uses the CompressedMLXBackend's generate loop (which handles token count
-mismatch, position encoding, etc.) but replaces post-encoder compression
-with in-encoder ToMe merging.
+Handles custom vision encoding + token compression, then delegates
+prefill/decode to generate_step for PromptCache, early stopping,
+speculative decode, and other features.
 """
 
 from __future__ import annotations
 
-import functools
 import logging
 import time
+from typing import Generator
 
 import numpy as np
 
@@ -82,19 +82,13 @@ class ToMeMLXBackend(MLXBackend):
             )
         return model.config.video_token_id, model.config.image_token_id
 
-    def generate(
-        self, frames: np.ndarray, prompt: str, *,
-        max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
-    ) -> GenerationResult:
-        """Run inference with ToMe-compressed vision tokens."""
+    def _prepare_tome_embeds(self, input_ids, pixel_values, kwargs):
+        """Run ToMe vision encoding and build compressed embeddings.
+
+        Returns:
+            (final_embeds, new_input_ids, extra_kwargs) — ready for generate_step.
+        """
         import mlx.core as mx
-        from trio_core.generate import make_prompt_cache, make_sampler, maybe_quantize_kv_cache
-
-        formatted, kwargs = self._prepare(frames, prompt)
-
-        input_ids = kwargs.pop("input_ids")
-        pixel_values = kwargs.pop("pixel_values")
-        mask = kwargs.pop("mask")
 
         video_grid_thw = kwargs.get("video_grid_thw", None)
         image_grid_thw = kwargs.get("image_grid_thw", None)
@@ -152,14 +146,13 @@ class ToMeMLXBackend(MLXBackend):
         text_embeds = model.language_model.model.embed_tokens(new_input_ids)
 
         # Merge compressed visual tokens at placeholder positions
+        image_mask = None
         if self._is_qwen3:
-            # Qwen3-VL: merge_input_ids_with_image_features(features, embeds, ids, img_idx, vid_idx)
             final_embeds, image_mask = model.merge_input_ids_with_image_features(
                 hidden_states, text_embeds, new_input_ids,
                 image_token_id, video_token_id,
             )
         else:
-            # Qwen2.5-VL: merge_input_ids_with_image_features(img_id, vid_id, features, embeds, ids)
             final_embeds = model.merge_input_ids_with_image_features(
                 image_token_id, video_token_id,
                 hidden_states, text_embeds, new_input_ids,
@@ -170,9 +163,7 @@ class ToMeMLXBackend(MLXBackend):
             grid_thw, original_count, compressed_count
         )
 
-        # The grid may not produce exactly compressed_count tokens due to
-        # rounding (e.g., compressed_count=147 but grid gives T*H*W=156).
-        # Align hidden_states and input_ids to match the grid.
+        # Align hidden_states and input_ids to match grid token count
         grid_count = self._original_token_count(compressed_grid)
         if grid_count != compressed_count:
             logger.debug(
@@ -180,13 +171,12 @@ class ToMeMLXBackend(MLXBackend):
                 compressed_count, grid_count,
             )
             if grid_count > compressed_count:
-                # Pad hidden_states by repeating last token
                 pad = mx.repeat(hidden_states[-1:], grid_count - compressed_count, axis=0)
                 hidden_states = mx.concatenate([hidden_states, pad])
             else:
                 hidden_states = hidden_states[:grid_count]
 
-            # Rebuild new_input_ids with grid_count visual placeholders
+            # Rebuild with adjusted counts
             ids_list = input_ids[0].tolist()
             new_ids = []
             vis_count = 0
@@ -200,7 +190,6 @@ class ToMeMLXBackend(MLXBackend):
             new_input_ids = mx.array([new_ids], dtype=input_ids.dtype)
             new_mask = mx.ones(new_input_ids.shape, dtype=mx.int32)
 
-            # Re-merge embeddings with adjusted counts
             text_embeds = model.language_model.model.embed_tokens(new_input_ids)
             if self._is_qwen3:
                 final_embeds, image_mask = model.merge_input_ids_with_image_features(
@@ -227,99 +216,152 @@ class ToMeMLXBackend(MLXBackend):
         model.language_model._position_ids = position_ids
         model.language_model._rope_deltas = rope_deltas
 
-        # Step 3: Generate
-        prompt_cache = make_prompt_cache(model.language_model)
-        sampler = make_sampler(temperature, top_p)
-        quantize_cache_fn = functools.partial(
-            maybe_quantize_kv_cache,
-            quantized_kv_start=5000,
-            kv_group_size=64,
-            kv_bits=None,
+        # Build extra kwargs for Qwen3 deepstack
+        extra_kwargs = {}
+        if self._is_qwen3 and deepstack_embeds is not None:
+            visual_pos_masks = image_mask[..., 0] if image_mask is not None else None
+            extra_kwargs["visual_pos_masks"] = visual_pos_masks
+            mx.eval(deepstack_embeds)
+            extra_kwargs["deepstack_visual_embeds"] = deepstack_embeds
+
+        return final_embeds, new_input_ids, extra_kwargs
+
+    def generate(
+        self, frames: np.ndarray, prompt: str, *,
+        max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
+    ) -> GenerationResult:
+        """Run inference with ToMe-compressed vision tokens."""
+        import mlx.core as mx
+        from trio_core.generate import generate_step, _wired_limit
+
+        formatted, kwargs = self._prepare(frames, prompt)
+
+        input_ids = kwargs.pop("input_ids")
+        pixel_values = kwargs.pop("pixel_values")
+        mask = kwargs.pop("mask")
+
+        # Steps 1-2: ToMe vision encoding + compressed embedding
+        final_embeds, new_input_ids, extra_kwargs = self._prepare_tome_embeds(
+            input_ids, pixel_values, kwargs,
         )
+        kwargs.update(extra_kwargs)
 
-        tokenizer = self._processor.tokenizer if hasattr(self._processor, "tokenizer") else self._processor
-        tokenizer.stopping_criteria.reset(model.config.eos_token_id)
-
+        # Step 3: Delegate to generate_step for prefill + decode
+        tokenizer = (
+            self._processor.tokenizer
+            if hasattr(self._processor, "tokenizer")
+            else self._processor
+        )
         detokenizer = self._processor.detokenizer
         detokenizer.reset()
 
-        # Prefill
-        tic = time.perf_counter()
+        if hasattr(tokenizer, "stopping_criteria"):
+            tokenizer.stopping_criteria.reset(self._model.config.eos_token_id)
 
-        prefill_kwargs = {}
-        if self._is_qwen3 and deepstack_embeds is not None:
-            visual_pos_masks = image_mask[..., 0] if image_mask is not None else None
-            prefill_kwargs["visual_pos_masks"] = visual_pos_masks
-            prefill_kwargs["deepstack_visual_embeds"] = mx.eval(deepstack_embeds)
-
-        outputs = model.language_model(
-            new_input_ids,
-            inputs_embeds=final_embeds,
-            cache=prompt_cache,
-            **prefill_kwargs,
-        )
-        logits = outputs.logits[:, -1, :]
-        quantize_cache_fn(prompt_cache)
-
-        logprobs = logits - mx.logsumexp(logits)
-        y = sampler(logprobs)
-        mx.eval(y)
-
-        prompt_time = time.perf_counter() - tic
-        prompt_token_count = new_input_ids.size
-        prompt_tps = prompt_token_count / max(prompt_time, 1e-9)
-
-        # Decode loop
-        tic = time.perf_counter()
         text = ""
-        n_generated = 0
+        prompt_tps = 0.0
+        generation_tps = 0.0
+        n_tokens = 0
 
-        for n_generated in range(max_tokens):
-            if tokenizer.stopping_criteria(y.item()):
-                break
+        with _wired_limit(self._model):
+            tic = time.perf_counter()
+            for n, (token, logprobs) in enumerate(
+                generate_step(
+                    new_input_ids, self._model, pixel_values, mask,
+                    inputs_embeds=final_embeds,
+                    max_tokens=max_tokens, temperature=temperature, top_p=top_p,
+                    prompt_cache_manager=self._get_prompt_cache(),
+                    early_stop=self._early_stop,
+                    speculative_lookahead=self._speculative_lookahead,
+                    **kwargs,
+                )
+            ):
+                if n == 0:
+                    prompt_time = time.perf_counter() - tic
+                    prompt_tps = new_input_ids.size / max(prompt_time, 1e-9)
+                    tic = time.perf_counter()
 
-            detokenizer.add_token(y.item())
-            text += detokenizer.last_segment
+                if hasattr(tokenizer, "stopping_criteria") and tokenizer.stopping_criteria(token):
+                    break
 
-            outputs = model.language_model(y[None], cache=prompt_cache)
-            logits = outputs.logits[:, -1, :]
-            quantize_cache_fn(prompt_cache)
-            logprobs = logits - mx.logsumexp(logits)
-            y = sampler(logprobs)
-            mx.eval(y)
+                detokenizer.add_token(token)
+                n_tokens = n + 1
 
-            if n_generated % 256 == 0:
-                mx.clear_cache()
+            detokenizer.finalize()
+            text = detokenizer.text
 
-        detokenizer.finalize()
-        text += detokenizer.last_segment
-
-        n_generated = max(n_generated, 1)
-        decode_time = time.perf_counter() - tic
-        generation_tps = n_generated / max(decode_time, 1e-9)
-
-        mx.clear_cache()
+            if n_tokens > 0:
+                generation_tps = n_tokens / max(time.perf_counter() - tic, 1e-9)
 
         return GenerationResult(
-            text=text.strip(),
-            prompt_tokens=prompt_token_count,
-            completion_tokens=n_generated,
+            text=text,
+            prompt_tokens=new_input_ids.size,
+            completion_tokens=n_tokens,
             prompt_tps=prompt_tps,
             generation_tps=generation_tps,
-            peak_memory=mx.get_peak_memory() / 1e9,
+            peak_memory=mx.get_peak_memory() / 1e9 if hasattr(mx, "get_peak_memory") else 0.0,
         )
 
     def stream_generate(
         self, frames: np.ndarray, prompt: str, *,
         max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
-    ):
-        result = self.generate(frames, prompt, max_tokens=max_tokens,
-                               temperature=temperature, top_p=top_p)
-        yield StreamChunk(
-            text=result.text, finished=True,
-            prompt_tokens=result.prompt_tokens,
-            completion_tokens=result.completion_tokens,
+    ) -> Generator:
+        from trio_core.generate import generate_step, _wired_limit
+
+        formatted, kwargs = self._prepare(frames, prompt)
+
+        input_ids = kwargs.pop("input_ids")
+        pixel_values = kwargs.pop("pixel_values")
+        mask = kwargs.pop("mask")
+
+        final_embeds, new_input_ids, extra_kwargs = self._prepare_tome_embeds(
+            input_ids, pixel_values, kwargs,
         )
+        kwargs.update(extra_kwargs)
+
+        tokenizer = (
+            self._processor.tokenizer
+            if hasattr(self._processor, "tokenizer")
+            else self._processor
+        )
+        detokenizer = self._processor.detokenizer
+        detokenizer.reset()
+
+        if hasattr(tokenizer, "stopping_criteria"):
+            tokenizer.stopping_criteria.reset(self._model.config.eos_token_id)
+
+        n_tokens = 0
+        with _wired_limit(self._model):
+            for n, (token, logprobs) in enumerate(
+                generate_step(
+                    new_input_ids, self._model, pixel_values, mask,
+                    inputs_embeds=final_embeds,
+                    max_tokens=max_tokens, temperature=temperature, top_p=top_p,
+                    prompt_cache_manager=self._get_prompt_cache(),
+                    early_stop=self._early_stop,
+                    speculative_lookahead=self._speculative_lookahead,
+                    **kwargs,
+                )
+            ):
+                if hasattr(tokenizer, "stopping_criteria") and tokenizer.stopping_criteria(token):
+                    break
+
+                detokenizer.add_token(token)
+                n_tokens = n + 1
+                yield StreamChunk(
+                    text=detokenizer.last_segment,
+                    prompt_tokens=new_input_ids.size,
+                    completion_tokens=n_tokens,
+                )
+
+            detokenizer.finalize()
+            if detokenizer.last_segment:
+                yield StreamChunk(
+                    text=detokenizer.last_segment,
+                    finished=True,
+                    prompt_tokens=new_input_ids.size,
+                    completion_tokens=n_tokens,
+                )
 
     @staticmethod
     def _original_token_count(grid_thw) -> int:
