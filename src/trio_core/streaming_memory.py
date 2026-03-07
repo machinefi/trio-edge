@@ -192,9 +192,11 @@ class StreamingMemory:
             return EvictionStats(tokens_before, n_vis, 0, 0)
 
         # Protect attention sink tokens — force-keep the first N visual tokens
-        if self.n_sink_tokens > 0 and n_vis > self.n_sink_tokens:
+        # Clamp to budget so sinks don't consume the entire budget
+        effective_sinks = min(self.n_sink_tokens, n_keep - 1) if n_keep > 1 else 0
+        if effective_sinks > 0 and n_vis > effective_sinks:
             sink_boost = mx.zeros_like(saliency)
-            sink_boost[:self.n_sink_tokens] = 1e9
+            sink_boost[:effective_sinks] = 1e9
             saliency = saliency + sink_boost
 
         # Sort by saliency — keep top-scoring
@@ -214,7 +216,7 @@ class StreamingMemory:
         # Suffix tokens start after all visual tokens
         suffix_start = vis_start + n_vis
 
-        proto_keys = []
+        actual_prototypes = 0
         for layer_idx in range(len(kv_cache)):
             c = kv_cache[layer_idx]
             if not self._is_kvcache_layer(c):
@@ -246,8 +248,8 @@ class StreamingMemory:
             weights = mx.softmax(evict_saliency)  # (n_evict,)
 
             # Compute prototypes by grouping evicted tokens
-            proto_keys = []
-            proto_values = []
+            layer_proto_keys = []
+            layer_proto_values = []
             chunk_size = max(1, n_evict // n_prototypes)
             for p in range(n_prototypes):
                 start_idx = p * chunk_size
@@ -264,12 +266,13 @@ class StreamingMemory:
                 pv = (v_evicted[:, :, start_idx:end_idx, :] * w_expanded).sum(
                     axis=2, keepdims=True
                 )
-                proto_keys.append(pk)
-                proto_values.append(pv)
+                layer_proto_keys.append(pk)
+                layer_proto_values.append(pv)
 
-            if proto_keys:
-                k_protos = mx.concatenate(proto_keys, axis=2)
-                v_protos = mx.concatenate(proto_values, axis=2)
+            if layer_proto_keys:
+                k_protos = mx.concatenate(layer_proto_keys, axis=2)
+                v_protos = mx.concatenate(layer_proto_values, axis=2)
+                actual_prototypes = len(layer_proto_keys)
             else:
                 k_protos = mx.zeros_like(k_kept[:, :, :0, :])
                 v_protos = mx.zeros_like(v_kept[:, :, :0, :])
@@ -291,7 +294,6 @@ class StreamingMemory:
             c.keys = new_keys
             c.values = new_values
 
-        actual_prototypes = len(proto_keys) if proto_keys else 0
         self._total_visual_tokens = n_keep + actual_prototypes
 
         stats = EvictionStats(
