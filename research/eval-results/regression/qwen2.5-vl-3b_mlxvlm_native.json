@@ -1,0 +1,36 @@
+{
+  "model": "mlx-community/Qwen2.5-VL-3B-Instruct-4bit",
+  "config_key": "qwen2.5-vl-3b_mlxvlm_native",
+  "runner": "mlx-vlm-native",
+  "samples_per_bench": 50,
+  "timestamp": "2026-03-06 20:23:36",
+  "benchmarks": {
+    "pope_random": {
+      "accuracy": 0.86,
+      "avg_latency_ms": 633.84,
+      "n": 50,
+      "yes_rate": 0.36
+    },
+    "pope_adversarial": {
+      "accuracy": 0.8,
+      "avg_latency_ms": 412.34,
+      "n": 50,
+      "yes_rate": 0.42
+    },
+    "textvqa": {
+      "accuracy": 0.72,
+      "avg_latency_ms": 998.64,
+      "n": 50
+    },
+    "gqa": {
+      "accuracy": 0.58,
+      "avg_latency_ms": 629.83,
+      "n": 50
+    },
+    "mmbench": {
+      "accuracy": 0.9,
+      "avg_latency_ms": 250.17,
+      "n": 50
+    }
+  }
+}

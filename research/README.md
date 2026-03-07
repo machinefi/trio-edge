@@ -118,6 +118,7 @@ Gemma/SmolVLM have entirely different ViT — ToMe/FastV not yet supported.
 - [eval-strategy.md](eval-strategy.md) — Evaluation benchmark selection: research across model reports, compression papers, and eval toolkits. Tiered benchmark suite (Tier 1 regression gate, Tier 2 full eval, Tier 3 video).
 - [eval-baseline-plan.md](eval-baseline-plan.md) — Tier 1 baseline collection plan: 6 models × 5 benchmarks × baseline/ToMe configs.
 - [phase1-custom-generate.md](phase1-custom-generate.md) — Phase 1 detailed implementation: custom generate loop, persistent KV cache, early stopping. Code-level design with mlx-vlm source analysis.
+- [eval-results/mlxvlm-native-baselines.md](eval-results/mlxvlm-native-baselines.md) — mlx-vlm native baselines: ground-truth comparison (4 models × 5 benchmarks) showing trio-core adds no meaningful accuracy or latency overhead.
 - [eval-results/](eval-results/) — Baseline, compressed, and ToMe eval JSON files.
 
 ## Key Thesis
