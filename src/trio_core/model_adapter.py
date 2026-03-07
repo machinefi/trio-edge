@@ -90,24 +90,21 @@ class ModelAdapter(ABC):
         """
         return None, None
 
-    def apply_rope_at_layer(self, q, k, v, position_ids, layer):
+    def apply_rope_at_layer(self, q, k, v, position_ids, layer, cache_offset=0):
         """Apply rotary position embeddings at a specific LLM layer.
 
-        Default: standard 1D RoPE via the layer's rotary_emb.
+        Default: standard 1D RoPE via nn.RoPE(q/k, offset=cache_offset).
         Qwen adapters override for MRoPE with multimodal RoPE.
         """
-        import mlx.core as mx
         attn = layer.self_attn
-        cos, sin = attn.rotary_emb(v, position_ids)
-        # Standard RoPE application (rotate_half)
-        def _rotate_half(x):
-            x1 = x[..., : x.shape[-1] // 2]
-            x2 = x[..., x.shape[-1] // 2 :]
-            return mx.concatenate([-x2, x1], axis=-1)
-
-        q = q * cos + _rotate_half(q) * sin
-        k = k * cos + _rotate_half(k) * sin
+        rope = getattr(attn, 'rotary_emb', getattr(attn, 'rope', None))
+        q = rope(q, offset=cache_offset)
+        k = rope(k, offset=cache_offset)
         return q, k
+
+    def call_layer(self, layer, h, mask, cache, position_ids=None):
+        """Call a decoder layer. Qwen passes position_ids; others don't."""
+        return layer(h, mask, cache)
 
     def get_vision_dtype(self):
         """Get the dtype of the vision encoder weights."""
@@ -176,12 +173,15 @@ class Qwen25VLAdapter(ModelAdapter):
             input_ids, attention_mask=attention_mask, **grid_kwargs,
         )
 
-    def apply_rope_at_layer(self, q, k, v, position_ids, layer):
+    def apply_rope_at_layer(self, q, k, v, position_ids, layer, cache_offset=0):
         attn = layer.self_attn
         cos, sin = attn.rotary_emb(v, position_ids)
         from mlx_vlm.models.qwen2_5_vl.language import apply_multimodal_rotary_pos_emb
         q, k = apply_multimodal_rotary_pos_emb(q, k, cos, sin, unqueeze_dim=1)
         return q, k
+
+    def call_layer(self, layer, h, mask, cache, position_ids=None):
+        return layer(h, mask, cache, position_ids)
 
 
 # ── Qwen3-VL / Qwen3.5 ──────────────────────────────────────────────────────
@@ -243,12 +243,15 @@ class Qwen3VLAdapter(ModelAdapter):
             input_ids, attention_mask=attention_mask, **grid_kwargs,
         )
 
-    def apply_rope_at_layer(self, q, k, v, position_ids, layer):
+    def apply_rope_at_layer(self, q, k, v, position_ids, layer, cache_offset=0):
         attn = layer.self_attn
         cos, sin = attn.rotary_emb(v, position_ids)
         from mlx_vlm.models.qwen3_vl.language import apply_multimodal_rotary_pos_emb
         q, k = apply_multimodal_rotary_pos_emb(q, k, cos, sin, unqueeze_dim=1)
         return q, k
+
+    def call_layer(self, layer, h, mask, cache, position_ids=None):
+        return layer(h, mask, cache, position_ids)
 
 
 # ── InternVL3 ────────────────────────────────────────────────────────────────
@@ -282,15 +285,26 @@ class InternVLAdapter(ModelAdapter):
     def run_vision_encoder(self, pixel_values, grid_thw=None) -> VisionOutput:
         dtype = self.get_vision_dtype()
         pv = pixel_values.astype(dtype)
-        # InternVL3 vision pipeline: vision_model → remove CLS → pixel_shuffle → MLP
-        hs = self._model.vision_model(pv, output_hidden_states=False)
+        if pv.ndim == 5:
+            pv = pv[0]
+        # Full pipeline: vision_model → CLS removal → pixel_shuffle → mlp1
+        hs, _, _ = self._model.vision_model(
+            pv.transpose(0, 2, 3, 1), output_hidden_states=True,
+        )
+        hs = hs[:, 1:, :]  # remove CLS token
+        from mlx_vlm.models.base import pixel_shuffle
+        hs = pixel_shuffle(hs, shuffle_ratio=self._model.downsample_ratio)
+        for layer in self._model.mlp1:
+            hs = layer(hs)
+        # Flatten batch: (B, N, D) → (B*N, D) to match Qwen format
+        hs = hs.reshape(-1, hs.shape[-1])
         return VisionOutput(hidden_states=hs)
 
     def merge_visual_features(self, hidden_states, text_embeds, input_ids) -> MergeResult:
-        vid_id, img_id = self.get_visual_token_ids()
-        # InternVL uses assignment-based merge (scatter visual features to placeholder positions)
-        embeds = self._model.merge_input_ids_with_image_features(
-            img_id, vid_id, hidden_states, text_embeds, input_ids,
+        # hidden_states is (N, D) flat; need (1, N, D) for merge
+        hs = hidden_states[None] if hidden_states.ndim == 2 else hidden_states
+        embeds = self._model._merge_input_ids_with_image_features(
+            hs, text_embeds, input_ids,
         )
         if isinstance(embeds, tuple):
             return MergeResult(embeds=embeds[0], image_mask=embeds[1] if len(embeds) > 1 else None)
@@ -337,14 +351,21 @@ class LLaVAAdapter(ModelAdapter):
     def run_vision_encoder(self, pixel_values, grid_thw=None) -> VisionOutput:
         dtype = self.get_vision_dtype()
         pv = pixel_values.astype(dtype)
-        # nanoLLaVA: vision_tower → mm_projector
-        hs = self._model.vision_tower(pv, output_hidden_states=False)
+        # Full pipeline: vision_tower → hidden_state[-1] → mm_projector
+        *_, hidden_state = self._model.vision_tower(
+            pv.transpose(0, 2, 3, 1), output_hidden_states=True,
+        )
+        image_features = hidden_state[-1].astype(pv.dtype)
+        image_features = self._model.mm_projector(image_features)
+        # Flatten: (B, N, D) → (B*N, D)
+        hs = image_features.reshape(-1, image_features.shape[-1])
         return VisionOutput(hidden_states=hs)
 
     def merge_visual_features(self, hidden_states, text_embeds, input_ids) -> MergeResult:
-        vid_id, img_id = self.get_visual_token_ids()
-        embeds = self._model.merge_input_ids_with_image_features(
-            img_id, vid_id, hidden_states, text_embeds, input_ids,
+        # hidden_states is (N, D) flat; need (1, N, D) for merge
+        hs = hidden_states[None] if hidden_states.ndim == 2 else hidden_states
+        embeds = self._model._prepare_inputs_for_multimodal(
+            hs, text_embeds, input_ids,
         )
         if isinstance(embeds, tuple):
             return MergeResult(embeds=embeds[0], image_mask=embeds[1] if len(embeds) > 1 else None)

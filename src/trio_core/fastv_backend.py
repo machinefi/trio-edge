@@ -257,7 +257,7 @@ class FastVMLXBackend(MLXBackend):
         h = h[:, all_keep, :]
 
         # Step 9: Set position info for AR decode (MRoPE models only)
-        if position_ids is not None:
+        if adapter.uses_mrope and position_ids is not None:
             position_ids = position_ids[:, :, all_keep]
             max_pos = position_ids.max()
             rope_deltas = max_pos + 1 - pruned_ids.shape[1]
@@ -404,7 +404,7 @@ class FastVMLXBackend(MLXBackend):
                 v = v.reshape(B, L, n_kv, head_dim).transpose(0, 2, 1, 3)
 
                 # Apply RoPE via adapter (handles MRoPE vs standard)
-                q, k = self._adapter.apply_rope_at_layer(q, k, v, position_ids, layer)
+                q, k = self._adapter.apply_rope_at_layer(q, k, v, position_ids, layer, cache_offset=0)
 
                 # Extract importance from post-RoPE Q/K (before cache update)
                 importance = self._score_visual(q, k, visual_mask, n_heads, n_kv, head_dim)
@@ -428,8 +428,8 @@ class FastVMLXBackend(MLXBackend):
                 h = h + attn_out
                 h = h + layer.mlp(layer.post_attention_layernorm(h))
             else:
-                # Standard layer forward with cache + MRoPE position_ids
-                h = layer(h, mask, cache[i], position_ids)
+                # Standard layer forward with cache (adapter handles position_ids)
+                h = self._adapter.call_layer(layer, h, mask, cache[i], position_ids)
 
         mx.eval(h, importance)
         return h, importance
@@ -498,8 +498,7 @@ class FastVMLXBackend(MLXBackend):
         if eval_tensors:
             mx.eval(*eval_tensors)
 
-    @staticmethod
-    def _run_remaining_layers(language_model, h, cache, start_layer,
+    def _run_remaining_layers(self, language_model, h, cache, start_layer,
                                position_ids=None):
         """Run layers start_layer→end with existing KV cache.
 
@@ -529,7 +528,7 @@ class FastVMLXBackend(MLXBackend):
         mask = create_attention_mask(h, remaining_cache)
 
         for i in range(start_layer, len(layers)):
-            h = layers[i](h, mask, cache[i], position_ids)
+            h = self._adapter.call_layer(layers[i], h, mask, cache[i], position_ids)
 
         return language_model.model.norm(h)
 
