@@ -183,13 +183,13 @@ class SpeculativeDecoder:
                     resampled = sampler(target_logprobs[0][None])
                     yield resampled.squeeze(), target_logprobs[0]
                     n += 1
+                    self._total_drafted += 0
+                    self._total_accepted += 1
                     y = resampled.squeeze()
                     continue
 
                 draft_tokens = draft_candidates
                 k = draft_tokens.shape[0]
-                # Prompt lookup has no probability model — use uniform logprobs
-                vocab_size = None  # will be inferred from target
                 draft_logprobs = None
             else:
                 draft_tokens, draft_logprobs = self._draft(y, self.num_draft)

@@ -145,6 +145,7 @@ class MLXBackend(BaseBackend):
         self._config = load_config(self.model_name)
         self._prompt_cache = None  # Lazily created on first generate
         self._early_stop = None   # Set via set_early_stop() after load
+        self._speculative_lookahead = 0  # Set via set_speculative() after load
         # Detect if model natively supports video tokens (Qwen2.5-VL, Qwen3-VL, etc.)
         # Models without video support (Gemma 3, SmolVLM2) use the image path instead.
         self._is_video_model = (
@@ -182,6 +183,12 @@ class MLXBackend(BaseBackend):
             eos_token_ids=list(eos_ids),
         )
         logger.info("[MLX] Early stopping enabled: threshold=%.2f, eos_ids=%s", threshold, eos_ids)
+
+    def set_speculative(self, lookahead: int) -> None:
+        """Configure speculative decoding. Called by engine after load()."""
+        self._speculative_lookahead = max(0, lookahead)
+        if self._speculative_lookahead > 0:
+            logger.info("[MLX] Speculative decode enabled: lookahead=%d", self._speculative_lookahead)
 
     def generate(
         self, frames: np.ndarray, prompt: str, *,
@@ -221,6 +228,7 @@ class MLXBackend(BaseBackend):
                     max_tokens=max_tokens, temperature=temperature, top_p=top_p,
                     prompt_cache_manager=self._get_prompt_cache(),
                     early_stop=self._early_stop,
+                    speculative_lookahead=self._speculative_lookahead,
                     **kwargs,
                 )
             ):
@@ -282,6 +290,7 @@ class MLXBackend(BaseBackend):
                     max_tokens=max_tokens, temperature=temperature, top_p=top_p,
                     prompt_cache_manager=self._get_prompt_cache(),
                     early_stop=self._early_stop,
+                    speculative_lookahead=self._speculative_lookahead,
                     **kwargs,
                 )
             ):

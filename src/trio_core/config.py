@@ -64,6 +64,11 @@ class EngineConfig(BaseSettings):
         default=2, description="LLM layer to compute attention importance at"
     )
 
+    # Speculative decoding (prompt lookup)
+    speculative_lookahead: int = Field(
+        default=0, description="Prompt lookup draft tokens (0=disabled, 3-8 typical)"
+    )
+
     # Early stopping
     early_stop: bool = Field(default=False, description="Enable EOS-probability early stopping")
     early_stop_threshold: float = Field(

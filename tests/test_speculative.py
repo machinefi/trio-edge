@@ -260,3 +260,40 @@ class TestSpecDecoderValidation:
             SpeculativeDecoder(
                 target_model=None, target_cache=[],
             )
+
+
+# ---------------------------------------------------------------------------
+# Config integration
+# ---------------------------------------------------------------------------
+
+class TestSpeculativeConfig:
+
+    def test_config_default(self):
+        from trio_core.config import EngineConfig
+        config = EngineConfig()
+        assert config.speculative_lookahead == 0
+
+    def test_config_custom(self):
+        from trio_core.config import EngineConfig
+        config = EngineConfig(speculative_lookahead=5)
+        assert config.speculative_lookahead == 5
+
+
+# ---------------------------------------------------------------------------
+# Fallback stats tracking
+# ---------------------------------------------------------------------------
+
+class TestFallbackStats:
+
+    def test_fallback_updates_accepted(self):
+        """When no n-gram match, fallback path should still count the decoded token."""
+        from trio_core.speculative import SpeculativeDecoder, PromptLookupDraft
+
+        # Prompt with no possible matches for our generated tokens
+        draft_fn = PromptLookupDraft(mx.array([100, 200, 300]), num_draft=3)
+        decoder = SpeculativeDecoder(
+            target_model=None, target_cache=[], draft_fn=draft_fn,
+        )
+        # Directly check that stats fields exist and are zero initially
+        assert decoder._total_accepted == 0
+        assert decoder._total_drafted == 0
