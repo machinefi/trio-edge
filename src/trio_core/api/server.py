@@ -133,11 +133,8 @@ def _register_routes(app: FastAPI) -> None:
         latency_ms = int((_time.monotonic() - t0) * 1000)
         answer = result.text.strip()
 
-        # Auto-detect triggered: yes/no question → bool
-        triggered = None
-        lower = answer.lower()
-        if lower.startswith(("yes", "no")):
-            triggered = lower.startswith("yes")
+        # Auto-detect triggered from answer semantics
+        triggered = _detect_triggered(answer)
 
         return AnalyzeFrameResponse(
             answer=answer,
@@ -271,6 +268,33 @@ def _register_routes(app: FastAPI) -> None:
                 total_tokens=result.metrics.prompt_tokens + result.metrics.completion_tokens,
             ),
         )
+
+
+def _detect_triggered(answer: str) -> bool | None:
+    """Detect yes/no from VLM answer for trioclaw triggered flag.
+
+    Returns True for affirmative, False for negative, None for descriptive answers.
+    """
+    lower = answer.lower().strip()
+    # Direct yes/no start
+    if lower.startswith(("yes", "yeah", "yep")):
+        return True
+    if lower.startswith(("no", "nope")):
+        return False
+    # Check for negative patterns in first sentence
+    first_sentence = lower.split(".")[0]
+    neg_patterns = ("there is no", "there are no", "there isn't", "there aren't",
+                    "i don't see", "i do not see", "no ", "not ", "cannot see",
+                    "can't see", "nothing", "nobody", "no one")
+    pos_patterns = ("there is a", "there are", "i see a", "i can see",
+                    "someone", "a person", "a package", "a delivery")
+    for pat in neg_patterns:
+        if pat in first_sentence:
+            return False
+    for pat in pos_patterns:
+        if pat in first_sentence:
+            return True
+    return None
 
 
 def _extract_from_messages(messages: list[ChatMessage]) -> tuple[list[str], str]:
