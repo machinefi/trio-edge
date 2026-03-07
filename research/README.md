@@ -2,6 +2,71 @@
 
 Research notes on visual token compression for edge VLM inference.
 
+## Pipeline Big Picture
+
+Every VLM inference decomposes into 5 stages. This is the map we optimize against:
+
+```
+输入 → [Vision Encoder + ToMe] → visual tokens → [LLM Prefill] → [KV Cache] → [Decode]
+        ^^^^^^^^^^^^^^^^^^^      ^^^^^^^^^^^      ^^^^^^^^^^^^     ^^^^^^^^^    ^^^^^^^^
+        ToMe 在这里              更少了            量化在这里        缓存在这里    batch在这里
+```
+
+### Per-Stage Status (updated 2026-03-06)
+
+```
+Stage 0: 输入 (Video Pipeline)      ██████████ 100%   done
+Stage 1: Vision Encoder + ToMe      ████████░░  80%   ToMe + adaptive r done; native化 remaining
+Stage 2: Visual Token Count          ██████░░░░  60%   FastV done(粗); mid-stream KV prune next
+Stage 3: LLM Prefill                 ████░░░░░░  40%   own generate loop done; shared prefix TODO
+Stage 4: KV Cache                    ██░░░░░░░░  20%   basic cache done; frame-to-frame reuse TODO
+Stage 5: Decode                      ██░░░░░░░░  20%   streaming done; speculative decode TODO
+```
+
+### Priority Ranking (ROI for video inference latency)
+
+| # | What | Expected Gain | Difficulty | Stage |
+|---|------|---------------|------------|-------|
+| 1 | Frame-to-frame KV reuse | -60~80% video latency | High | 4 |
+| 2 | Mid-stream FastV (true KV prune) | -30~50% visual tokens | Medium | 2 |
+| 3 | Shared text prefix KV | -20~40% prefill | Medium | 3 |
+| 4 | Speculative decoding | +30~50% decode TPS | Medium | 5 |
+| 5 | Content-aware adaptive r | +quality, same speed | Low | 2 |
+| 6 | Native ToMe (no monkey-patch) | cleaner arch | Medium | 1 |
+| 7 | Remove mlx-vlm load dep | zero dependency | High | 3 |
+
+### Stage Details
+
+**Stage 0 — Input (Video Pipeline)** -- DONE
+- StreamCapture (webcam/RTSP/YouTube), temporal dedup (-30~70% frames),
+  motion gate (-80%+ VLM calls), smart resize, model profiles
+
+**Stage 1 — Vision Encoder + ToMe** -- 80%
+- Done: ToMe bipartite soft matching, windowed-attn aware, adaptive r ramp,
+  hidden-state metric, Qwen2.5/3/3.5 support
+- TODO: native ToMe (replace monkey-patch with built-in ViT)
+
+**Stage 2 — Visual Token Count** -- 60%
+- Done: ToMe compression (Qwen2.5 1080p: 748->242 tokens, -68%),
+  post-encoder compression, FastV attention pruning (runs layers 0-N twice)
+- TODO: mid-stream FastV (prune KV cache in-place, no double computation),
+  content-aware adaptive ratio
+
+**Stage 3 — LLM Prefill** -- 40%
+- Done: own generate loop (sampler, KV cache, logits processors internalized),
+  mlx-lm runtime dep mostly removed
+- TODO: chunked prefill, shared text prefix across video frames,
+  remove mlx-vlm model loading dep
+
+**Stage 4 — KV Cache** -- 20% (BIGGEST UNTAPPED POTENTIAL)
+- Done: basic KVCache, quantized KV cache
+- TODO: frame-to-frame KV reuse (consecutive frames share 80%+ context),
+  streaming KV eviction for long video, cross-frame visual KV sharing
+
+**Stage 5 — Decode** -- 20%
+- Done: auto-regressive, streaming output, early stopping config
+- TODO: speculative decoding (draft model), continuous batching
+
 ## Documents
 
 - [visual-token-compression.md](visual-token-compression.md) — Core research direction: three key papers, prototype results, compatibility analysis with KV cache / batch scheduling / quantization.
