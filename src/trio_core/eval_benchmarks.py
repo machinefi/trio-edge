@@ -144,7 +144,7 @@ class BenchmarkResult:
         # Per-category breakdown (for MVBench tasks, etc.)
         cat_acc = self.per_category_accuracy
         if len(cat_acc) > 1:
-            print(f"\n  Per-category accuracy:")
+            print("\n  Per-category accuracy:")
             for cat, (acc, cnt) in cat_acc.items():
                 if cat:
                     print(f"    {cat:<30s} {acc:.1%}  (n={cnt})")
@@ -185,7 +185,7 @@ class BenchmarkResult:
         b = json.loads(Path(path_b).read_text())
 
         print(f"\n{'='*60}")
-        print(f"  BENCHMARK COMPARISON")
+        print("  BENCHMARK COMPARISON")
         print(f"  A: {a['name']}  ({a.get('metadata', {}).get('backend', '?')})")
         print(f"  B: {b['name']}  ({b.get('metadata', {}).get('backend', '?')})")
         print(f"{'='*60}")
@@ -686,7 +686,6 @@ class MVBenchBenchmark(Benchmark):
         except ImportError:
             raise ImportError("Install 'huggingface_hub': pip install huggingface_hub")
 
-        import cv2
 
         tasks_to_run = self.tasks or list(self.TASK_CONFIG.keys())
         # Filter to tasks with valid config

@@ -426,7 +426,7 @@ class PromptCache:
         if not any(s is not None for s in self._prefix_states):
             return False
         import numpy as np
-        h = hashlib.md5(np.array(input_ids.flatten(), copy=False).tobytes()).hexdigest()
+        h = hashlib.md5(np.array(input_ids.flatten(), copy=False).tobytes(), usedforsecurity=False).hexdigest()
         return h == self._prefix_hash
 
     def save_prefix(
@@ -446,7 +446,7 @@ class PromptCache:
         if prefix_len <= 0:
             return
         self._prefix_hash = hashlib.md5(
-            np.array(input_ids.flatten(), copy=False).tobytes()
+            np.array(input_ids.flatten(), copy=False).tobytes(), usedforsecurity=False
         ).hexdigest()
         self._prefix_len = prefix_len
         self._prefix_position_ids = position_ids
@@ -480,7 +480,7 @@ class PromptCache:
     def _hash_input(input_ids: mx.array, pixel_values: mx.array = None) -> str:
         """Fast hash of input_ids + pixel_values for exact-match detection."""
         import numpy as np
-        h = hashlib.md5(np.array(input_ids.flatten(), copy=False).tobytes())
+        h = hashlib.md5(np.array(input_ids.flatten(), copy=False).tobytes(), usedforsecurity=False)
         if pixel_values is not None and pixel_values.size > 0:
             h.update(np.array(pixel_values.flatten(), copy=False).tobytes())
         return h.hexdigest()

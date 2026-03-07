@@ -124,7 +124,7 @@ class FastVMLXBackend(MLXBackend):
 
         input_ids = kwargs.pop("input_ids")
         pixel_values = kwargs.pop("pixel_values")
-        mask = kwargs.pop("mask")
+        kwargs.pop("mask")
 
         video_grid_thw = kwargs.get("video_grid_thw", None)
         image_grid_thw = kwargs.get("image_grid_thw", None)
@@ -520,7 +520,6 @@ class FastVMLXBackend(MLXBackend):
         Returns:
             Normalized hidden state (after final RMSNorm).
         """
-        import mlx.core as mx
         from mlx_vlm.models.base import create_attention_mask
 
         layers = language_model.model.layers

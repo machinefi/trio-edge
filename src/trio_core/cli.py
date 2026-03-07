@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import sys
 
 import typer
 
@@ -92,8 +91,8 @@ def doctor():
         all_ok = False
 
     try:
-        from PIL import Image
         import PIL
+        import PIL.Image  # noqa: F401 — verify PIL.Image is importable
         typer.echo(f"pillow:    ✓ {PIL.__version__}")
     except ImportError:
         typer.echo("pillow:    ✗ not installed")

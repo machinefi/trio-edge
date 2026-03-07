@@ -13,6 +13,8 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
+import numpy as np
+
 from trio_core.api.models import (
     AnalyzeFrameRequest,
     AnalyzeFrameResponse,
@@ -21,7 +23,6 @@ from trio_core.api.models import (
     ChatCompletionRequest,
     ChatCompletionResponse,
     ChatMessage,
-    ContentPart,
     DeltaContent,
     HealthResponse,
     InferenceMetricsResponse,
@@ -104,7 +105,6 @@ def _register_routes(app: FastAPI) -> None:
         """
         import base64
         import io
-        import tempfile
         import time as _time
 
         import numpy as np

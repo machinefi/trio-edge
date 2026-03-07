@@ -656,7 +656,7 @@ class LanguageModel(nn.Module):
         return self.model.layers
 
     def make_cache(self):
-        return [ArraysCache(size=2) if l.is_linear else KVCache() for l in self.layers]
+        return [ArraysCache(size=2) if layer.is_linear else KVCache() for layer in self.layers]
 
     @property
     def head_dim(self):
