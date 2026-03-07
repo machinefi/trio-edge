@@ -20,7 +20,7 @@ Stage 1: Vision Encoder + ToMe      ████████░░  80%   ToMe +
 Stage 2: Visual Token Count          ████████░░  80%   mid-stream FastV done; adaptive ratio TODO
 Stage 3: LLM Prefill                 ██████░░░░  60%   generate loop + prefix cache done; mlx-vlm dep remaining
 Stage 4: KV Cache                    ████░░░░░░  40%   persistent cache + prefix reuse done; frame-to-frame TODO
-Stage 5: Decode                      ██░░░░░░░░  20%   streaming done; speculative decode TODO
+Stage 5: Decode                      ████░░░░░░  40%   streaming + speculative decode done; continuous batching TODO
 ```
 
 ### Priority Ranking (ROI for video inference latency)
@@ -30,7 +30,7 @@ Stage 5: Decode                      ██░░░░░░░░  20%   strea
 | 1 | Frame-to-frame KV reuse | -60~80% video latency | High | 4 | TODO |
 | 2 | ~~Mid-stream FastV (true KV prune)~~ | ~~-30~50% visual tokens~~ | ~~Medium~~ | ~~2~~ | DONE |
 | 3 | ~~Shared text prefix KV~~ | ~~-20~40% prefill~~ | ~~Medium~~ | ~~3~~ | DONE |
-| 4 | Speculative decoding | +30~50% decode TPS | Medium | 5 | TODO |
+| 4 | ~~Speculative decoding~~ | ~~+30~50% decode TPS~~ | ~~Medium~~ | ~~5~~ | DONE |
 | 5 | Content-aware adaptive r | +quality, same speed | Low | 2 | TODO |
 | 6 | Native ToMe (no monkey-patch) | cleaner arch | Medium | 1 | TODO |
 | 7 | Remove mlx-vlm load dep | zero dependency | High | 3 | TODO |
@@ -64,9 +64,11 @@ Stage 5: Decode                      ██░░░░░░░░  20%   strea
 - TODO: frame-to-frame KV reuse (consecutive frames share 80%+ context),
   streaming KV eviction for long video, cross-frame visual KV sharing
 
-**Stage 5 — Decode** -- 20%
-- Done: auto-regressive, streaming output, early stopping config
-- TODO: speculative decoding (draft model), continuous batching
+**Stage 5 — Decode** -- 40%
+- Done: auto-regressive, streaming output, early stopping config,
+  speculative decoding (draft model + prompt lookup, rejection sampling,
+  KV cache rollback)
+- TODO: continuous batching, integrate speculative decode into generate loop
 
 ### Per-Stage Model Differences (updated 2026-03-06)
 
@@ -216,7 +218,7 @@ Finding: 0.25 is viable (~2% more loss for ~11% more compression). 0.2 is too ag
 ### Next Optimization Directions
 
 1. **Frame-to-frame KV reuse** — consecutive video frames share 80%+ context
-3. **Speculative decoding** — draft model for faster decode
+3. **Integrate speculative decode** — wire into generate loop, benchmark TPS gain
 4. **Content-aware adaptive r** — quality-preserving compression
 
 ## Status
