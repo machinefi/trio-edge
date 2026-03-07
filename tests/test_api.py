@@ -92,6 +92,56 @@ class TestVideoAnalyze:
         assert data["metrics"]["frames_input"] == 10
 
 
+class TestFramesAnalyze:
+    def test_upload_frames(self, client):
+        """Multipart frame upload."""
+        import io
+        from PIL import Image
+
+        # Create two 8x8 test images
+        files = []
+        for color in [(255, 0, 0), (0, 255, 0)]:
+            img = Image.new("RGB", (8, 8), color)
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG")
+            buf.seek(0)
+            files.append(("frames", ("frame.jpg", buf, "image/jpeg")))
+
+        resp = client.post(
+            "/v1/frames/analyze",
+            data={"prompt": "What do you see?"},
+            files=files,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["text"] == "Test analysis result"
+        assert data["metrics"]["frames_input"] == 10
+
+    def test_upload_frames_checks_engine_call(self, client):
+        """Verify frames are passed as numpy array to engine."""
+        import io, numpy as np
+        from PIL import Image
+        import trio_core.api.server as server_mod
+
+        img = Image.new("RGB", (4, 4), (128, 128, 128))
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        buf.seek(0)
+
+        resp = client.post(
+            "/v1/frames/analyze",
+            data={"prompt": "test", "max_tokens": "100"},
+            files=[("frames", ("f.png", buf, "image/png"))],
+        )
+        assert resp.status_code == 200
+        # Verify analyze_video was called with numpy array
+        call_args = server_mod._engine.analyze_video.call_args
+        video_arg = call_args.kwargs.get("video", call_args[1].get("video"))
+        assert isinstance(video_arg, np.ndarray)
+        assert video_arg.shape[0] == 1  # 1 frame
+        assert video_arg.shape[1] == 3  # 3 channels
+
+
 class TestChatCompletions:
     def test_no_video_returns_400(self, client):
         resp = client.post("/v1/chat/completions", json={

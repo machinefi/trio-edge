@@ -9,7 +9,7 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
@@ -112,6 +112,54 @@ def _register_routes(app: FastAPI) -> None:
                 prompt=request.prompt,
                 max_tokens=request.max_tokens,
                 temperature=request.temperature,
+            ),
+        )
+
+        return VideoAnalyzeResponse(
+            text=result.text,
+            model=engine.config.model,
+            metrics=InferenceMetricsResponse(**result.metrics.__dict__),
+        )
+
+    @app.post("/v1/frames/analyze")
+    async def analyze_frames(
+        prompt: str = Form(...),
+        max_tokens: int | None = Form(None),
+        temperature: float | None = Form(None),
+        stream: bool = Form(False),
+        frames: list[UploadFile] = File(...),
+    ):
+        engine = get_engine()
+
+        import io
+        import numpy as np
+        from PIL import Image
+
+        frame_arrays = []
+        for f in frames:
+            data = await f.read()
+            img = Image.open(io.BytesIO(data)).convert("RGB")
+            arr = np.array(img, dtype=np.float32) / 255.0  # (H, W, C)
+            arr = arr.transpose(2, 0, 1)  # (C, H, W)
+            frame_arrays.append(arr)
+
+        # Stack into (T, C, H, W)
+        frames_array = np.stack(frame_arrays, axis=0)
+
+        if stream:
+            return StreamingResponse(
+                _stream_frames_analyze(engine, frames_array, prompt, max_tokens, temperature),
+                media_type="text/event-stream",
+            )
+
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None,
+            lambda: engine.analyze_video(
+                video=frames_array,
+                prompt=prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
             ),
         )
 
@@ -239,6 +287,28 @@ async def _stream_video_analyze(
         prompt=request.prompt,
         max_tokens=request.max_tokens,
         temperature=request.temperature,
+    ):
+        if chunk.get("metrics"):
+            data = {"text": "", "finished": True, "metrics": chunk["metrics"].__dict__}
+        else:
+            data = {"text": chunk["text"], "finished": chunk["finished"]}
+        yield f"data: {json.dumps(data)}\n\n"
+    yield "data: [DONE]\n\n"
+
+
+async def _stream_frames_analyze(
+    engine: TrioCore,
+    frames: "np.ndarray",
+    prompt: str,
+    max_tokens: int | None,
+    temperature: float | None,
+) -> AsyncIterator[str]:
+    """Stream /v1/frames/analyze response as SSE."""
+    async for chunk in engine.stream_analyze(
+        video=frames,
+        prompt=prompt,
+        max_tokens=max_tokens,
+        temperature=temperature,
     ):
         if chunk.get("metrics"):
             data = {"text": "", "finished": True, "metrics": chunk["metrics"].__dict__}

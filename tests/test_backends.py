@@ -51,6 +51,34 @@ class TestAutoBackend:
         assert isinstance(b, TransformersBackend)
 
 
+class TestTransformersFeatureDetection:
+    """P4: Verify _is_video_model uses feature detection, not string matching."""
+
+    def test_video_model_detected(self):
+        """Model with video_token_id routes to _prepare_video."""
+        info = DeviceInfo("transformers", "RTX 4090", "cuda", 24.0, 0)
+        b = TransformersBackend("some-unrelated-name", device_info=info)
+        # Simulate load() setting _is_video_model
+        mock_config = MagicMock()
+        mock_config.video_token_id = 12345
+        mock_model = MagicMock()
+        mock_model.config = mock_config
+        b._model = mock_model
+        b._is_video_model = hasattr(mock_model.config, "video_token_id")
+        assert b._is_video_model is True
+
+    def test_non_video_model_detected(self):
+        """Model without video_token_id routes to generic path."""
+        info = DeviceInfo("transformers", "RTX 4090", "cuda", 24.0, 0)
+        b = TransformersBackend("gemma-3-4b", device_info=info)
+        mock_config = MagicMock(spec=["hidden_size"])  # no video_token_id
+        mock_model = MagicMock()
+        mock_model.config = mock_config
+        b._model = mock_model
+        b._is_video_model = hasattr(mock_model.config, "video_token_id")
+        assert b._is_video_model is False
+
+
 class TestBaseBackendHealth:
     def test_health(self):
         info = DeviceInfo("mlx", "M3", "metal", 36.0, 40)

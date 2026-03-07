@@ -347,10 +347,18 @@ class MLXBackend(BaseBackend):
             messages, return_video_kwargs=True,
         )
 
-        inputs = self._processor(
-            text=[formatted], images=image_inputs, videos=video_inputs,
-            padding=True, return_tensors="np",
-        )
+        # Some processors only support PyTorch tensors, not numpy.
+        try:
+            inputs = self._processor(
+                text=[formatted], images=image_inputs, videos=video_inputs,
+                padding=True, return_tensors="np",
+            )
+        except ValueError:
+            inputs = self._processor(
+                text=[formatted], images=image_inputs, videos=video_inputs,
+                padding=True, return_tensors="pt",
+            )
+            inputs = {k: v.numpy() if hasattr(v, "numpy") else v for k, v in inputs.items()}
 
         # Convert to MLX arrays for generate_step
         kwargs = {
@@ -395,10 +403,18 @@ class MLXBackend(BaseBackend):
             messages, return_video_kwargs=True,
         )
 
-        inputs = self._processor(
-            text=[formatted], images=image_inputs,
-            padding=True, return_tensors="np",
-        )
+        # Some processors (Gemma 3) only support PyTorch tensors, not numpy.
+        try:
+            inputs = self._processor(
+                text=[formatted], images=image_inputs,
+                padding=True, return_tensors="np",
+            )
+        except ValueError:
+            inputs = self._processor(
+                text=[formatted], images=image_inputs,
+                padding=True, return_tensors="pt",
+            )
+            inputs = {k: v.numpy() if hasattr(v, "numpy") else v for k, v in inputs.items()}
 
         # Convert to MLX arrays for generate_step
         kwargs = {
@@ -469,7 +485,7 @@ class TransformersBackend(BaseBackend):
             self.model_name, torch_dtype=dtype, device_map=device,
         )
         self._device = device
-        self._is_qwen = "qwen" in self.model_name.lower()
+        self._is_video_model = hasattr(self._model.config, "video_token_id")
         self._loaded = True
         logger.info("[Transformers] Model loaded in %.1fs", time.monotonic() - t0)
 
@@ -545,8 +561,8 @@ class TransformersBackend(BaseBackend):
         import torch
         from PIL import Image
 
-        if self._is_qwen:
-            return self._prepare_qwen(frames, prompt)
+        if self._is_video_model:
+            return self._prepare_video(frames, prompt)
 
         # Generic path: convert frames to PIL images
         images = self._frames_to_pil(frames)
@@ -567,8 +583,8 @@ class TransformersBackend(BaseBackend):
 
         return {k: v.to(self._device) if hasattr(v, "to") else v for k, v in inputs.items()}
 
-    def _prepare_qwen(self, frames: np.ndarray, prompt: str) -> dict:
-        """Qwen-specific preparation using qwen_vl_utils."""
+    def _prepare_video(self, frames: np.ndarray, prompt: str) -> dict:
+        """Video-capable model preparation using qwen_vl_utils."""
         import torch
 
         messages = [{

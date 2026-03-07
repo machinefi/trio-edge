@@ -25,6 +25,7 @@ dependencies = [
     "opencv-python-headless",
     "numpy",
     "fastapi>=0.104",
+    "python-multipart>=0.0.6",
     "uvicorn[standard]",
     "typer>=0.9",
     "pydantic>=2.0",
