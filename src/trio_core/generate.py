@@ -192,6 +192,11 @@ class PromptCache:
     Benefits:
     1. Buffer reuse: avoids GPU buffer re-allocation between requests
     2. Exact-match: identical input_ids → skip entire prefill (ViT + LLM)
+    3. Prefix-match: same prompt template + resolution → skip text prefix prefill
+
+    The prefix cache stores KV for the text tokens before visual placeholders.
+    When the same prompt is used with different frames, the prefix KV is
+    reused and only the visual + suffix tokens are re-prefilled.
 
     Usage:
         pcache = PromptCache(model)
@@ -208,6 +213,13 @@ class PromptCache:
         self._prefill_offset: int = 0  # KV offset after prefill (before decode)
         self._model = model
         self._max_kv_size = max_kv_size
+
+        # Prefix caching: reuse text prefix KV across frames
+        self._prefix_hash: Optional[str] = None
+        self._prefix_states: Optional[List[Any]] = None  # [(keys, values), ...]
+        self._prefix_len: int = 0
+        self._prefix_position_ids = None
+        self._prefix_rope_deltas = None
 
     @property
     def kv_cache(self) -> Optional[List[Any]]:
@@ -276,6 +288,65 @@ class PromptCache:
         self._input_hash = None
         self._first_token = None
 
+    # ── Prefix caching ──────────────────────────────────────────────
+
+    def check_prefix_hit(self, input_ids: mx.array) -> bool:
+        """Check if text prefix matches (same prompt template, different pixels).
+
+        Hashes the full input_ids (not pixels). Same input_ids means same
+        prompt + same visual token count (same resolution), so prefix KV
+        and position_ids are valid for reuse.
+        """
+        if self._prefix_hash is None or self._prefix_states is None:
+            return False
+        if not self.is_trimmable:
+            return False
+        import numpy as np
+        h = hashlib.md5(np.array(input_ids.flatten(), copy=False).tobytes()).hexdigest()
+        return h == self._prefix_hash
+
+    def save_prefix(
+        self, input_ids: mx.array, prefix_len: int, kv_cache: List[Any],
+    ):
+        """Save text prefix KV state for reuse across frames.
+
+        Args:
+            input_ids: Full input_ids (hashed for matching).
+            prefix_len: Number of text prefix tokens (before first visual token).
+            kv_cache: KV cache after full prefill (contains all tokens' KV).
+        """
+        import numpy as np
+        if prefix_len <= 0:
+            return
+        self._prefix_hash = hashlib.md5(
+            np.array(input_ids.flatten(), copy=False).tobytes()
+        ).hexdigest()
+        self._prefix_len = prefix_len
+        self._prefix_states = []
+        for c in kv_cache:
+            if hasattr(c, 'keys') and c.keys is not None and c.offset >= prefix_len:
+                k = c.keys[..., :prefix_len, :]
+                v = c.values[..., :prefix_len, :]
+                mx.eval(k, v)
+                self._prefix_states.append((k, v))
+            else:
+                self._prefix_states.append(None)
+        logger.debug("Prefix saved: %d tokens, %d layers", prefix_len, len(self._prefix_states))
+
+    def restore_prefix_cache(self) -> List[Any]:
+        """Create new KV cache initialized with saved prefix state."""
+        cache = make_prompt_cache(
+            self._model.language_model, max_kv_size=self._max_kv_size,
+        )
+        for c, state in zip(cache, self._prefix_states):
+            if state is not None:
+                k, v = state
+                c.state = (k, v)
+        self._kv_cache = cache
+        return cache
+
+    # ── Private ──────────────────────────────────────────────────────
+
     @staticmethod
     def _hash_input(input_ids: mx.array, pixel_values: mx.array = None) -> str:
         """Fast hash of input_ids + pixel_values for exact-match detection."""
@@ -284,6 +355,26 @@ class PromptCache:
         if pixel_values is not None and pixel_values.size > 0:
             h.update(np.array(pixel_values.flatten(), copy=False).tobytes())
         return h.hexdigest()
+
+def _find_visual_boundary(input_ids: mx.array, model: nn.Module) -> int:
+    """Find position of first visual placeholder token in input_ids.
+
+    Returns the index where visual tokens start, or 0 if none found.
+    The tokens before this position are the "text prefix" that can be cached.
+    """
+    import numpy as np
+    ids = np.array(input_ids[0])
+    img_id = getattr(model.config, 'image_token_id', None)
+    if img_id is None:
+        img_id = getattr(model.config, 'image_token_index', None)
+    vid_id = getattr(model.config, 'video_token_id', None)
+    if vid_id is None:
+        vid_id = getattr(model.config, 'video_token_index', None)
+    for i, tid in enumerate(ids):
+        if (img_id is not None and tid == img_id) or (vid_id is not None and tid == vid_id):
+            return int(i)
+    return 0
+
 
 # Dedicated stream for generation (matches mlx-vlm)
 _generation_stream = mx.new_stream(mx.default_device())
@@ -376,8 +467,9 @@ def generate_step(
     original_input_ids = input_ids  # Save before chunked prefill modifies it
     tokens = mx.array([], dtype=input_ids.dtype)
 
-    # Check for exact-match cache hit
+    # Check for exact-match cache hit, then prefix hit
     cache_hit = False
+    prefix_hit = False
     if prompt_cache_manager is not None:
         cache_hit = prompt_cache_manager.check_hit(original_input_ids, pixel_values)
         if cache_hit:
@@ -390,8 +482,16 @@ def generate_step(
                         c.trim(decode_tokens)
             logger.debug("Cache HIT — skipping prefill (%d tokens)", input_ids.size)
         else:
-            prompt_cache = prompt_cache_manager.get_or_create_cache()
-            logger.debug("Cache MISS — full prefill (%d tokens)", input_ids.size)
+            prefix_hit = prompt_cache_manager.check_prefix_hit(original_input_ids)
+            if prefix_hit:
+                prompt_cache = prompt_cache_manager.restore_prefix_cache()
+                logger.debug(
+                    "Prefix HIT — reusing %d prefix tokens, re-prefilling suffix",
+                    prompt_cache_manager._prefix_len,
+                )
+            else:
+                prompt_cache = prompt_cache_manager.get_or_create_cache()
+                logger.debug("Cache MISS — full prefill (%d tokens)", input_ids.size)
     elif prompt_cache is None:
         prompt_cache = make_prompt_cache(
             model.language_model,
@@ -460,26 +560,62 @@ def generate_step(
                 }
             )
 
-            # Chunked prefill for long sequences
-            if prefill_step_size is not None and inputs_embeds.shape[1] > prefill_step_size:
-                while inputs_embeds.shape[1] > 1:
-                    n_to_process = min(prefill_step_size, inputs_embeds.shape[1] - 1)
-                    model.language_model(
-                        inputs=input_ids[:, :n_to_process],
-                        inputs_embeds=inputs_embeds[:, :n_to_process],
-                        cache=prompt_cache,
-                        **kwargs,
-                    )
-                    quantize_cache_fn(prompt_cache)
-                    mx.eval([c.state for c in prompt_cache])
-                    inputs_embeds = inputs_embeds[:, n_to_process:]
-                    input_ids = input_ids[:, n_to_process:]
-                    mx.clear_cache()
+            if prefix_hit:
+                # Prefix cache hit: skip text prefix prefill, only prefill
+                # visual + suffix tokens. The prefix KV is already in cache.
+                prefix_len = prompt_cache_manager._prefix_len
+                lm = model.language_model
 
-                input_ids = input_ids[:, -1:]
+                # Restore full position_ids so model can slice for suffix
+                lm._position_ids = prompt_cache_manager._prefix_position_ids
+                # Temporarily clear rope_deltas to force _position_ids slicing
+                # (delta-based path assumes sequential positions, wrong for visual)
+                saved_rope_deltas = prompt_cache_manager._prefix_rope_deltas
+                lm._rope_deltas = None
 
-            # First step: prefill remaining + get first token
-            y, logprobs = _step(input_ids, inputs_embeds=inputs_embeds)
+                suffix_embeds = inputs_embeds[:, prefix_len:]
+                suffix_ids = input_ids[:, prefix_len:]
+
+                y, logprobs = _step(suffix_ids, inputs_embeds=suffix_embeds)
+
+                # Restore rope_deltas for sequential decode phase
+                lm._rope_deltas = saved_rope_deltas
+
+                logger.debug(
+                    "Prefix prefill skipped %d tokens, prefilled %d suffix tokens",
+                    prefix_len, suffix_ids.shape[1],
+                )
+            else:
+                # Full prefill (possibly chunked)
+                if prefill_step_size is not None and inputs_embeds.shape[1] > prefill_step_size:
+                    while inputs_embeds.shape[1] > 1:
+                        n_to_process = min(prefill_step_size, inputs_embeds.shape[1] - 1)
+                        model.language_model(
+                            inputs=input_ids[:, :n_to_process],
+                            inputs_embeds=inputs_embeds[:, :n_to_process],
+                            cache=prompt_cache,
+                            **kwargs,
+                        )
+                        quantize_cache_fn(prompt_cache)
+                        mx.eval([c.state for c in prompt_cache])
+                        inputs_embeds = inputs_embeds[:, n_to_process:]
+                        input_ids = input_ids[:, n_to_process:]
+                        mx.clear_cache()
+
+                    input_ids = input_ids[:, -1:]
+
+                y, logprobs = _step(input_ids, inputs_embeds=inputs_embeds)
+
+                # Save text prefix KV for future prefix-match reuse
+                if prompt_cache_manager is not None:
+                    vis_boundary = _find_visual_boundary(original_input_ids, model)
+                    if vis_boundary > 0:
+                        prompt_cache_manager.save_prefix(
+                            original_input_ids, vis_boundary, prompt_cache,
+                        )
+                        lm = model.language_model
+                        prompt_cache_manager._prefix_position_ids = lm._position_ids
+                        prompt_cache_manager._prefix_rope_deltas = lm._rope_deltas
 
         # Save state for future exact-match detection
         if prompt_cache_manager is not None:
