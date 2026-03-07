@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 _MODEL_REGISTRY = {
     "qwen2_5_vl": "trio_core.models.qwen2_5_vl",
     "qwen3_vl": "trio_core.models.qwen3_vl",
+    "qwen3_5": "trio_core.models.qwen3_5",
 }
 
 
