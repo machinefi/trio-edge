@@ -161,6 +161,11 @@ class MLXBackend(BaseBackend):
         if self._prompt_cache is None:
             from trio_core.generate import PromptCache
             self._prompt_cache = PromptCache(self._model)
+            # Attach StreamingMemory if configured
+            if getattr(self, '_streaming_memory_config', None):
+                from trio_core.streaming_memory import StreamingMemory
+                sm = StreamingMemory(**self._streaming_memory_config)
+                self._prompt_cache.set_streaming_memory(sm)
         return self._prompt_cache
 
     def _get_early_stop(self):
@@ -199,6 +204,20 @@ class MLXBackend(BaseBackend):
                 "[MLX] Visual similarity KV reuse enabled: threshold=%.2f",
                 self._visual_similarity_threshold,
             )
+
+    def set_streaming_memory(self, enabled: bool, budget: int = 6000, prototype_ratio: float = 0.1) -> None:
+        """Configure StreamMem bounded KV cache. Called by engine after load()."""
+        if not enabled:
+            self._streaming_memory_config = None
+            return
+        self._streaming_memory_config = {
+            "budget": budget,
+            "prototype_ratio": prototype_ratio,
+        }
+        logger.info(
+            "[MLX] StreamMem enabled: budget=%d, prototype_ratio=%.2f",
+            budget, prototype_ratio,
+        )
 
     def generate(
         self, frames: np.ndarray, prompt: str, *,

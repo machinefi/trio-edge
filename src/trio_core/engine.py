@@ -188,6 +188,14 @@ class TrioCore(CallbackMixin):
         if self.config.visual_similarity_threshold > 0 and hasattr(self._backend, 'set_visual_similarity'):
             self._backend.set_visual_similarity(self.config.visual_similarity_threshold)
 
+        # Configure StreamMem bounded KV cache if enabled
+        if self.config.streaming_memory_enabled and hasattr(self._backend, 'set_streaming_memory'):
+            self._backend.set_streaming_memory(
+                True,
+                self.config.streaming_memory_budget,
+                self.config.streaming_memory_prototype_ratio,
+            )
+
         self._loaded = True
         self._profile = get_profile(self.config.model)
         logger.info(
