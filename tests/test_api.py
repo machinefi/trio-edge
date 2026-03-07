@@ -142,6 +142,106 @@ class TestFramesAnalyze:
         assert video_arg.shape[1] == 3  # 3 channels
 
 
+class TestTrioClawCompat:
+    """Tests for TrioClaw-compatible endpoints (/healthz, /analyze-frame)."""
+
+    def test_healthz(self, client):
+        resp = client.get("/healthz")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "ok"
+
+    def test_analyze_frame(self, client):
+        import base64
+        import io
+        from PIL import Image
+
+        # Create a test JPEG
+        img = Image.new("RGB", (8, 8), (255, 0, 0))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG")
+        frame_b64 = base64.b64encode(buf.getvalue()).decode()
+
+        resp = client.post("/analyze-frame", json={
+            "frame_b64": frame_b64,
+            "question": "what do you see?",
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "answer" in data
+        assert "latency_ms" in data
+        assert data["answer"] == "Test analysis result"
+
+    def test_analyze_frame_triggered_yes(self, client):
+        """triggered=true when answer starts with 'Yes'."""
+        import base64, io
+        from PIL import Image
+        import trio_core.api.server as server_mod
+
+        # Mock answer starting with "Yes"
+        server_mod._engine.analyze_video.return_value = VideoResult(
+            text="Yes, there is a person at the door.",
+            metrics=InferenceMetrics(latency_ms=100.0),
+        )
+
+        img = Image.new("RGB", (8, 8), (0, 0, 255))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG")
+        frame_b64 = base64.b64encode(buf.getvalue()).decode()
+
+        resp = client.post("/analyze-frame", json={
+            "frame_b64": frame_b64,
+            "question": "is there a person at the door?",
+        })
+        data = resp.json()
+        assert data["triggered"] is True
+
+    def test_analyze_frame_triggered_no(self, client):
+        """triggered=false when answer starts with 'No'."""
+        import base64, io
+        from PIL import Image
+        import trio_core.api.server as server_mod
+
+        server_mod._engine.analyze_video.return_value = VideoResult(
+            text="No, the porch is empty.",
+            metrics=InferenceMetrics(latency_ms=100.0),
+        )
+
+        img = Image.new("RGB", (8, 8), (0, 255, 0))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG")
+        frame_b64 = base64.b64encode(buf.getvalue()).decode()
+
+        resp = client.post("/analyze-frame", json={
+            "frame_b64": frame_b64,
+            "question": "is there a package?",
+        })
+        data = resp.json()
+        assert data["triggered"] is False
+
+    def test_analyze_frame_triggered_null(self, client):
+        """triggered=null when answer is descriptive (not yes/no)."""
+        import base64, io
+        from PIL import Image
+        import trio_core.api.server as server_mod
+
+        server_mod._engine.analyze_video.return_value = VideoResult(
+            text="The image shows a red square on a white background.",
+            metrics=InferenceMetrics(latency_ms=100.0),
+        )
+
+        img = Image.new("RGB", (8, 8), (255, 255, 255))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG")
+        frame_b64 = base64.b64encode(buf.getvalue()).decode()
+
+        resp = client.post("/analyze-frame", json={
+            "frame_b64": frame_b64,
+            "question": "describe this image",
+        })
+        data = resp.json()
+        assert data["triggered"] is None
+
+
 class TestChatCompletions:
     def test_no_video_returns_400(self, client):
         resp = client.post("/v1/chat/completions", json={

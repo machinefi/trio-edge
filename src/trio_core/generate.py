@@ -561,8 +561,6 @@ def generate_step(
     logits_processors: Optional[List[Callable[[mx.array, mx.array], mx.array]]] = None,
     prefill_step_size: Optional[int] = 2048,
     early_stop: Optional[EarlyStopConfig] = None,
-    speculative_lookahead: int = 0,
-    speculative_stats: Optional[dict] = None,
     inputs_embeds: Optional[mx.array] = None,
     visual_similarity_threshold: float = 0.0,
     **kwargs,
@@ -875,37 +873,7 @@ def generate_step(
 
     mx.async_eval(y)
 
-    # Speculative decode path (prompt lookup — zero-cost draft from input n-grams)
-    if speculative_lookahead > 0:
-        from trio_core.speculative import PromptLookupDraft, SpeculativeDecoder
-
-        draft_fn = PromptLookupDraft(
-            original_input_ids.flatten(),
-            num_draft=speculative_lookahead,
-        )
-        spec_decoder = SpeculativeDecoder(
-            target_model=model.language_model,
-            target_cache=prompt_cache,
-            draft_fn=draft_fn,
-            quantize_cache_fn=quantize_cache_fn,
-        )
-
-        n = 0
-        for token, lp in spec_decoder.decode(y, sampler, max_tokens, temperature):
-            yield token.item(), lp
-            n += 1
-            if early_stop is not None and early_stop.should_stop(lp, n):
-                break
-
-        if speculative_stats is not None:
-            s = spec_decoder.stats
-            speculative_stats.update(
-                drafted=s.drafted, accepted=s.accepted,
-                fallbacks=s.fallbacks, acceptance_rate=s.acceptance_rate,
-            )
-        return
-
-    # Standard decode loop
+    # Decode loop
     n = 0
     while True:
         if n != max_tokens:

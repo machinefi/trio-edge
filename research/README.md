@@ -20,7 +20,7 @@ Stage 1: Vision Encoder + ToMe      ██████████ 100%   ToMe +
 Stage 2: Visual Token Count          ██████████ 100%   mid-stream FastV + content-aware adaptive ratio done
 Stage 3: LLM Prefill                 █████████░  90%   generate loop + prefix cache + native loading wired in
 Stage 4: KV Cache                    █████████░  90%   4-tier cache + KV reuse + StreamMem + attention sink done
-Stage 5: Decode                      ████░░░░░░  40%   streaming + speculative decode done; benchmark pending
+Stage 5: Decode                      ███░░░░░░░  30%   streaming done; speculative decode removed (0% accept for VLM)
 ```
 
 ### Priority Ranking (ROI for video inference latency)
@@ -77,12 +77,9 @@ Stage 5: Decode                      ████░░░░░░  40%   strea
   appended visual KV across requests; generate_step does full prefill per call.
   StreamMem works for long single-video prefill, not cross-request accumulation.
 
-**Stage 5 — Decode** -- 40%
-- Done: auto-regressive, streaming output, early stopping config,
-  speculative decoding (draft model + prompt lookup, rejection sampling,
-  KV cache rollback), integrated into generate loop via `speculative_lookahead` config
-- Note: prompt lookup confirmed 0% acceptance for VLM (visual tokens ≠ text output).
-  Draft model mode ready but needs separate model loading.
+**Stage 5 — Decode** -- 30%
+- Done: auto-regressive, streaming output, early stopping config
+- Removed: speculative decoding (prompt lookup 0% acceptance for VLM — visual tokens ≠ text output; code deleted)
 - TODO: continuous batching
 
 ### Per-Stage Model Differences (updated 2026-03-06)
@@ -135,7 +132,7 @@ Gemma/SmolVLM have entirely different ViT — ToMe/FastV not yet supported.
 - [eval-baseline-plan.md](eval-baseline-plan.md) — Tier 1 baseline collection plan: 6 models × 5 benchmarks × baseline/ToMe configs.
 - [phase1-custom-generate.md](phase1-custom-generate.md) — Phase 1 detailed implementation: custom generate loop, persistent KV cache, early stopping. Code-level design with mlx-vlm source analysis.
 - [eval-results/mlxvlm-native-baselines.md](eval-results/mlxvlm-native-baselines.md) — mlx-vlm native baselines: ground-truth comparison (4 models × 5 benchmarks) showing trio-core adds no meaningful accuracy or latency overhead.
-- [eval-results/speculative-decode-benchmark.md](eval-results/speculative-decode-benchmark.md) — Speculative decode (prompt lookup) benchmark: 0% acceptance rate across 3 scenarios, confirms prompt lookup is not useful for VLM inference.
+- [eval-results/speculative-decode-benchmark.md](eval-results/speculative-decode-benchmark.md) — Speculative decode benchmark (historical): 0% acceptance, code removed.
 - [eval-results/compound-tome-fastv-benchmark.md](eval-results/compound-tome-fastv-benchmark.md) — ToMe + FastV compound benchmark: 85% token reduction is too aggressive, use one or the other.
 - [eval-results/](eval-results/) — Baseline, compressed, and ToMe eval JSON files.
 
@@ -344,10 +341,10 @@ Target use case: Frigate-style security/surveillance monitoring.
 - [x] **Shared text prefix KV cache** — three-tier cache (exact hit > prefix hit > full miss), MRoPE-aware
 - [x] **FastV visual token pruning** — attention-based importance scoring, Qwen2.5/3/3.5 support
 - [x] **Mid-stream FastV** — single-pass KV cache pruning (zero double computation), MRoPE position_ids fix
-- [x] **Speculative decoding** — prompt lookup + draft model modes, rejection sampling, KV cache rollback, integrated into generate loop (0% accept for VLM — visual tokens don't match text output)
+- [x] ~~**Speculative decoding**~~ — removed (0% accept for VLM — visual tokens don't match text output)
 - [x] **mlx-vlm native baselines** — 4 models × 5 benchmarks, trio-core matches or beats native on 3B+
 - [x] **Native ToMe ViT** — NativeToMeQwen25Vision / NativeToMeQwen3Vision, proper OO subclass, no monkey-patch
-- [x] **Unified ToMe generate path** — ToMeMLXBackend delegates to generate_step (gets PromptCache, early stopping, speculative, streaming for free). Fixed mx.eval() deepstack bug.
+- [x] **Unified ToMe generate path** — ToMeMLXBackend delegates to generate_step (gets PromptCache, early stopping, streaming for free). Fixed mx.eval() deepstack bug.
 - [x] **ToMe + FastV compound benchmark** — 85% token reduction too aggressive, recommend using one or the other
 - [x] **Frame-to-frame KV reuse** — visual embedding similarity gating, four-tier cache hierarchy (1.6x Qwen2.5, 1.7x Qwen3, 1.35x Qwen3.5). Input_ids check prevents wrong-answer reuse; p10 cosine for robust visual discrimination. DeltaNet support via ArraysCache state snapshot/restore.
 - [x] **Content-aware adaptive r** — per-image diversity scoring, dynamic r scaling [0.2, 1.0], stacks with layer-adaptive

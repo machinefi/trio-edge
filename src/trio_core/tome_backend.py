@@ -2,7 +2,7 @@
 
 Handles custom vision encoding + token compression, then delegates
 prefill/decode to generate_step for PromptCache, early stopping,
-speculative decode, and other features.
+early stopping, and other features.
 """
 
 from __future__ import annotations
@@ -258,7 +258,6 @@ class ToMeMLXBackend(MLXBackend):
                     max_tokens=max_tokens, temperature=temperature, top_p=top_p,
                     prompt_cache_manager=self._get_prompt_cache(),
                     early_stop=self._early_stop,
-                    speculative_lookahead=self._speculative_lookahead,
                     visual_similarity_threshold=self._visual_similarity_threshold,
                     **kwargs,
                 )
@@ -339,7 +338,6 @@ class ToMeMLXBackend(MLXBackend):
                     max_tokens=max_tokens, temperature=temperature, top_p=top_p,
                     prompt_cache_manager=self._get_prompt_cache(),
                     early_stop=self._early_stop,
-                    speculative_lookahead=self._speculative_lookahead,
                     visual_similarity_threshold=self._visual_similarity_threshold,
                     **kwargs,
                 )

@@ -180,10 +180,6 @@ class TrioCore(CallbackMixin):
         if self.config.early_stop and hasattr(self._backend, 'set_early_stop'):
             self._backend.set_early_stop(True, self.config.early_stop_threshold)
 
-        # Configure speculative decoding if enabled
-        if self.config.speculative_lookahead > 0 and hasattr(self._backend, 'set_speculative'):
-            self._backend.set_speculative(self.config.speculative_lookahead)
-
         # Configure visual similarity KV reuse if enabled
         if self.config.visual_similarity_threshold > 0 and hasattr(self._backend, 'set_visual_similarity'):
             self._backend.set_visual_similarity(self.config.visual_similarity_threshold)

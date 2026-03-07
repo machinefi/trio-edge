@@ -378,7 +378,7 @@ TRIO_PORT=8000
 
 - [x] **v0.1:** Core engine -- video pipeline, temporal dedup, motion gating
 - [x] **v0.2:** Visual token compression (ToMe) + eval framework (POPE, TextVQA)
-- [x] **v0.3:** Custom generate loop -- own KV cache, speculative decoding, early stopping
+- [x] **v0.3:** Custom generate loop -- own KV cache, early stopping
 - [x] **v0.3.1:** Native ToMe ViT, FastV pruning, frame-to-frame KV reuse (1.7x speedup)
 - [x] **v0.3.2:** Content-aware adaptive r, 4-tier cache hierarchy, StreamMem
 - [x] **v0.3.3:** Native model loading -- vendored Qwen2.5-VL, Qwen3-VL, Qwen3.5 (zero mlx-vlm for T1)

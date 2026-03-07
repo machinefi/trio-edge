@@ -69,11 +69,6 @@ class EngineConfig(BaseSettings):
         default=2, description="LLM layer to compute attention importance at"
     )
 
-    # Speculative decoding (prompt lookup)
-    speculative_lookahead: int = Field(
-        default=0, description="Prompt lookup draft tokens (0=disabled, 3-8 typical)"
-    )
-
     # Frame-to-frame KV reuse (visual similarity gating)
     visual_similarity_threshold: float = Field(
         default=0.0,

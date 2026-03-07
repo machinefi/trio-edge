@@ -14,6 +14,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from trio_core.api.models import (
+    AnalyzeFrameRequest,
+    AnalyzeFrameResponse,
     ChatCompletionChunk,
     ChatCompletionChoice,
     ChatCompletionRequest,
@@ -86,6 +88,62 @@ def _register_routes(app: FastAPI) -> None:
         if _engine is None:
             return HealthResponse(status="not_loaded", model="none", loaded=False)
         return HealthResponse(**_engine.health())
+
+    @app.get("/healthz")
+    async def healthz():
+        """TrioClaw-compatible health check."""
+        if _engine is None or not _engine._loaded:
+            raise HTTPException(503, "Engine not loaded")
+        return {"status": "ok"}
+
+    @app.post("/analyze-frame", response_model=AnalyzeFrameResponse)
+    async def analyze_frame(request: AnalyzeFrameRequest):
+        """TrioClaw-compatible single-frame analysis.
+
+        Accepts base64-encoded JPEG + question, returns answer + triggered flag.
+        """
+        import base64
+        import io
+        import tempfile
+        import time as _time
+
+        import numpy as np
+        from PIL import Image
+
+        engine = get_engine()
+        t0 = _time.monotonic()
+
+        # Decode base64 JPEG → numpy array
+        jpeg_bytes = base64.b64decode(request.frame_b64)
+        img = Image.open(io.BytesIO(jpeg_bytes)).convert("RGB")
+        frame = np.array(img, dtype=np.float32) / 255.0
+        frame = frame.transpose(2, 0, 1)  # (C, H, W)
+        frames = np.expand_dims(frame, axis=0)  # (1, C, H, W)
+
+        # Run VLM inference
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None,
+            lambda: engine.analyze_video(
+                video=frames,
+                prompt=request.question,
+            ),
+        )
+
+        latency_ms = int((_time.monotonic() - t0) * 1000)
+        answer = result.text.strip()
+
+        # Auto-detect triggered: yes/no question → bool
+        triggered = None
+        lower = answer.lower()
+        if lower.startswith(("yes", "no")):
+            triggered = lower.startswith("yes")
+
+        return AnalyzeFrameResponse(
+            answer=answer,
+            triggered=triggered,
+            latency_ms=latency_ms,
+        )
 
     @app.get("/v1/models", response_model=ModelListResponse)
     async def list_models():

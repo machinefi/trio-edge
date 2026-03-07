@@ -150,3 +150,21 @@ class ModelInfo(BaseModel):
 class ModelListResponse(BaseModel):
     object: str = "list"
     data: list[ModelInfo]
+
+
+# ── TrioClaw-compatible (POST /analyze-frame) ────────────────────────────────
+
+
+class AnalyzeFrameRequest(BaseModel):
+    """Request for POST /analyze-frame (TrioClaw compatibility)."""
+
+    frame_b64: str = Field(..., description="Base64-encoded JPEG image")
+    question: str = Field(..., description="Question about the image")
+
+
+class AnalyzeFrameResponse(BaseModel):
+    """Response for POST /analyze-frame (TrioClaw compatibility)."""
+
+    answer: str
+    triggered: bool | None = None
+    latency_ms: int = 0
