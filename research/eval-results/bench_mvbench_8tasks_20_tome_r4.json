@@ -1,0 +1,1619 @@
+{
+  "name": "MVBench-8tasks (n=20/task)",
+  "n_samples": 160,
+  "accuracy": 0.64375,
+  "f1": 0.0,
+  "yes_rate": 0.0,
+  "avg_latency_ms": 3191.9614606827963,
+  "avg_prompt_tokens": 540.65,
+  "total_time_s": 510.6996998786926,
+  "metadata": {
+    "backend": "mlx-tome",
+    "model": "mlx-community/Qwen2.5-VL-3B-Instruct-4bit",
+    "device": "Apple M3 Pro",
+    "max_tokens": 16,
+    "timestamp": "2026-03-07 13:04:09"
+  },
+  "predictions": [
+    {
+      "id": "object_existence_0",
+      "question": "Watch the video carefully and answer the following question.\nAre there any moving green objects when the video ends?\nA. not sure\nB. yes\nC. no\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B.",
+      "correct": true,
+      "latency_ms": 4387.944041751325,
+      "prompt_tokens": 542,
+      "category": "object_existence"
+    },
+    {
+      "id": "object_existence_1",
+      "question": "Watch the video carefully and answer the following question.\nAre there any rubber cylinders that exit the scene?\nA. no\nB. not sure\nC. yes\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "A.",
+      "correct": false,
+      "latency_ms": 4500.081665813923,
+      "prompt_tokens": 541,
+      "category": "object_existence"
+    },
+    {
+      "id": "object_existence_2",
+      "question": "Watch the video carefully and answer the following question.\nAre there any cyan objects that enter the scene?\nA. no\nB. yes\nC. not sure\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "A.",
+      "correct": true,
+      "latency_ms": 3171.892125159502,
+      "prompt_tokens": 541,
+      "category": "object_existence"
+    },
+    {
+      "id": "object_existence_3",
+      "question": "Watch the video carefully and answer the following question.\nAre there any stationary objects when the video ends?\nA. no\nB. not sure\nC. yes\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "C.",
+      "correct": true,
+      "latency_ms": 3153.103374876082,
+      "prompt_tokens": 541,
+      "category": "object_existence"
+    },
+    {
+      "id": "object_existence_4",
+      "question": "Watch the video carefully and answer the following question.\nAre there any rubber spheres that enter the scene?\nA. yes\nB. no\nC. not sure\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B.",
+      "correct": true,
+      "latency_ms": 3157.304499298334,
+      "prompt_tokens": 541,
+      "category": "object_existence"
+    },
+    {
+      "id": "object_existence_5",
+      "question": "Watch the video carefully and answer the following question.\nAre there any metal cubes that enter the scene?\nA. no\nB. not sure\nC. yes\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "A.",
+      "correct": true,
+      "latency_ms": 3164.697375148535,
+      "prompt_tokens": 541,
+      "category": "object_existence"
+    },
+    {
+      "id": "object_existence_6",
+      "question": "Watch the video carefully and answer the following question.\nAre there any stationary cubes?\nA. no\nB. yes\nC. not sure\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "A.",
+      "correct": true,
+      "latency_ms": 3160.774459131062,
+      "prompt_tokens": 537,
+      "category": "object_existence"
+    },
+    {
+      "id": "object_existence_7",
+      "question": "Watch the video carefully and answer the following question.\nAre there any moving blue objects?\nA. not sure\nB. yes\nC. no\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "C.",
+      "correct": true,
+      "latency_ms": 3161.4224994555116,
+      "prompt_tokens": 538,
+      "category": "object_existence"
+    },
+    {
+      "id": "object_existence_8",
+      "question": "Watch the video carefully and answer the following question.\nAre there any moving brown objects?\nA. not sure\nB. no\nC. yes\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "C.",
+      "correct": true,
+      "latency_ms": 3158.3786671981215,
+      "prompt_tokens": 538,
+      "category": "object_existence"
+    },
+    {
+      "id": "object_existence_9",
+      "question": "Watch the video carefully and answer the following question.\nAre there any cylinders that enter the scene?\nA. not sure\nB. yes\nC. no\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "C.",
+      "correct": true,
+      "latency_ms": 3163.7032087892294,
+      "prompt_tokens": 540,
+      "category": "object_existence"
+    },
+    {
+      "id": "object_existence_10",
+      "question": "Watch the video carefully and answer the following question.\nAre there any moving yellow objects when the video ends?\nA. no\nB. yes\nC. not sure\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B.",
+      "correct": true,
+      "latency_ms": 3143.896583467722,
+      "prompt_tokens": 542,
+      "category": "object_existence"
+    },
+    {
+      "id": "object_existence_11",
+      "question": "Watch the video carefully and answer the following question.\nAre there any moving cylinders when the video ends?\nA. not sure\nB. yes\nC. no\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B.",
+      "correct": true,
+      "latency_ms": 3163.6264584958553,
+      "prompt_tokens": 541,
+      "category": "object_existence"
+    },
+    {
+      "id": "object_existence_12",
+      "question": "Watch the video carefully and answer the following question.\nAre there any moving spheres?\nA. no\nB. yes\nC. not sure\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B.",
+      "correct": true,
+      "latency_ms": 3161.891541443765,
+      "prompt_tokens": 537,
+      "category": "object_existence"
+    },
+    {
+      "id": "object_existence_13",
+      "question": "Watch the video carefully and answer the following question.\nAre there any purple spheres that enter the scene?\nA. not sure\nB. yes\nC. no\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B",
+      "correct": true,
+      "latency_ms": 3145.724583417177,
+      "prompt_tokens": 541,
+      "category": "object_existence"
+    },
+    {
+      "id": "object_existence_14",
+      "question": "Watch the video carefully and answer the following question.\nAre there any moving blue objects?\nA. no\nB. yes\nC. not sure\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B.",
+      "correct": true,
+      "latency_ms": 3149.5204577222466,
+      "prompt_tokens": 538,
+      "category": "object_existence"
+    },
+    {
+      "id": "object_existence_15",
+      "question": "Watch the video carefully and answer the following question.\nAre there any moving cylinders?\nA. not sure\nB. yes\nC. no\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "C.",
+      "correct": true,
+      "latency_ms": 3169.8982091620564,
+      "prompt_tokens": 537,
+      "category": "object_existence"
+    },
+    {
+      "id": "object_existence_16",
+      "question": "Watch the video carefully and answer the following question.\nAre there any rubber cylinders that enter the scene?\nA. not sure\nB. yes\nC. no\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B.",
+      "correct": true,
+      "latency_ms": 3149.409499950707,
+      "prompt_tokens": 541,
+      "category": "object_existence"
+    },
+    {
+      "id": "object_existence_17",
+      "question": "Watch the video carefully and answer the following question.\nAre there any moving purple objects when the video begins?\nA. yes\nB. not sure\nC. no\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "C.",
+      "correct": true,
+      "latency_ms": 3154.7518335282803,
+      "prompt_tokens": 542,
+      "category": "object_existence"
+    },
+    {
+      "id": "object_existence_18",
+      "question": "Watch the video carefully and answer the following question.\nAre there any rubber spheres that exit the scene?\nA. not sure\nB. no\nC. yes\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "C.",
+      "correct": true,
+      "latency_ms": 3163.6089999228716,
+      "prompt_tokens": 541,
+      "category": "object_existence"
+    },
+    {
+      "id": "object_existence_19",
+      "question": "Watch the video carefully and answer the following question.\nAre there any stationary green objects?\nA. no\nB. not sure\nC. yes\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "A.",
+      "correct": true,
+      "latency_ms": 3153.042457997799,
+      "prompt_tokens": 538,
+      "category": "object_existence"
+    },
+    {
+      "id": "moving_direction_0",
+      "question": "Watch the video carefully and answer the following question.\nWhat direction is the cyan sphere moving in within the video?\nA. The object is stationary.\nB. Up and to the right.\nC. Down and to the left.\nD. Down and to the right.\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "A.",
+      "correct": true,
+      "latency_ms": 3212.610250338912,
+      "prompt_tokens": 561,
+      "category": "moving_direction"
+    },
+    {
+      "id": "moving_direction_1",
+      "question": "Watch the video carefully and answer the following question.\nWhat direction is the gray cylinder moving in within the video?\nA. Up and to the right.\nB. Up and to the left.\nC. The object is stationary.\nD. Down and to the right.\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "C",
+      "correct": false,
+      "latency_ms": 3244.534457102418,
+      "prompt_tokens": 561,
+      "category": "moving_direction"
+    },
+    {
+      "id": "moving_direction_2",
+      "question": "Watch the video carefully and answer the following question.\nWhat direction is the brown cylinder moving in within the video?\nA. Up and to the right.\nB. Up and to the left.\nC. The object is stationary.\nD. Down and to the left.\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "C",
+      "correct": false,
+      "latency_ms": 3144.0787920728326,
+      "prompt_tokens": 561,
+      "category": "moving_direction"
+    },
+    {
+      "id": "moving_direction_3",
+      "question": "Watch the video carefully and answer the following question.\nIn which direction does the blue cube move in the video?\nA. Up and to the right.\nB. Down and to the left.\nC. Down and to the right.\nD. The object is stationary.\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "C",
+      "correct": false,
+      "latency_ms": 3180.036417208612,
+      "prompt_tokens": 561,
+      "category": "moving_direction"
+    },
+    {
+      "id": "moving_direction_4",
+      "question": "Watch the video carefully and answer the following question.\nWhat direction is the red sphere moving in within the video?\nA. The object is stationary.\nB. Down and to the right.\nC. Up and to the right.\nD. Up and to the left.\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "A",
+      "correct": true,
+      "latency_ms": 3176.1339167132974,
+      "prompt_tokens": 561,
+      "category": "moving_direction"
+    },
+    {
+      "id": "moving_direction_5",
+      "question": "Watch the video carefully and answer the following question.\nCan you identify the direction of the gray sphere's movement in the video?\nA. Down and to the right.\nB. The object is stationary.\nC. Up and to the left.\nD. Down and to the left.\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B",
+      "correct": true,
+      "latency_ms": 3190.0866255164146,
+      "prompt_tokens": 564,
+      "category": "moving_direction"
+    },
+    {
+      "id": "moving_direction_6",
+      "question": "Watch the video carefully and answer the following question.\nWhat direction is the cyan sphere moving in within the video?\nA. Down and to the left.\nB. The object is stationary.\nC. Up and to the right.\nD. Up and to the left.\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B",
+      "correct": true,
+      "latency_ms": 3182.655917480588,
+      "prompt_tokens": 561,
+      "category": "moving_direction"
+    },
+    {
+      "id": "moving_direction_7",
+      "question": "Watch the video carefully and answer the following question.\nCan you identify the direction of the brown sphere's movement in the video?\nA. Down and to the right.\nB. Up and to the left.\nC. The object is stationary.\nD. Down and to the left.\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "C",
+      "correct": false,
+      "latency_ms": 3172.7636670693755,
+      "prompt_tokens": 564,
+      "category": "moving_direction"
+    },
+    {
+      "id": "moving_direction_8",
+      "question": "Watch the video carefully and answer the following question.\nCan you identify the direction of the red sphere's movement in the video?\nA. Down and to the right.\nB. Up and to the left.\nC. Up and to the right.\nD. The object is stationary.\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "D",
+      "correct": true,
+      "latency_ms": 3172.162082977593,
+      "prompt_tokens": 564,
+      "category": "moving_direction"
+    },
+    {
+      "id": "moving_direction_9",
+      "question": "Watch the video carefully and answer the following question.\nCan you identify the direction of the yellow sphere's movement in the video?\nA. The object is stationary.\nB. Down and to the right.\nC. Up and to the left.\nD. Up and to the right.\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "B",
+      "correct": false,
+      "latency_ms": 3174.866416491568,
+      "prompt_tokens": 564,
+      "category": "moving_direction"
+    },
+    {
+      "id": "moving_direction_10",
+      "question": "Watch the video carefully and answer the following question.\nIn which direction does the yellow cylinder move in the video?\nA. The object is stationary.\nB. Down and to the right.\nC. Down and to the left.\nD. Up and to the right.\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B",
+      "correct": true,
+      "latency_ms": 3193.901041522622,
+      "prompt_tokens": 561,
+      "category": "moving_direction"
+    },
+    {
+      "id": "moving_direction_11",
+      "question": "Watch the video carefully and answer the following question.\nCan you identify the direction of the red sphere's movement in the video?\nA. Down and to the right.\nB. The object is stationary.\nC. Down and to the left.\nD. Up and to the right.\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B",
+      "correct": true,
+      "latency_ms": 3190.2756253257394,
+      "prompt_tokens": 564,
+      "category": "moving_direction"
+    },
+    {
+      "id": "moving_direction_12",
+      "question": "Watch the video carefully and answer the following question.\nCan you identify the direction of the blue sphere's movement in the video?\nA. The object is stationary.\nB. Down and to the left.\nC. Up and to the right.\nD. Down and to the right.\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "A",
+      "correct": true,
+      "latency_ms": 3191.4412500336766,
+      "prompt_tokens": 564,
+      "category": "moving_direction"
+    },
+    {
+      "id": "moving_direction_13",
+      "question": "Watch the video carefully and answer the following question.\nWhat direction is the yellow cylinder moving in within the video?\nA. Down and to the left.\nB. The object is stationary.\nC. Down and to the right.\nD. Up and to the right.\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "B",
+      "correct": false,
+      "latency_ms": 3175.36445800215,
+      "prompt_tokens": 561,
+      "category": "moving_direction"
+    },
+    {
+      "id": "moving_direction_14",
+      "question": "Watch the video carefully and answer the following question.\nWhat direction is the brown sphere moving in within the video?\nA. The object is stationary.\nB. Down and to the left.\nC. Up and to the left.\nD. Down and to the right.\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "A",
+      "correct": false,
+      "latency_ms": 3178.546958602965,
+      "prompt_tokens": 561,
+      "category": "moving_direction"
+    },
+    {
+      "id": "moving_direction_15",
+      "question": "Watch the video carefully and answer the following question.\nCan you identify the direction of the gray sphere's movement in the video?\nA. Down and to the left.\nB. The object is stationary.\nC. Up and to the right.\nD. Up and to the left.\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B",
+      "correct": true,
+      "latency_ms": 3186.3497495651245,
+      "prompt_tokens": 564,
+      "category": "moving_direction"
+    },
+    {
+      "id": "moving_direction_16",
+      "question": "Watch the video carefully and answer the following question.\nCan you identify the direction of the green sphere's movement in the video?\nA. Up and to the right.\nB. Up and to the left.\nC. Down and to the right.\nD. Down and to the left.\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "B",
+      "correct": false,
+      "latency_ms": 3183.386666700244,
+      "prompt_tokens": 565,
+      "category": "moving_direction"
+    },
+    {
+      "id": "moving_direction_17",
+      "question": "Watch the video carefully and answer the following question.\nWhat direction is the blue sphere moving in within the video?\nA. Up and to the left.\nB. Down and to the left.\nC. Up and to the right.\nD. The object is stationary.\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "D",
+      "correct": true,
+      "latency_ms": 3186.044500209391,
+      "prompt_tokens": 561,
+      "category": "moving_direction"
+    },
+    {
+      "id": "moving_direction_18",
+      "question": "Watch the video carefully and answer the following question.\nIn which direction does the purple sphere move in the video?\nA. Up and to the right.\nB. Down and to the right.\nC. Up and to the left.\nD. Down and to the left.\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "C",
+      "correct": true,
+      "latency_ms": 3181.8535830825567,
+      "prompt_tokens": 562,
+      "category": "moving_direction"
+    },
+    {
+      "id": "moving_direction_19",
+      "question": "Watch the video carefully and answer the following question.\nWhat direction is the red sphere moving in within the video?\nA. The object is stationary.\nB. Down and to the left.\nC. Down and to the right.\nD. Up and to the left.\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "C",
+      "correct": false,
+      "latency_ms": 3200.336874462664,
+      "prompt_tokens": 561,
+      "category": "moving_direction"
+    },
+    {
+      "id": "moving_count_0",
+      "question": "Watch the video carefully and answer the following question.\nHow many red objects are moving?\nA. 3\nB. 5\nC. 4\nD. 2\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "D.",
+      "correct": true,
+      "latency_ms": 3219.983249902725,
+      "prompt_tokens": 545,
+      "category": "moving_count"
+    },
+    {
+      "id": "moving_count_1",
+      "question": "Watch the video carefully and answer the following question.\nHow many moving cylinders are there?\nA. 3\nB. 0\nC. 2\nD. 1\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B.",
+      "correct": true,
+      "latency_ms": 3189.158874563873,
+      "prompt_tokens": 545,
+      "category": "moving_count"
+    },
+    {
+      "id": "moving_count_2",
+      "question": "Watch the video carefully and answer the following question.\nHow many moving rubber objects are there when the video ends?\nA. 1\nB. 2\nC. 3\nD. 0\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "B.",
+      "correct": false,
+      "latency_ms": 3198.820332996547,
+      "prompt_tokens": 550,
+      "category": "moving_count"
+    },
+    {
+      "id": "moving_count_3",
+      "question": "Watch the video carefully and answer the following question.\nHow many collisions happen?\nA. 3\nB. 2\nC. 0\nD. 1\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "B.",
+      "correct": false,
+      "latency_ms": 3200.1942079514265,
+      "prompt_tokens": 543,
+      "category": "moving_count"
+    },
+    {
+      "id": "moving_count_4",
+      "question": "Watch the video carefully and answer the following question.\nHow many cylinders enter the scene?\nA. 2\nB. 1\nC. 3\nD. 0\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "B.",
+      "correct": false,
+      "latency_ms": 3215.790582820773,
+      "prompt_tokens": 545,
+      "category": "moving_count"
+    },
+    {
+      "id": "moving_count_5",
+      "question": "Watch the video carefully and answer the following question.\nHow many metal objects enter the scene?\nA. 3\nB. 1\nC. 2\nD. 0\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B",
+      "correct": true,
+      "latency_ms": 3173.9816246554255,
+      "prompt_tokens": 546,
+      "category": "moving_count"
+    },
+    {
+      "id": "moving_count_6",
+      "question": "Watch the video carefully and answer the following question.\nHow many objects enter the scene?\nA. 0\nB. 2\nC. 1\nD. 3\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "C.",
+      "correct": true,
+      "latency_ms": 3212.9479171708226,
+      "prompt_tokens": 545,
+      "category": "moving_count"
+    },
+    {
+      "id": "moving_count_7",
+      "question": "Watch the video carefully and answer the following question.\nHow many objects are stationary?\nA. 1\nB. 2\nC. 0\nD. 3\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "C.",
+      "correct": false,
+      "latency_ms": 3187.591999769211,
+      "prompt_tokens": 544,
+      "category": "moving_count"
+    },
+    {
+      "id": "moving_count_8",
+      "question": "Watch the video carefully and answer the following question.\nHow many gray objects are moving when the video ends?\nA. 3\nB. 2\nC. 5\nD. 4\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B.",
+      "correct": true,
+      "latency_ms": 3196.9834584742785,
+      "prompt_tokens": 549,
+      "category": "moving_count"
+    },
+    {
+      "id": "moving_count_9",
+      "question": "Watch the video carefully and answer the following question.\nHow many moving cyan objects are there?\nA. 2\nB. 3\nC. 0\nD. 1\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "D.",
+      "correct": false,
+      "latency_ms": 3162.293749861419,
+      "prompt_tokens": 546,
+      "category": "moving_count"
+    },
+    {
+      "id": "moving_count_10",
+      "question": "Watch the video carefully and answer the following question.\nHow many stationary blue objects are there?\nA. 3\nB. 1\nC. 4\nD. 2\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B",
+      "correct": true,
+      "latency_ms": 3181.7779168486595,
+      "prompt_tokens": 546,
+      "category": "moving_count"
+    },
+    {
+      "id": "moving_count_11",
+      "question": "Watch the video carefully and answer the following question.\nHow many metal objects are stationary when the video ends?\nA. 0\nB. 1\nC. 3\nD. 2\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "A",
+      "correct": false,
+      "latency_ms": 3185.1360416039824,
+      "prompt_tokens": 549,
+      "category": "moving_count"
+    },
+    {
+      "id": "moving_count_12",
+      "question": "Watch the video carefully and answer the following question.\nHow many objects are moving?\nA. 2\nB. 0\nC. 1\nD. 3\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "D.",
+      "correct": true,
+      "latency_ms": 3174.490916542709,
+      "prompt_tokens": 544,
+      "category": "moving_count"
+    },
+    {
+      "id": "moving_count_13",
+      "question": "Watch the video carefully and answer the following question.\nHow many gray objects are moving?\nA. 3\nB. 1\nC. 2\nD. 0\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "A.",
+      "correct": true,
+      "latency_ms": 3204.3154165148735,
+      "prompt_tokens": 545,
+      "category": "moving_count"
+    },
+    {
+      "id": "moving_count_14",
+      "question": "Watch the video carefully and answer the following question.\nHow many spheres are moving when the video ends?\nA. 3\nB. 5\nC. 2\nD. 4\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "C.",
+      "correct": true,
+      "latency_ms": 3193.324458785355,
+      "prompt_tokens": 548,
+      "category": "moving_count"
+    },
+    {
+      "id": "moving_count_15",
+      "question": "Watch the video carefully and answer the following question.\nHow many rubber objects enter the scene?\nA. 3\nB. 1\nC. 2\nD. 0\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "D.",
+      "correct": true,
+      "latency_ms": 3202.6412077248096,
+      "prompt_tokens": 546,
+      "category": "moving_count"
+    },
+    {
+      "id": "moving_count_16",
+      "question": "Watch the video carefully and answer the following question.\nHow many blue objects enter the scene?\nA. 3\nB. 0\nC. 2\nD. 1\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "D.",
+      "correct": true,
+      "latency_ms": 3208.3198754116893,
+      "prompt_tokens": 546,
+      "category": "moving_count"
+    },
+    {
+      "id": "moving_count_17",
+      "question": "Watch the video carefully and answer the following question.\nHow many moving metal objects are there when the video ends?\nA. 2\nB. 0\nC. 1\nD. 3\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "A.",
+      "correct": false,
+      "latency_ms": 3176.773834042251,
+      "prompt_tokens": 550,
+      "category": "moving_count"
+    },
+    {
+      "id": "moving_count_18",
+      "question": "Watch the video carefully and answer the following question.\nHow many rubber objects enter the scene?\nA. 3\nB. 4\nC. 2\nD. 5\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "C.",
+      "correct": true,
+      "latency_ms": 3197.603667154908,
+      "prompt_tokens": 546,
+      "category": "moving_count"
+    },
+    {
+      "id": "moving_count_19",
+      "question": "Watch the video carefully and answer the following question.\nHow many brown objects are stationary?\nA. 3\nB. 0\nC. 2\nD. 1\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "D",
+      "correct": true,
+      "latency_ms": 3257.7266665175557,
+      "prompt_tokens": 545,
+      "category": "moving_count"
+    },
+    {
+      "id": "moving_attribute_0",
+      "question": "Watch the video carefully and answer the following question.\nWhat color is the object that is stationary?\nA. gray\nB. green\nC. yellow\nD. blue\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "A",
+      "correct": true,
+      "latency_ms": 4018.071792088449,
+      "prompt_tokens": 543,
+      "category": "moving_attribute"
+    },
+    {
+      "id": "moving_attribute_1",
+      "question": "Watch the video carefully and answer the following question.\nWhat shape is the moving object when the video begins?\nA. cylinder\nB. sphere\nC. cube\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B",
+      "correct": true,
+      "latency_ms": 3163.651667535305,
+      "prompt_tokens": 541,
+      "category": "moving_attribute"
+    },
+    {
+      "id": "moving_attribute_2",
+      "question": "Watch the video carefully and answer the following question.\nWhat color is the stationary rubber sphere when the video ends?\nA. red\nB. yellow\nC. purple\nD. cyan\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B.",
+      "correct": true,
+      "latency_ms": 3206.4974578097463,
+      "prompt_tokens": 546,
+      "category": "moving_attribute"
+    },
+    {
+      "id": "moving_attribute_3",
+      "question": "Watch the video carefully and answer the following question.\nWhat material is the yellow object that is moving when the video begins?\nA. rubber\nB. metal\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B",
+      "correct": true,
+      "latency_ms": 3156.199499964714,
+      "prompt_tokens": 540,
+      "category": "moving_attribute"
+    },
+    {
+      "id": "moving_attribute_4",
+      "question": "Watch the video carefully and answer the following question.\nWhat is the material of the cube that is moving when the video ends?\nA. rubber\nB. metal\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "A",
+      "correct": true,
+      "latency_ms": 3178.866750560701,
+      "prompt_tokens": 541,
+      "category": "moving_attribute"
+    },
+    {
+      "id": "moving_attribute_5",
+      "question": "Watch the video carefully and answer the following question.\nWhat shape is the moving rubber object?\nA. cube\nB. cylinder\nC. sphere\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B",
+      "correct": true,
+      "latency_ms": 3138.5467499494553,
+      "prompt_tokens": 538,
+      "category": "moving_attribute"
+    },
+    {
+      "id": "moving_attribute_6",
+      "question": "Watch the video carefully and answer the following question.\nWhat material is the cylinder that is moving when the video ends?\nA. rubber\nB. metal\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B",
+      "correct": true,
+      "latency_ms": 3165.886290371418,
+      "prompt_tokens": 539,
+      "category": "moving_attribute"
+    },
+    {
+      "id": "moving_attribute_7",
+      "question": "Watch the video carefully and answer the following question.\nWhat is the shape of the last object that enters the scene?\nA. sphere\nB. cylinder\nC. cube\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "A",
+      "correct": false,
+      "latency_ms": 3163.657084107399,
+      "prompt_tokens": 543,
+      "category": "moving_attribute"
+    },
+    {
+      "id": "moving_attribute_8",
+      "question": "Watch the video carefully and answer the following question.\nWhat is the shape of the stationary blue object when the video begins?\nA. sphere\nB. cylinder\nC. cube\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B",
+      "correct": true,
+      "latency_ms": 3172.2451662644744,
+      "prompt_tokens": 544,
+      "category": "moving_attribute"
+    },
+    {
+      "id": "moving_attribute_9",
+      "question": "Watch the video carefully and answer the following question.\nWhat shape is the metal object that is stationary when the video ends?\nA. cube\nB. cylinder\nC. sphere\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "C",
+      "correct": true,
+      "latency_ms": 3179.202999919653,
+      "prompt_tokens": 544,
+      "category": "moving_attribute"
+    },
+    {
+      "id": "moving_attribute_10",
+      "question": "Watch the video carefully and answer the following question.\nWhat material is the red object that is stationary when the video begins?\nA. metal\nB. rubber\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "A",
+      "correct": true,
+      "latency_ms": 3174.148083664477,
+      "prompt_tokens": 540,
+      "category": "moving_attribute"
+    },
+    {
+      "id": "moving_attribute_11",
+      "question": "Watch the video carefully and answer the following question.\nWhat shape is the object that exits the scene?\nA. cylinder\nB. cube\nC. sphere\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "B",
+      "correct": false,
+      "latency_ms": 3151.1820424348116,
+      "prompt_tokens": 540,
+      "category": "moving_attribute"
+    },
+    {
+      "id": "moving_attribute_12",
+      "question": "Watch the video carefully and answer the following question.\nWhat is the color of the cube that is moving when the video ends?\nA. purple\nB. gray\nC. yellow\nD. red\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "C",
+      "correct": true,
+      "latency_ms": 3198.837541975081,
+      "prompt_tokens": 549,
+      "category": "moving_attribute"
+    },
+    {
+      "id": "moving_attribute_13",
+      "question": "Watch the video carefully and answer the following question.\nWhat material is the last object that enters the scene?\nA. rubber\nB. metal\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "A",
+      "correct": true,
+      "latency_ms": 3160.574084147811,
+      "prompt_tokens": 537,
+      "category": "moving_attribute"
+    },
+    {
+      "id": "moving_attribute_14",
+      "question": "Watch the video carefully and answer the following question.\nWhat material is the stationary cylinder when the video ends?\nA. rubber\nB. metal\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B",
+      "correct": true,
+      "latency_ms": 3171.6073332354426,
+      "prompt_tokens": 537,
+      "category": "moving_attribute"
+    },
+    {
+      "id": "moving_attribute_15",
+      "question": "Watch the video carefully and answer the following question.\nWhat is the color of the object that is stationary when the video begins?\nA. red\nB. green\nC. gray\nD. yellow\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B",
+      "correct": true,
+      "latency_ms": 3183.4417916834354,
+      "prompt_tokens": 549,
+      "category": "moving_attribute"
+    },
+    {
+      "id": "moving_attribute_16",
+      "question": "Watch the video carefully and answer the following question.\nWhat is the color of the last object that enters the scene?\nA. green\nB. cyan\nC. purple\nD. brown\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "C",
+      "correct": true,
+      "latency_ms": 3211.9182497262955,
+      "prompt_tokens": 547,
+      "category": "moving_attribute"
+    },
+    {
+      "id": "moving_attribute_17",
+      "question": "Watch the video carefully and answer the following question.\nWhat material is the object that is moving when the video begins?\nA. metal\nB. rubber\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "A",
+      "correct": false,
+      "latency_ms": 3157.469041645527,
+      "prompt_tokens": 539,
+      "category": "moving_attribute"
+    },
+    {
+      "id": "moving_attribute_18",
+      "question": "Watch the video carefully and answer the following question.\nWhat is the shape of the rubber object that is stationary when the video ends?\nA. sphere\nB. cube\nC. cylinder\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "C",
+      "correct": true,
+      "latency_ms": 3184.7289577126503,
+      "prompt_tokens": 546,
+      "category": "moving_attribute"
+    },
+    {
+      "id": "moving_attribute_19",
+      "question": "Watch the video carefully and answer the following question.\nWhat material is the moving green object when the video ends?\nA. rubber\nB. metal\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B",
+      "correct": true,
+      "latency_ms": 3171.267875470221,
+      "prompt_tokens": 538,
+      "category": "moving_attribute"
+    },
+    {
+      "id": "counterfactual_inference_0",
+      "question": "Watch the video carefully and answer the following question.\nWhich of the following will happen if the cylinder is removed?\nA. The cyan rubber object and the blue cube collide\nB. The brown cube collides with the metal cube\nC. The cyan rubber object and the metal cube collide\nD. The cyan rubber cube collides with the sphere\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "D",
+      "correct": true,
+      "latency_ms": 3237.5974161550403,
+      "prompt_tokens": 578,
+      "category": "counterfactual_inference"
+    },
+    {
+      "id": "counterfactual_inference_1",
+      "question": "Watch the video carefully and answer the following question.\nWhich event will happen if the sphere is removed?\nA. The yellow object and the brown cylinder collide\nB. The brown cylinder and the cube collide\nC. The yellow cylinder collides with the cube\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "C",
+      "correct": false,
+      "latency_ms": 3235.788958147168,
+      "prompt_tokens": 560,
+      "category": "counterfactual_inference"
+    },
+    {
+      "id": "counterfactual_inference_2",
+      "question": "Watch the video carefully and answer the following question.\nIf the gray object is removed, which event will happen?\nA. The rubber cube collides with the sphere\nB. The sphere collides with the blue cube\nC. The rubber cube and the blue object collide\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "C",
+      "correct": false,
+      "latency_ms": 3218.363666906953,
+      "prompt_tokens": 563,
+      "category": "counterfactual_inference"
+    },
+    {
+      "id": "counterfactual_inference_3",
+      "question": "Watch the video carefully and answer the following question.\nWhich event will happen without the cube?\nA. The red object and the brown cylinder collide\nB. The brown cylinder collides with the green sphere\nC. The gray cylinder and the green object collide\nD. The red object and the gray object collide\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "B",
+      "correct": false,
+      "latency_ms": 3146.5664161369205,
+      "prompt_tokens": 571,
+      "category": "counterfactual_inference"
+    },
+    {
+      "id": "counterfactual_inference_4",
+      "question": "Watch the video carefully and answer the following question.\nWhat will happen without the brown object?\nA. The purple rubber cylinder and the sphere collide\nB. The cube and the gray object collide\nC. The purple rubber cylinder collides with the gray cylinder\nD. The purple metal object and the purple rubber cylinder collide\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "D",
+      "correct": true,
+      "latency_ms": 3210.8737090602517,
+      "prompt_tokens": 573,
+      "category": "counterfactual_inference"
+    },
+    {
+      "id": "counterfactual_inference_5",
+      "question": "Watch the video carefully and answer the following question.\nWithout the yellow object, which event will happen?\nA. The sphere collides with the cylinder\nB. The sphere collides with the metal cube\nC. The cylinder collides with the cyan object\nD. The sphere collides with the cyan cube\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B",
+      "correct": true,
+      "latency_ms": 3207.0070412009954,
+      "prompt_tokens": 571,
+      "category": "counterfactual_inference"
+    },
+    {
+      "id": "counterfactual_inference_6",
+      "question": "Watch the video carefully and answer the following question.\nIf the cylinder is removed, what will happen?\nA. The red object collides with the sphere\nB. The brown object and the red object collide\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B",
+      "correct": true,
+      "latency_ms": 3297.4247904494405,
+      "prompt_tokens": 550,
+      "category": "counterfactual_inference"
+    },
+    {
+      "id": "counterfactual_inference_7",
+      "question": "Watch the video carefully and answer the following question.\nWhich of the following will happen if the blue object is removed?\nA. The gray object and the cube collide\nB. The cyan sphere and the gray object collide\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B",
+      "correct": true,
+      "latency_ms": 3207.9135002568364,
+      "prompt_tokens": 552,
+      "category": "counterfactual_inference"
+    },
+    {
+      "id": "counterfactual_inference_8",
+      "question": "Watch the video carefully and answer the following question.\nIf the cube is removed, which event will happen?\nA. The metal sphere and the rubber sphere collide\nB. The metal sphere and the cylinder collide\nC. The cylinder and the rubber sphere collide\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B",
+      "correct": true,
+      "latency_ms": 3173.1765000149608,
+      "prompt_tokens": 560,
+      "category": "counterfactual_inference"
+    },
+    {
+      "id": "counterfactual_inference_9",
+      "question": "Watch the video carefully and answer the following question.\nIf the brown object is removed, what will happen?\nA. The cube collides with the sphere\nB. The metal cylinder and the sphere collide\nC. The cube and the metal cylinder collide\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "C",
+      "correct": false,
+      "latency_ms": 3208.1117080524564,
+      "prompt_tokens": 559,
+      "category": "counterfactual_inference"
+    },
+    {
+      "id": "counterfactual_inference_10",
+      "question": "Watch the video carefully and answer the following question.\nWhat will happen without the red object?\nA. The cylinder and the cube collide\nB. The purple sphere collides with the yellow sphere\nC. The yellow object and the cube collide\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "B",
+      "correct": false,
+      "latency_ms": 3201.354875229299,
+      "prompt_tokens": 557,
+      "category": "counterfactual_inference"
+    },
+    {
+      "id": "counterfactual_inference_11",
+      "question": "Watch the video carefully and answer the following question.\nIf the red object is removed, which event will happen?\nA. The yellow object collides with the rubber cube\nB. The metal sphere collides with the yellow object\nC. The cyan sphere collides with the green sphere\nD. The green object and the blue cube collide\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B",
+      "correct": true,
+      "latency_ms": 3234.145250171423,
+      "prompt_tokens": 577,
+      "category": "counterfactual_inference"
+    },
+    {
+      "id": "counterfactual_inference_12",
+      "question": "Watch the video carefully and answer the following question.\nIf the sphere is removed, what will happen?\nA. The green cylinder and the red cylinder collide\nB. The green object and the cube collide\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "B",
+      "correct": false,
+      "latency_ms": 3226.330541074276,
+      "prompt_tokens": 549,
+      "category": "counterfactual_inference"
+    },
+    {
+      "id": "counterfactual_inference_13",
+      "question": "Watch the video carefully and answer the following question.\nWhat will happen without the sphere?\nA. The gray metal object collides with the rubber cylinder\nB. The gray metal cylinder and the cyan object collide\nC. The rubber cylinder and the cyan cylinder collide\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "B",
+      "correct": false,
+      "latency_ms": 3193.4837074950337,
+      "prompt_tokens": 561,
+      "category": "counterfactual_inference"
+    },
+    {
+      "id": "counterfactual_inference_14",
+      "question": "Watch the video carefully and answer the following question.\nWhich event will happen without the blue object?\nA. The yellow cylinder collides with the green cylinder\nB. The cube collides with the rubber cylinder\nC. The cube collides with the green sphere\nD. The green sphere and the metal cylinder collide\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B",
+      "correct": true,
+      "latency_ms": 3218.4682078659534,
+      "prompt_tokens": 572,
+      "category": "counterfactual_inference"
+    },
+    {
+      "id": "counterfactual_inference_15",
+      "question": "Watch the video carefully and answer the following question.\nWhat will happen if the cylinder is removed?\nA. The red object collides with the rubber cube\nB. The yellow sphere and the green metal object collide\nC. The yellow sphere and the rubber sphere collide\nD. The metal cube collides with the yellow sphere\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "A",
+      "correct": false,
+      "latency_ms": 3181.8056255578995,
+      "prompt_tokens": 574,
+      "category": "counterfactual_inference"
+    },
+    {
+      "id": "counterfactual_inference_16",
+      "question": "Watch the video carefully and answer the following question.\nWhich event will happen without the cube?\nA. The metal cylinder collides with the rubber cylinder\nB. The metal cylinder and the sphere collide\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "A",
+      "correct": true,
+      "latency_ms": 3234.604666940868,
+      "prompt_tokens": 548,
+      "category": "counterfactual_inference"
+    },
+    {
+      "id": "counterfactual_inference_17",
+      "question": "Watch the video carefully and answer the following question.\nWhat will happen if the green object is removed?\nA. The sphere collides with the yellow cylinder\nB. The sphere and the brown cube collide\nC. The brown object collides with the yellow cylinder\nD. The yellow cube collides with the yellow cylinder\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "B",
+      "correct": false,
+      "latency_ms": 3209.3942500650883,
+      "prompt_tokens": 573,
+      "category": "counterfactual_inference"
+    },
+    {
+      "id": "counterfactual_inference_18",
+      "question": "Watch the video carefully and answer the following question.\nWhat will happen if the red object is removed?\nA. The gray object collides with the cyan object\nB. The blue object collides with the cyan sphere\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "A",
+      "correct": true,
+      "latency_ms": 3197.4511658772826,
+      "prompt_tokens": 552,
+      "category": "counterfactual_inference"
+    },
+    {
+      "id": "counterfactual_inference_19",
+      "question": "Watch the video carefully and answer the following question.\nWhat will happen without the sphere?\nA. The gray cylinder and the yellow cylinder collide\nB. The cyan cylinder and the yellow cylinder collide\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B",
+      "correct": true,
+      "latency_ms": 3207.429208792746,
+      "prompt_tokens": 547,
+      "category": "counterfactual_inference"
+    },
+    {
+      "id": "action_sequence_0",
+      "question": "Watch the video carefully and answer the following question.\nWhat happened after the person took the food?\nA. Ate the medicine.\nB. Tidied up the blanket.\nC. Put down the cup/glass/bottle.\nD. Took the box.\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "A",
+      "correct": true,
+      "latency_ms": 2852.0820420235395,
+      "prompt_tokens": 480,
+      "category": "action_sequence"
+    },
+    {
+      "id": "action_sequence_1",
+      "question": "Watch the video carefully and answer the following question.\nWhat happened before the person watched at the book?\nA. Tidied up the table.\nB. Took the phone/camera.\nC. Opened the closet/cabinet.\nD. Washed the table.\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "C",
+      "correct": true,
+      "latency_ms": 2893.7701247632504,
+      "prompt_tokens": 481,
+      "category": "action_sequence"
+    },
+    {
+      "id": "action_sequence_2",
+      "question": "Watch the video carefully and answer the following question.\nWhat happened before the person watched at the book?\nA. Put down the sandwich.\nB. Washed the table.\nC. Opened the closet/cabinet.\nD. Put down the pillow.\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "C",
+      "correct": true,
+      "latency_ms": 2836.646417155862,
+      "prompt_tokens": 478,
+      "category": "action_sequence"
+    },
+    {
+      "id": "action_sequence_3",
+      "question": "Watch the video carefully and answer the following question.\nWhat happened after the person put down the clothes?\nA. Took the broom.\nB. Took the blanket.\nC. Opened the door.\nD. Threw the towel.\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "C",
+      "correct": false,
+      "latency_ms": 5022.096999920905,
+      "prompt_tokens": 635,
+      "category": "action_sequence"
+    },
+    {
+      "id": "action_sequence_4",
+      "question": "Watch the video carefully and answer the following question.\nWhat happened after the person held the shoe?\nA. Opened the closet/cabinet.\nB. Threw the broom.\nC. Sat on the sofa/couch.\nD. Washed the clothes.\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "C",
+      "correct": true,
+      "latency_ms": 2896.9157077372074,
+      "prompt_tokens": 512,
+      "category": "action_sequence"
+    },
+    {
+      "id": "action_sequence_5",
+      "question": "Watch the video carefully and answer the following question.\nWhat happened after the person held the phone/camera?\nA. Closed the refrigerator.\nB. Put down the towel.\nC. Put down the laptop.\nD. Opened the window.\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B",
+      "correct": true,
+      "latency_ms": 2899.0567084401846,
+      "prompt_tokens": 508,
+      "category": "action_sequence"
+    },
+    {
+      "id": "action_sequence_6",
+      "question": "Watch the video carefully and answer the following question.\nWhat happened after the person took the phone/camera?\nA. Took the book.\nB. Put down the pillow.\nC. Closed the window.\nD. Took the food.\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "C",
+      "correct": true,
+      "latency_ms": 2862.1794590726495,
+      "prompt_tokens": 474,
+      "category": "action_sequence"
+    },
+    {
+      "id": "action_sequence_7",
+      "question": "Watch the video carefully and answer the following question.\nWhat happened after the person opened the box?\nA. Threw the clothes.\nB. Put down the food.\nC. Sat at the table.\nD. Put down the paper/notebook.\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "A",
+      "correct": false,
+      "latency_ms": 2835.1667495444417,
+      "prompt_tokens": 478,
+      "category": "action_sequence"
+    },
+    {
+      "id": "action_sequence_8",
+      "question": "Watch the video carefully and answer the following question.\nWhat happened after the person sat on the bed?\nA. Took the phone/camera.\nB. Opened the window.\nC. Took the pillow.\nD. Put down the broom.\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "C",
+      "correct": false,
+      "latency_ms": 2810.0954992696643,
+      "prompt_tokens": 477,
+      "category": "action_sequence"
+    },
+    {
+      "id": "action_sequence_9",
+      "question": "Watch the video carefully and answer the following question.\nWhat happened before the person took the clothes?\nA. Threw the book.\nB. Put down the bag.\nC. Opened the window.\nD. Put down the cup/glass/bottle.\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "C",
+      "correct": false,
+      "latency_ms": 5244.636000134051,
+      "prompt_tokens": 655,
+      "category": "action_sequence"
+    },
+    {
+      "id": "action_sequence_10",
+      "question": "Watch the video carefully and answer the following question.\nWhat happened before the person sat on the sofa/couch?\nA. Put down the laptop.\nB. Took the paper/notebook.\nC. Put down the pillow.\nD. Ate the medicine.\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "A",
+      "correct": true,
+      "latency_ms": 2850.793667137623,
+      "prompt_tokens": 512,
+      "category": "action_sequence"
+    },
+    {
+      "id": "action_sequence_11",
+      "question": "Watch the video carefully and answer the following question.\nWhat happened after the person held the blanket?\nA. Tidied up the table.\nB. Took the dish.\nC. Opened the window.\nD. Took the pillow.\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "A",
+      "correct": true,
+      "latency_ms": 2822.451874613762,
+      "prompt_tokens": 475,
+      "category": "action_sequence"
+    },
+    {
+      "id": "action_sequence_12",
+      "question": "Watch the video carefully and answer the following question.\nWhat happened before the person held the food?\nA. Put down the clothes.\nB. Opened the laptop.\nC. Put down the food.\nD. Took the dish.\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "A",
+      "correct": false,
+      "latency_ms": 2805.222749710083,
+      "prompt_tokens": 474,
+      "category": "action_sequence"
+    },
+    {
+      "id": "action_sequence_13",
+      "question": "Watch the video carefully and answer the following question.\nWhat happened after the person held the dish?\nA. Sat on the bed.\nB. Ate the sandwich.\nC. Put down the food.\nD. Took the food.\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "C",
+      "correct": true,
+      "latency_ms": 3791.4384584873915,
+      "prompt_tokens": 634,
+      "category": "action_sequence"
+    },
+    {
+      "id": "action_sequence_14",
+      "question": "Watch the video carefully and answer the following question.\nWhat happened after the person sat on the sofa/couch?\nA. Ate the sandwich.\nB. Put down the pillow.\nC. Washed the clothes.\nD. Took the bag.\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "B",
+      "correct": false,
+      "latency_ms": 3747.891957871616,
+      "prompt_tokens": 637,
+      "category": "action_sequence"
+    },
+    {
+      "id": "action_sequence_15",
+      "question": "Watch the video carefully and answer the following question.\nWhat happened before the person threw the clothes?\nA. Opened the bag.\nB. Took the shoe.\nC. Threw the food.\nD. Tidied up the blanket.\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "D",
+      "correct": true,
+      "latency_ms": 3721.864292398095,
+      "prompt_tokens": 636,
+      "category": "action_sequence"
+    },
+    {
+      "id": "action_sequence_16",
+      "question": "Watch the video carefully and answer the following question.\nWhat happened after the person took the dish?\nA. Threw the shoe.\nB. Put down the food.\nC. Threw the pillow.\nD. Tidied up the table.\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "D",
+      "correct": true,
+      "latency_ms": 3715.02529270947,
+      "prompt_tokens": 637,
+      "category": "action_sequence"
+    },
+    {
+      "id": "action_sequence_17",
+      "question": "Watch the video carefully and answer the following question.\nWhat happened after the person sat at the table?\nA. Put down the cup/glass/bottle.\nB. Opened the box.\nC. Opened the window.\nD. Closed the book.\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "A",
+      "correct": false,
+      "latency_ms": 2816.8530836701393,
+      "prompt_tokens": 511,
+      "category": "action_sequence"
+    },
+    {
+      "id": "action_sequence_18",
+      "question": "Watch the video carefully and answer the following question.\nWhat happened before the person took the towel?\nA. Closed the closet/cabinet.\nB. Threw the clothes.\nC. Lied on the bed.\nD. Lied on the sofa/couch.\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "A",
+      "correct": true,
+      "latency_ms": 2819.891083985567,
+      "prompt_tokens": 480,
+      "category": "action_sequence"
+    },
+    {
+      "id": "action_sequence_19",
+      "question": "Watch the video carefully and answer the following question.\nWhat happened after the person put down the food?\nA. Opened the bag.\nB. Took the paper/notebook.\nC. Threw the clothes.\nD. Ate the sandwich.\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "A",
+      "correct": false,
+      "latency_ms": 3155.026124790311,
+      "prompt_tokens": 558,
+      "category": "action_sequence"
+    },
+    {
+      "id": "action_prediction_0",
+      "question": "Watch the video carefully and answer the following question.\nWhat will the person do next?\nA. Put down the pillow.\nB. Open the door.\nC. Take the book.\nD. Open the closet/cabinet.\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "A",
+      "correct": true,
+      "latency_ms": 3760.317916981876,
+      "prompt_tokens": 632,
+      "category": "action_prediction"
+    },
+    {
+      "id": "action_prediction_1",
+      "question": "Watch the video carefully and answer the following question.\nWhat will the person do next?\nA. Sit on the floor.\nB. Put down the cup/glass/bottle.\nC. Take the book.\nD. Open the book.\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "B",
+      "correct": false,
+      "latency_ms": 2792.667374946177,
+      "prompt_tokens": 475,
+      "category": "action_prediction"
+    },
+    {
+      "id": "action_prediction_2",
+      "question": "Watch the video carefully and answer the following question.\nWhat will the person do next?\nA. Put down the cup/glass/bottle.\nB. Take the book.\nC. Eat the sandwich.\nD. Put down the dish.\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B",
+      "correct": true,
+      "latency_ms": 2800.918458029628,
+      "prompt_tokens": 475,
+      "category": "action_prediction"
+    },
+    {
+      "id": "action_prediction_3",
+      "question": "Watch the video carefully and answer the following question.\nWhat will the person do next?\nA. Tidy up the broom.\nB. Put down the clothes.\nC. Put down the food.\nD. Throw the blanket.\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "B",
+      "correct": false,
+      "latency_ms": 2803.8860000669956,
+      "prompt_tokens": 474,
+      "category": "action_prediction"
+    },
+    {
+      "id": "action_prediction_4",
+      "question": "Watch the video carefully and answer the following question.\nWhat will the person do next?\nA. Tidy up the table.\nB. Open the box.\nC. Tidy up the closet/cabinet.\nD. Hold the dish.\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "C",
+      "correct": true,
+      "latency_ms": 2828.271457925439,
+      "prompt_tokens": 507,
+      "category": "action_prediction"
+    },
+    {
+      "id": "action_prediction_5",
+      "question": "Watch the video carefully and answer the following question.\nWhat will the person do next?\nA. Take the shoe.\nB. Sit on the table.\nC. Take the paper/notebook.\nD. Throw the clothes.\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "A",
+      "correct": false,
+      "latency_ms": 2799.9622095376253,
+      "prompt_tokens": 473,
+      "category": "action_prediction"
+    },
+    {
+      "id": "action_prediction_6",
+      "question": "Watch the video carefully and answer the following question.\nWhat will the person do next with the sofa/couch?\nA. Take.\nB. Sit on.\nC. Tidy up.\nD. Lie on.\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "B",
+      "correct": false,
+      "latency_ms": 2806.5114580094814,
+      "prompt_tokens": 470,
+      "category": "action_prediction"
+    },
+    {
+      "id": "action_prediction_7",
+      "question": "Watch the video carefully and answer the following question.\nWhat will the person do next?\nA. Take the clothes.\nB. Put down the bag.\nC. Sit on the table.\nD. Take the book.\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "A",
+      "correct": true,
+      "latency_ms": 2842.5102094188333,
+      "prompt_tokens": 503,
+      "category": "action_prediction"
+    },
+    {
+      "id": "action_prediction_8",
+      "question": "Watch the video carefully and answer the following question.\nWhat will the person do next?\nA. Throw the shoe.\nB. Put down the laptop.\nC. Put down the dish.\nD. Open the bag.\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B",
+      "correct": true,
+      "latency_ms": 2821.3291252031922,
+      "prompt_tokens": 471,
+      "category": "action_prediction"
+    },
+    {
+      "id": "action_prediction_9",
+      "question": "Watch the video carefully and answer the following question.\nWhat will the person do next?\nA. Close the closet/cabinet.\nB. Tidy up the broom.\nC. Throw the pillow.\nD. Take the bag.\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "D",
+      "correct": true,
+      "latency_ms": 4006.6219167783856,
+      "prompt_tokens": 634,
+      "category": "action_prediction"
+    },
+    {
+      "id": "action_prediction_10",
+      "question": "Watch the video carefully and answer the following question.\nWhat will the person do next?\nA. Put down the bag.\nB. Take the food.\nC. Take the phone/camera.\nD. Put down the shoe.\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "A",
+      "correct": true,
+      "latency_ms": 2779.479209333658,
+      "prompt_tokens": 473,
+      "category": "action_prediction"
+    },
+    {
+      "id": "action_prediction_11",
+      "question": "Watch the video carefully and answer the following question.\nWhat will the person do next?\nA. Take the picture.\nB. Eat the medicine.\nC. Tidy up the table.\nD. Close the closet/cabinet.\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "C",
+      "correct": false,
+      "latency_ms": 3142.1607499942183,
+      "prompt_tokens": 553,
+      "category": "action_prediction"
+    },
+    {
+      "id": "action_prediction_12",
+      "question": "Watch the video carefully and answer the following question.\nWhat will the person do next?\nA. Take the broom.\nB. Open the bag.\nC. Take the cup/glass/bottle.\nD. Put down the paper/notebook.\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "D",
+      "correct": true,
+      "latency_ms": 3089.787625707686,
+      "prompt_tokens": 478,
+      "category": "action_prediction"
+    },
+    {
+      "id": "action_prediction_13",
+      "question": "Watch the video carefully and answer the following question.\nWhat will the person do next?\nA. Take the bag.\nB. Wash the window.\nC. Tidy up the blanket.\nD. Sit on the sofa/couch.\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "A",
+      "correct": false,
+      "latency_ms": 3796.4912075549364,
+      "prompt_tokens": 650,
+      "category": "action_prediction"
+    },
+    {
+      "id": "action_prediction_14",
+      "question": "Watch the video carefully and answer the following question.\nWhat will the person do next?\nA. Eat the sandwich.\nB. Take the phone/camera.\nC. Take the blanket.\nD. Eat the medicine.\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "B",
+      "correct": false,
+      "latency_ms": 2808.8724575936794,
+      "prompt_tokens": 471,
+      "category": "action_prediction"
+    },
+    {
+      "id": "action_prediction_15",
+      "question": "Watch the video carefully and answer the following question.\nWhat will the person do next?\nA. Put down the shoe.\nB. Open the book.\nC. Take the shoe.\nD. Open the box.\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "B",
+      "correct": false,
+      "latency_ms": 2857.7022086828947,
+      "prompt_tokens": 502,
+      "category": "action_prediction"
+    },
+    {
+      "id": "action_prediction_16",
+      "question": "Watch the video carefully and answer the following question.\nWhat will the person do next?\nA. Put down the towel.\nB. Close the laptop.\nC. Close the door.\nD. Hold the book.\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "C",
+      "correct": false,
+      "latency_ms": 2816.595958545804,
+      "prompt_tokens": 470,
+      "category": "action_prediction"
+    },
+    {
+      "id": "action_prediction_17",
+      "question": "Watch the video carefully and answer the following question.\nWhat will the person do next with the blanket?\nA. Tidy up.\nB. Sit on.\nC. Put down.\nD. Take.\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "C",
+      "correct": true,
+      "latency_ms": 3211.1603328958154,
+      "prompt_tokens": 572,
+      "category": "action_prediction"
+    },
+    {
+      "id": "action_prediction_18",
+      "question": "Watch the video carefully and answer the following question.\nWhat will the person do next?\nA. Open the door.\nB. Sit at the table.\nC. Take the food.\nD. Take the dish.\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B",
+      "correct": true,
+      "latency_ms": 2816.7789159342647,
+      "prompt_tokens": 470,
+      "category": "action_prediction"
+    },
+    {
+      "id": "action_prediction_19",
+      "question": "Watch the video carefully and answer the following question.\nWhat will the person do next?\nA. Wash the window.\nB. Throw the clothes.\nC. Open the box.\nD. Put down the book.\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "B",
+      "correct": false,
+      "latency_ms": 4245.794832706451,
+      "prompt_tokens": 630,
+      "category": "action_prediction"
+    },
+    {
+      "id": "object_interaction_0",
+      "question": "Watch the video carefully and answer the following question.\nWhich object was taken by the person?\nA. The dish.\nB. The box.\nC. The blanket.\nD. The paper/notebook.\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "C",
+      "correct": true,
+      "latency_ms": 2859.774167649448,
+      "prompt_tokens": 501,
+      "category": "object_interaction"
+    },
+    {
+      "id": "object_interaction_1",
+      "question": "Watch the video carefully and answer the following question.\nWhich object was tidied up by the person?\nA. The broom.\nB. The closet/cabinet.\nC. The blanket.\nD. The table.\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "B",
+      "correct": false,
+      "latency_ms": 3785.654249601066,
+      "prompt_tokens": 647,
+      "category": "object_interaction"
+    },
+    {
+      "id": "object_interaction_2",
+      "question": "Watch the video carefully and answer the following question.\nWhich object was thrown by the person?\nA. The shoe.\nB. The clothes.\nC. The pillow.\nD. The food.\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "C",
+      "correct": true,
+      "latency_ms": 3166.3292506709695,
+      "prompt_tokens": 570,
+      "category": "object_interaction"
+    },
+    {
+      "id": "object_interaction_3",
+      "question": "Watch the video carefully and answer the following question.\nWhich object was opened by the person?\nA. The door.\nB. The book.\nC. The closet/cabinet.\nD. The laptop.\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B",
+      "correct": true,
+      "latency_ms": 2814.6507097408175,
+      "prompt_tokens": 468,
+      "category": "object_interaction"
+    },
+    {
+      "id": "object_interaction_4",
+      "question": "Watch the video carefully and answer the following question.\nWhich object was lied on by the person?\nA. The floor.\nB. The bed.\nC. The sofa/couch.\nD. The blanket.\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "B",
+      "correct": false,
+      "latency_ms": 3759.145707823336,
+      "prompt_tokens": 629,
+      "category": "object_interaction"
+    },
+    {
+      "id": "object_interaction_5",
+      "question": "Watch the video carefully and answer the following question.\nWhich object was put down by the person?\nA. The book.\nB. The pillow.\nC. The paper/notebook.\nD. The towel.\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "B",
+      "correct": false,
+      "latency_ms": 2805.1462499424815,
+      "prompt_tokens": 470,
+      "category": "object_interaction"
+    },
+    {
+      "id": "object_interaction_6",
+      "question": "Watch the video carefully and answer the following question.\nWhich object was put down by the person?\nA. The picture.\nB. The blanket.\nC. The phone/camera.\nD. The laptop.\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "C",
+      "correct": false,
+      "latency_ms": 2789.9380000308156,
+      "prompt_tokens": 469,
+      "category": "object_interaction"
+    },
+    {
+      "id": "object_interaction_7",
+      "question": "Watch the video carefully and answer the following question.\nWhich object was sat on by the person?\nA. The table.\nB. The floor.\nC. The bed.\nD. The sofa/couch.\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B",
+      "correct": true,
+      "latency_ms": 2788.255791179836,
+      "prompt_tokens": 469,
+      "category": "object_interaction"
+    },
+    {
+      "id": "object_interaction_8",
+      "question": "Watch the video carefully and answer the following question.\nWhich object was closed by the person?\nA. The refrigerator.\nB. The book.\nC. The laptop.\nD. The box.\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "B",
+      "correct": false,
+      "latency_ms": 3169.4968743249774,
+      "prompt_tokens": 570,
+      "category": "object_interaction"
+    },
+    {
+      "id": "object_interaction_9",
+      "question": "Watch the video carefully and answer the following question.\nWhich object was opened by the person?\nA. The box.\nB. The closet/cabinet.\nC. The door.\nD. The book.\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "A",
+      "correct": true,
+      "latency_ms": 2847.1763748675585,
+      "prompt_tokens": 500,
+      "category": "object_interaction"
+    },
+    {
+      "id": "object_interaction_10",
+      "question": "Watch the video carefully and answer the following question.\nWhich object was tidied up by the person?\nA. The clothes.\nB. The broom.\nC. The blanket.\nD. The table.\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "A",
+      "correct": false,
+      "latency_ms": 2788.284166716039,
+      "prompt_tokens": 469,
+      "category": "object_interaction"
+    },
+    {
+      "id": "object_interaction_11",
+      "question": "Watch the video carefully and answer the following question.\nWhich object was taken by the person?\nA. The cup/glass/bottle.\nB. The book.\nC. The clothes.\nD. The towel.\nAnswer with the option letter only.",
+      "answer_gt": "B",
+      "answer_pred": "B",
+      "correct": true,
+      "latency_ms": 2833.128792233765,
+      "prompt_tokens": 502,
+      "category": "object_interaction"
+    },
+    {
+      "id": "object_interaction_12",
+      "question": "Watch the video carefully and answer the following question.\nWhich object was washed by the person?\nA. The dish.\nB. The table.\nC. The cup/glass/bottle.\nD. The clothes.\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "A",
+      "correct": true,
+      "latency_ms": 2827.669625170529,
+      "prompt_tokens": 470,
+      "category": "object_interaction"
+    },
+    {
+      "id": "object_interaction_13",
+      "question": "Watch the video carefully and answer the following question.\nWhich object was taken by the person?\nA. The clothes.\nB. The pillow.\nC. The shoe.\nD. The phone/camera.\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "B",
+      "correct": false,
+      "latency_ms": 2831.327499821782,
+      "prompt_tokens": 468,
+      "category": "object_interaction"
+    },
+    {
+      "id": "object_interaction_14",
+      "question": "Watch the video carefully and answer the following question.\nWhich object was closed by the person?\nA. The refrigerator.\nB. The book.\nC. The laptop.\nD. The box.\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "A",
+      "correct": true,
+      "latency_ms": 2863.6671658605337,
+      "prompt_tokens": 466,
+      "category": "object_interaction"
+    },
+    {
+      "id": "object_interaction_15",
+      "question": "Watch the video carefully and answer the following question.\nWhich object was lied on by the person?\nA. The book.\nB. The sofa/couch.\nC. The bed.\nD. The floor.\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "B",
+      "correct": false,
+      "latency_ms": 4946.054041385651,
+      "prompt_tokens": 629,
+      "category": "object_interaction"
+    },
+    {
+      "id": "object_interaction_16",
+      "question": "Watch the video carefully and answer the following question.\nWhich object was sat at by the person?\nA. The floor.\nB. The bed.\nC. The table.\nD. The sofa/couch.\nAnswer with the option letter only.",
+      "answer_gt": "C",
+      "answer_pred": "C",
+      "correct": true,
+      "latency_ms": 3166.018458083272,
+      "prompt_tokens": 573,
+      "category": "object_interaction"
+    },
+    {
+      "id": "object_interaction_17",
+      "question": "Watch the video carefully and answer the following question.\nWhich object was put down by the person?\nA. The food.\nB. The bag.\nC. The clothes.\nD. The shoe.\nAnswer with the option letter only.",
+      "answer_gt": "D",
+      "answer_pred": "D",
+      "correct": true,
+      "latency_ms": 2841.6769579052925,
+      "prompt_tokens": 499,
+      "category": "object_interaction"
+    },
+    {
+      "id": "object_interaction_18",
+      "question": "Watch the video carefully and answer the following question.\nWhich object was taken by the person?\nA. The broom.\nB. The food.\nC. The bag.\nD. The sandwich.\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "B",
+      "correct": false,
+      "latency_ms": 2811.7467500269413,
+      "prompt_tokens": 467,
+      "category": "object_interaction"
+    },
+    {
+      "id": "object_interaction_19",
+      "question": "Watch the video carefully and answer the following question.\nWhich object was eaten by the person?\nA. The medicine.\nB. The mirror.\nC. The window.\nD. The sandwich.\nAnswer with the option letter only.",
+      "answer_gt": "A",
+      "answer_pred": "D",
+      "correct": false,
+      "latency_ms": 2844.5194996893406,
+      "prompt_tokens": 498,
+      "category": "object_interaction"
+    }
+  ]
+}

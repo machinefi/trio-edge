@@ -234,8 +234,10 @@ class ToMeMLXBackend(MLXBackend):
             if hasattr(self._processor, "tokenizer")
             else self._processor
         )
-        detokenizer = self._processor.detokenizer
-        detokenizer.reset()
+        has_detokenizer = hasattr(self._processor, "detokenizer")
+        if has_detokenizer:
+            detokenizer = self._processor.detokenizer
+            detokenizer.reset()
 
         if hasattr(tokenizer, "stopping_criteria"):
             tokenizer.stopping_criteria.reset(self._model.config.eos_token_id)
@@ -244,6 +246,8 @@ class ToMeMLXBackend(MLXBackend):
         prompt_tps = 0.0
         generation_tps = 0.0
         n_tokens = 0
+        token_ids = []
+        eos_token_id = getattr(self._model.config, "eos_token_id", None)
 
         with _wired_limit(self._model):
             tic = time.perf_counter()
@@ -267,11 +271,24 @@ class ToMeMLXBackend(MLXBackend):
                 if hasattr(tokenizer, "stopping_criteria") and tokenizer.stopping_criteria(token):
                     break
 
-                detokenizer.add_token(token)
+                if eos_token_id is not None and not has_detokenizer:
+                    if isinstance(eos_token_id, list):
+                        if token in eos_token_id:
+                            break
+                    elif token == eos_token_id:
+                        break
+
+                if has_detokenizer:
+                    detokenizer.add_token(token)
+                else:
+                    token_ids.append(token)
                 n_tokens = n + 1
 
-            detokenizer.finalize()
-            text = detokenizer.text
+            if has_detokenizer:
+                detokenizer.finalize()
+                text = detokenizer.text
+            else:
+                text = tokenizer.decode(token_ids, skip_special_tokens=True)
 
             if n_tokens > 0:
                 generation_tps = n_tokens / max(time.perf_counter() - tic, 1e-9)

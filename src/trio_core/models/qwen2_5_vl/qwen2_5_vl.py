@@ -93,6 +93,9 @@ class Model(nn.Module):
             batch_outputs.append(batch_output)
         return mx.stack(batch_outputs, axis=0)
 
+    # Public alias for compatibility with model_adapter
+    merge_input_ids_with_image_features = _merge_input_ids_with_image_features
+
     @property
     def layers(self):
         return self.language_model.model.layers
