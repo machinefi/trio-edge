@@ -102,6 +102,12 @@ def create_attention_mask(
     return "causal"
 
 
+def create_ssm_mask(h, cache=None):
+    if cache and hasattr(cache, "make_mask"):
+        return cache.make_mask(h.shape[1])
+    return None
+
+
 def scaled_dot_product_attention(
     queries,
     keys,
@@ -184,3 +190,40 @@ class KVCache:
     def state(self, v):
         self.keys, self.values = v
         self.offset = self.keys.shape[2]
+
+
+# ── Arrays Cache (for SSM/DeltaNet layers) ─────────────────────────────────
+
+
+class ArraysCache:
+    def __init__(self, size, left_padding: Optional[List[int]] = None):
+        self.cache = [None] * size
+        self.left_padding = mx.array(left_padding) if left_padding else None
+        self.lengths = None
+
+    def __setitem__(self, idx, value):
+        self.cache[idx] = value
+
+    def __getitem__(self, idx):
+        return self.cache[idx]
+
+    @property
+    def state(self):
+        return self.cache
+
+    @state.setter
+    def state(self, v):
+        self.cache = v
+
+    def make_mask(self, N: int):
+        if self.left_padding is not None:
+            pos = mx.arange(N)
+            return pos >= self.left_padding[:, None]
+        elif self.lengths is not None:
+            pos = mx.arange(N)
+            return pos < self.lengths[:, None]
+        else:
+            return None
+
+    def empty(self):
+        return self.cache[0] is None
