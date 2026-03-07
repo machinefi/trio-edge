@@ -30,7 +30,7 @@ class ToMeMLXBackend(MLXBackend):
     def __init__(
         self, model_name: str, tome_r: int = 8,
         metric: str = "keys", min_keep_ratio: float = 0.3,
-        adaptive: bool = False,
+        adaptive: bool = False, content_aware: bool = False,
         **kwargs,
     ):
         super().__init__(model_name, **kwargs)
@@ -48,6 +48,7 @@ class ToMeMLXBackend(MLXBackend):
         self.tome_metric = metric
         self.tome_min_keep_ratio = min_keep_ratio
         self.tome_adaptive = adaptive
+        self.tome_content_aware = content_aware
         self._native_vision = None
         self._is_qwen3: bool = False
 
@@ -68,6 +69,7 @@ class ToMeMLXBackend(MLXBackend):
             metric=self.tome_metric,
             min_keep_ratio=self.tome_min_keep_ratio,
             adaptive=self.tome_adaptive,
+            content_aware=self.tome_content_aware,
         )
         self._model.vision_tower = self._native_vision
 

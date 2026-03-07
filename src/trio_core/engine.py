@@ -169,6 +169,7 @@ class TrioCore(CallbackMixin):
                 metric=self.config.tome_metric,
                 min_keep_ratio=self.config.tome_min_keep_ratio,
                 adaptive=self.config.tome_adaptive,
+                content_aware=self.config.tome_content_aware,
                 device_info=backend.device_info,
             )
 

@@ -54,6 +54,11 @@ class EngineConfig(BaseSettings):
     tome_adaptive: bool = Field(
         default=False, description="Linearly ramp r from 0 in early layers to r_max in deep layers"
     )
+    tome_content_aware: bool = Field(
+        default=False,
+        description="Dynamically scale r based on image complexity. "
+        "Simple scenes get high compression, complex scenes (dense text) get low compression.",
+    )
 
     # FastV (visual token pruning in LLM layers)
     fastv_enabled: bool = Field(default=False, description="Enable FastV visual token pruning")

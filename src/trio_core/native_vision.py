@@ -17,7 +17,7 @@ import logging
 
 import mlx.core as mx
 
-from trio_core.tome import bipartite_soft_matching, merge_tokens, compute_k_metric
+from trio_core.tome import bipartite_soft_matching, merge_tokens, compute_k_metric, compute_content_diversity
 
 logger = logging.getLogger(__name__)
 
@@ -33,12 +33,15 @@ class _ToMeMixin:
     tome_min_keep_ratio: float
     tome_metric: str
     tome_adaptive: bool
+    tome_content_aware: bool
     _merge_log: list[dict]
     _initial_seq_len: int
+    _content_r_factor: float  # computed per-image, scales r
 
     def _init_tome(
         self, r: int, skip_first: int, skip_last: int,
         min_keep_ratio: float, metric: str, adaptive: bool,
+        content_aware: bool = False,
     ):
         self.tome_r = r
         self.tome_skip_first = skip_first
@@ -46,8 +49,10 @@ class _ToMeMixin:
         self.tome_min_keep_ratio = min_keep_ratio
         self.tome_metric = metric
         self.tome_adaptive = adaptive
+        self.tome_content_aware = content_aware
         self._merge_log = []
         self._initial_seq_len = 0
+        self._content_r_factor = 1.0  # default: no scaling
 
     def _should_merge(self, layer_num: int, n_blocks: int) -> bool:
         return (
@@ -59,15 +64,37 @@ class _ToMeMixin:
     def _get_layer_r(self, layer_num: int, n_blocks: int) -> int:
         if not self._should_merge(layer_num, n_blocks):
             return 0
-        if not self.tome_adaptive:
-            return self.tome_r
-        start = self.tome_skip_first
-        end = n_blocks - self.tome_skip_last
-        position = layer_num - start + 1
-        n_mergeable = end - start
-        if n_mergeable <= 0:
-            return 0
-        return max(0, int(self.tome_r * position / n_mergeable))
+        base_r = self.tome_r
+        if self.tome_adaptive:
+            start = self.tome_skip_first
+            end = n_blocks - self.tome_skip_last
+            position = layer_num - start + 1
+            n_mergeable = end - start
+            if n_mergeable <= 0:
+                return 0
+            base_r = max(0, int(self.tome_r * position / n_mergeable))
+        # Content-aware scaling: reduce r for complex (high diversity) images
+        if self.tome_content_aware:
+            base_r = max(0, int(base_r * self._content_r_factor))
+        return base_r
+
+    def _compute_content_factor(self, hidden_states: mx.array) -> None:
+        """Compute content-aware r scaling factor from ViT hidden states.
+
+        Called once at the first mergeable layer. Maps diversity to r factor:
+          diversity < 0.3 (simple/redundant) → factor ~1.0 (full merge)
+          diversity > 0.7 (complex/diverse)  → factor ~0.2 (minimal merge)
+        """
+        diversity = compute_content_diversity(hidden_states)
+        # Linear mapping: diversity 0.3→1.0, diversity 0.7→0.2
+        # Clamped to [0.2, 1.0]
+        factor = 1.0 - 2.0 * max(0.0, diversity - 0.3)
+        self._content_r_factor = max(0.2, min(1.0, factor))
+        logger.info(
+            "Content-aware: diversity=%.3f → r_factor=%.2f (r %d→%d)",
+            diversity, self._content_r_factor,
+            self.tome_r, int(self.tome_r * self._content_r_factor),
+        )
 
     def _get_metric(self, hidden_states, block, rotary_pos_emb=None):
         if self.tome_metric == "keys":
@@ -105,10 +132,12 @@ class NativeToMeQwen25Vision(_ToMeMixin):
     """
 
     def __init__(self, original_vision, *, tome_r=8, skip_first=2, skip_last=2,
-                 min_keep_ratio=0.3, metric="hidden", adaptive=False):
+                 min_keep_ratio=0.3, metric="hidden", adaptive=False,
+                 content_aware=False):
         # Store reference to original model (keeps all weights/modules)
         self._vm = original_vision
-        self._init_tome(tome_r, skip_first, skip_last, min_keep_ratio, metric, adaptive)
+        self._init_tome(tome_r, skip_first, skip_last, min_keep_ratio, metric, adaptive,
+                        content_aware=content_aware)
 
     def _should_merge(self, layer_num: int, n_blocks: int) -> bool:
         return (
@@ -152,11 +181,17 @@ class NativeToMeQwen25Vision(_ToMeMixin):
         n_blocks = len(vm.blocks)
         token_size = None
         initial_window_sizes = {}
+        content_factor_computed = False
 
         for layer_num, blk in enumerate(vm.blocks):
             cu_seqlens_now = cu_seqlens if layer_num in vm.fullatt_block_indexes else cu_window_seqlens
 
             hidden_states = blk(hidden_states, cu_seqlens=cu_seqlens_now, rotary_pos_emb=rotary_pos_emb)
+
+            # Content-aware: compute diversity factor once at first mergeable layer
+            if self.tome_content_aware and not content_factor_computed and self._should_merge(layer_num, n_blocks):
+                self._compute_content_factor(hidden_states)
+                content_factor_computed = True
 
             layer_r = self._get_layer_r(layer_num, n_blocks)
             if layer_r > 0:
@@ -273,9 +308,11 @@ class NativeToMeQwen3Vision(_ToMeMixin):
     """
 
     def __init__(self, original_vision, *, tome_r=8, skip_first=2, skip_last=2,
-                 min_keep_ratio=0.3, metric="hidden", adaptive=False):
+                 min_keep_ratio=0.3, metric="hidden", adaptive=False,
+                 content_aware=False):
         self._vm = original_vision
-        self._init_tome(tome_r, skip_first, skip_last, min_keep_ratio, metric, adaptive)
+        self._init_tome(tome_r, skip_first, skip_last, min_keep_ratio, metric, adaptive,
+                        content_aware=content_aware)
 
     def __call__(self, hidden_states, grid_thw, **kwargs):
         vm = self._vm
@@ -303,6 +340,7 @@ class NativeToMeQwen3Vision(_ToMeMixin):
         n_blocks = len(vm.blocks)
         token_size = None
         deepstack_feature_lists = []
+        content_factor_computed = False
 
         for layer_num, blk in enumerate(vm.blocks):
             hidden_states = blk(hidden_states, cu_seqlens=cu_seqlens, rotary_pos_emb=rotary_pos_emb)
@@ -313,6 +351,11 @@ class NativeToMeQwen3Vision(_ToMeMixin):
                     vm.deepstack_visual_indexes.index(layer_num)
                 ]
                 deepstack_feature_lists.append(ds_merger(hidden_states))
+
+            # Content-aware: compute diversity factor once at first mergeable layer
+            if self.tome_content_aware and not content_factor_computed and self._should_merge(layer_num, n_blocks):
+                self._compute_content_factor(hidden_states)
+                content_factor_computed = True
 
             # ToMe merge
             layer_r = self._get_layer_r(layer_num, n_blocks)
@@ -368,6 +411,7 @@ def create_tome_vision(
     min_keep_ratio: float = 0.3,
     metric: str = "hidden",
     adaptive: bool = False,
+    content_aware: bool = False,
 ):
     """Create a native ToMe vision encoder from a loaded mlx-vlm vision model.
 
@@ -382,6 +426,7 @@ def create_tome_vision(
         min_keep_ratio: Minimum fraction of tokens to keep.
         metric: Similarity metric ("keys" or "hidden").
         adaptive: Linear ramp r from 0 to tome_r across layers.
+        content_aware: Dynamically scale r based on image complexity.
 
     Returns:
         Native vision model with built-in ToMe.
@@ -390,6 +435,7 @@ def create_tome_vision(
     kwargs = dict(
         tome_r=tome_r, skip_first=skip_first, skip_last=skip_last,
         min_keep_ratio=min_keep_ratio, metric=metric, adaptive=adaptive,
+        content_aware=content_aware,
     )
 
     if model_type in ('qwen3_vl', 'qwen3_5', 'qwen3_5_moe'):
@@ -399,7 +445,7 @@ def create_tome_vision(
 
     native = cls(vision_model, **kwargs)
     logger.info(
-        "[NativeToMe] Created %s (r=%d, metric=%s, min_keep=%.0f%%, adaptive=%s)",
-        cls.__name__, tome_r, metric, min_keep_ratio * 100, adaptive,
+        "[NativeToMe] Created %s (r=%d, metric=%s, min_keep=%.0f%%, adaptive=%s, content_aware=%s)",
+        cls.__name__, tome_r, metric, min_keep_ratio * 100, adaptive, content_aware,
     )
     return native

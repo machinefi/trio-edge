@@ -110,6 +110,46 @@ def merge_tokens(
     return merged, new_size
 
 
+def compute_content_diversity(hidden_states: mx.array, sample_size: int = 128) -> float:
+    """Measure content diversity via inter-token cosine similarity variance.
+
+    Low diversity (high mean similarity) → redundant tokens → safe to merge aggressively.
+    High diversity (low mean similarity) → complex content → merge conservatively.
+
+    Args:
+        hidden_states: (N, D) token features from a ViT layer.
+        sample_size: Max tokens to sample for efficiency (O(n²) otherwise).
+
+    Returns:
+        Diversity score in [0, 1]. 0 = all identical, 1 = maximally diverse.
+    """
+    n = hidden_states.shape[0]
+    if n <= 1:
+        return 0.0
+
+    # Subsample for efficiency
+    if n > sample_size:
+        indices = mx.arange(0, n, n // sample_size)[:sample_size]
+        hidden_states = hidden_states[indices]
+        n = hidden_states.shape[0]
+
+    # Normalize
+    norms = mx.linalg.norm(hidden_states, axis=1, keepdims=True)
+    normed = hidden_states / mx.maximum(norms, 1e-8)
+
+    # Pairwise cosine similarity matrix
+    sim_matrix = normed @ normed.T  # (N, N)
+
+    # Mean off-diagonal similarity
+    # Mask diagonal with 0, sum, divide by n*(n-1)
+    mask = 1.0 - mx.eye(n)
+    mean_sim = mx.sum(sim_matrix * mask).item() / max(n * (n - 1), 1)
+
+    # Diversity = 1 - mean_similarity
+    # mean_sim ∈ [-1, 1] but in practice ViT tokens are non-negative → [0, 1]
+    return float(max(0.0, min(1.0, 1.0 - mean_sim)))
+
+
 def compute_k_metric(
     hidden_states: mx.array, block,
     rotary_pos_emb: mx.array | None = None,
