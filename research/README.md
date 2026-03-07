@@ -17,7 +17,7 @@ Every VLM inference decomposes into 5 stages. This is the map we optimize agains
 ```
 Stage 0: 输入 (Video Pipeline)      ██████████ 100%   done
 Stage 1: Vision Encoder + ToMe      ████████░░  80%   ToMe + adaptive r done; native化 remaining
-Stage 2: Visual Token Count          ██████░░░░  60%   FastV done(粗); mid-stream KV prune WIP
+Stage 2: Visual Token Count          ████████░░  80%   mid-stream FastV done; adaptive ratio TODO
 Stage 3: LLM Prefill                 ██████░░░░  60%   generate loop + prefix cache done; mlx-vlm dep remaining
 Stage 4: KV Cache                    ████░░░░░░  40%   persistent cache + prefix reuse done; frame-to-frame TODO
 Stage 5: Decode                      ██░░░░░░░░  20%   streaming done; speculative decode TODO
@@ -28,7 +28,7 @@ Stage 5: Decode                      ██░░░░░░░░  20%   strea
 | # | What | Expected Gain | Difficulty | Stage | Status |
 |---|------|---------------|------------|-------|--------|
 | 1 | Frame-to-frame KV reuse | -60~80% video latency | High | 4 | TODO |
-| 2 | Mid-stream FastV (true KV prune) | -30~50% visual tokens | Medium | 2 | WIP |
+| 2 | ~~Mid-stream FastV (true KV prune)~~ | ~~-30~50% visual tokens~~ | ~~Medium~~ | ~~2~~ | DONE |
 | 3 | ~~Shared text prefix KV~~ | ~~-20~40% prefill~~ | ~~Medium~~ | ~~3~~ | DONE |
 | 4 | Speculative decoding | +30~50% decode TPS | Medium | 5 | TODO |
 | 5 | Content-aware adaptive r | +quality, same speed | Low | 2 | TODO |
@@ -46,10 +46,10 @@ Stage 5: Decode                      ██░░░░░░░░  20%   strea
   hidden-state metric, Qwen2.5/3/3.5 support
 - TODO: native ToMe (replace monkey-patch with built-in ViT)
 
-**Stage 2 — Visual Token Count** -- 60%
+**Stage 2 — Visual Token Count** -- 80%
 - Done: ToMe compression (Qwen2.5 1080p: 748->242 tokens, -68%),
-  post-encoder compression, FastV attention pruning (runs layers 0-N twice)
-- WIP: mid-stream FastV (prune KV cache in-place, no double computation)
+  post-encoder compression, mid-stream FastV (single-pass KV cache pruning,
+  zero double computation, MRoPE-aware)
 - TODO: content-aware adaptive ratio
 
 **Stage 3 — LLM Prefill** -- 60%
@@ -215,8 +215,7 @@ Finding: 0.25 is viable (~2% more loss for ~11% more compression). 0.2 is too ag
 
 ### Next Optimization Directions
 
-1. **Mid-stream FastV** — prune KV cache in-place during prefill (WIP)
-2. **Frame-to-frame KV reuse** — consecutive video frames share 80%+ context
+1. **Frame-to-frame KV reuse** — consecutive video frames share 80%+ context
 3. **Speculative decoding** — draft model for faster decode
 4. **Content-aware adaptive r** — quality-preserving compression
 
@@ -238,6 +237,6 @@ Finding: 0.25 is viable (~2% more loss for ~11% more compression). 0.2 is too ag
 - [x] **Phase 1: Custom generate loop** — own sampler, KV cache reuse, prompt caching, early stop, chunked prefill
 - [x] **Shared text prefix KV cache** — three-tier cache (exact hit > prefix hit > full miss), MRoPE-aware
 - [x] **FastV visual token pruning** — attention-based importance scoring, Qwen2.5/3/3.5 support
-- [ ] **Mid-stream FastV** — in-place KV cache pruning (no double computation) — WIP
+- [x] **Mid-stream FastV** — single-pass KV cache pruning (zero double computation), MRoPE position_ids fix
 - [ ] Phase 2: Native Vision Encoder — built-in ToMe, adaptive r
 - [ ] Phase 3: Full native engine — zero mlx-vlm dependency

@@ -171,6 +171,7 @@ class FastVMLXBackend(MLXBackend):
         prompt_cache = make_prompt_cache(model.language_model)
         h, importance = self._run_layers_with_cache(
             model.language_model, final_embeds, visual_mask, prompt_cache,
+            position_ids,
         )
 
         # Step 5: Prune - keep top (1-prune_ratio) visual tokens
@@ -213,7 +214,7 @@ class FastVMLXBackend(MLXBackend):
         # Step 10: Run remaining layers (target_layer+1 → end) with pruned cache + h
         start_layer = target_layer + 1
         normed = self._run_remaining_layers(
-            model.language_model, h, prompt_cache, start_layer,
+            model.language_model, h, prompt_cache, start_layer, position_ids,
         )
 
         # Step 11: Compute logits from normed output
@@ -289,13 +290,21 @@ class FastVMLXBackend(MLXBackend):
 
     # ── Mid-stream helpers ──────────────────────────────────────────────────
 
-    def _run_layers_with_cache(self, language_model, embeds, visual_mask, cache):
+    def _run_layers_with_cache(self, language_model, embeds, visual_mask,
+                               cache, position_ids):
         """Run layers 0→target_layer with KV cache, extract importance at target.
 
         At the target layer, manually replicates Attention.__call__ to extract
         Q/K for importance scoring while also writing to KV cache and computing
         the real attention output. Zero-waste: the same Q/K/V serve both
         importance extraction and the actual forward pass.
+
+        Args:
+            language_model: The LLM module.
+            embeds: (B, L, D) input embeddings.
+            visual_mask: (L,) bool — True at visual token positions.
+            cache: list of KVCache objects.
+            position_ids: (3, B, L) MRoPE position IDs.
 
         Returns:
             (h, importance) — hidden state after layer target, and per-visual-token
@@ -316,6 +325,8 @@ class FastVMLXBackend(MLXBackend):
 
             if i == target:
                 # ── Manual forward: extract importance + complete real attention ──
+                # We call Attention.__call__ which handles MRoPE internally,
+                # then separately compute importance from the pre-attention Q/K.
                 normed = layer.input_layernorm(h)
                 B, L, D = normed.shape
                 attn = layer.self_attn
@@ -324,8 +335,6 @@ class FastVMLXBackend(MLXBackend):
                 k = attn.k_proj(normed)
                 v = attn.v_proj(normed)
 
-                # Attribute names differ: mlx_vlm uses n_heads/n_kv_heads,
-                # some models use num_heads/num_kv_heads
                 n_heads = getattr(attn, 'n_heads',
                           getattr(attn, 'num_heads', None))
                 n_kv = getattr(attn, 'n_kv_heads',
@@ -336,14 +345,18 @@ class FastVMLXBackend(MLXBackend):
                 k = k.reshape(B, L, n_kv, head_dim).transpose(0, 2, 1, 3)
                 v = v.reshape(B, L, n_kv, head_dim).transpose(0, 2, 1, 3)
 
-                offset = cache[i].offset if cache[i] else 0
-                q = attn.rotary_emb(q, offset=offset)
-                k = attn.rotary_emb(k, offset=offset)
+                # Apply MRoPE (same as Attention.__call__)
+                cos, sin = attn.rotary_emb(v, position_ids)
+                if self._is_qwen3:
+                    from mlx_vlm.models.qwen3_vl.language import apply_multimodal_rotary_pos_emb
+                else:
+                    from mlx_vlm.models.qwen2_5_vl.language import apply_multimodal_rotary_pos_emb
+                q, k = apply_multimodal_rotary_pos_emb(q, k, cos, sin, unqueeze_dim=1)
 
                 # Extract importance from post-RoPE Q/K (before cache update)
                 importance = self._score_visual(q, k, visual_mask, n_heads, n_kv, head_dim)
 
-                # Write to KV cache (same as Attention.__call__)
+                # Write to KV cache
                 k, v = cache[i].update_and_fetch(k, v)
 
                 # Apply mask
@@ -358,12 +371,12 @@ class FastVMLXBackend(MLXBackend):
                 output = output.transpose(0, 2, 1, 3).reshape(B, L, -1)
                 attn_out = attn.o_proj(output)
 
-                # Residual + MLP (same as Qwen2VLDecoderLayer.__call__)
+                # Residual + MLP
                 h = h + attn_out
                 h = h + layer.mlp(layer.post_attention_layernorm(h))
             else:
-                # Standard layer forward with cache
-                h = layer(h, mask, cache[i])
+                # Standard layer forward with cache + MRoPE position_ids
+                h = layer(h, mask, cache[i], position_ids)
 
         mx.eval(h, importance)
         return h, importance
@@ -433,12 +446,20 @@ class FastVMLXBackend(MLXBackend):
             mx.eval(*eval_tensors)
 
     @staticmethod
-    def _run_remaining_layers(language_model, h, cache, start_layer):
+    def _run_remaining_layers(language_model, h, cache, start_layer,
+                               position_ids=None):
         """Run layers start_layer→end with existing KV cache.
 
         Layers before start_layer have already been run (cache populated).
         Layers from start_layer onward have empty caches and process the
         (pruned) hidden state as a fresh prefill.
+
+        Args:
+            language_model: The LLM module.
+            h: (B, L_pruned, D) hidden state after pruning.
+            cache: list of KVCache objects.
+            start_layer: index of first remaining layer.
+            position_ids: (3, B, L_pruned) MRoPE position IDs (pruned).
 
         Returns:
             Normalized hidden state (after final RMSNorm).
@@ -449,15 +470,13 @@ class FastVMLXBackend(MLXBackend):
         layers = language_model.model.layers
 
         if start_layer >= len(layers):
-            # All layers already run (e.g., prune_after_layer >= n_layers - 1)
             return language_model.model.norm(h)
 
-        # Build mask using remaining cache slice (offset=0 → standard causal)
         remaining_cache = cache[start_layer:]
         mask = create_attention_mask(h, remaining_cache)
 
         for i in range(start_layer, len(layers)):
-            h = layers[i](h, mask, cache[i])
+            h = layers[i](h, mask, cache[i], position_ids)
 
         return language_model.model.norm(h)
 
