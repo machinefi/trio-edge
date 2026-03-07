@@ -51,3 +51,4 @@ trio = "trio_core.cli:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/trio_core"]
+exclude = ["src/trio_core/eval.py", "src/trio_core/eval_benchmarks.py"]
