@@ -51,7 +51,10 @@ def build_config_key(args) -> str:
     if has_fastv:
         layer_suffix = f"_L{args.fastv_layer}" if args.fastv_layer else ""
         parts.append(f"fastv_{args.fastv}{layer_suffix}")
-    if not has_fastv and not has_tome:
+    has_vs = args.visual_similarity is not None
+    if has_vs:
+        parts.append(f"vs_{args.visual_similarity}")
+    if not has_fastv and not has_tome and not has_vs:
         parts.append("baseline")
     return "_".join(parts)
 
@@ -84,6 +87,8 @@ def run_benchmarks(args) -> dict:
         config_kwargs["tome_min_keep_ratio"] = 0.3
         if args.tome_adaptive:
             config_kwargs["tome_adaptive"] = True
+    if args.visual_similarity is not None:
+        config_kwargs["visual_similarity_threshold"] = args.visual_similarity
 
     config = EngineConfig(**config_kwargs)
     engine = TrioCore(config)
@@ -104,6 +109,7 @@ def run_benchmarks(args) -> dict:
         "tome_r": args.tome,
         "tome_adaptive": getattr(args, "tome_adaptive", False),
         "fastv_ratio": getattr(args, "fastv", None),
+        "visual_similarity_threshold": getattr(args, "visual_similarity", None),
         "samples_per_bench": n,
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "benchmarks": {},
@@ -257,6 +263,8 @@ def main():
                         help="Enable ToMe with r tokens merged per layer")
     parser.add_argument("--tome-adaptive", action="store_true",
                         help="Use adaptive r (linear ramp from 0 to r_max)")
+    parser.add_argument("--visual-similarity", type=float, default=None, metavar="THRESHOLD",
+                        help="Visual similarity threshold for KV reuse (e.g., 0.95)")
     parser.add_argument("--fastv", type=float, default=None, metavar="RATIO",
                         help="Enable FastV with given prune ratio (0.0-1.0)")
     parser.add_argument("--fastv-layer", type=int, default=None,
