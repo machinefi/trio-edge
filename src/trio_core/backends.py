@@ -147,6 +147,7 @@ class MLXBackend(BaseBackend):
         self._model, self._processor = load(self.model_name)
         self._config = load_config(self.model_name)
         self._prompt_cache = None  # Lazily created on first generate
+        self._early_stop = None   # Set via set_early_stop() after load
         self._loaded = True
         logger.info("[MLX] Model loaded in %.1fs", time.monotonic() - t0)
 
@@ -156,6 +157,28 @@ class MLXBackend(BaseBackend):
             from trio_core.generate import PromptCache
             self._prompt_cache = PromptCache(self._model)
         return self._prompt_cache
+
+    def _get_early_stop(self):
+        """Get EarlyStopConfig if configured, else None."""
+        return self._early_stop
+
+    def set_early_stop(self, enabled: bool, threshold: float = 0.8) -> None:
+        """Configure early stopping. Called by engine after load()."""
+        if not enabled:
+            self._early_stop = None
+            return
+        from trio_core.generate import EarlyStopConfig
+        # Get EOS token IDs from model config
+        eos_ids = self._model.config.eos_token_id
+        if isinstance(eos_ids, int):
+            eos_ids = [eos_ids]
+        elif eos_ids is None:
+            eos_ids = []
+        self._early_stop = EarlyStopConfig(
+            eos_threshold=threshold,
+            eos_token_ids=list(eos_ids),
+        )
+        logger.info("[MLX] Early stopping enabled: threshold=%.2f, eos_ids=%s", threshold, eos_ids)
 
     def generate(
         self, frames: np.ndarray, prompt: str, *,
@@ -194,6 +217,7 @@ class MLXBackend(BaseBackend):
                     input_ids, self._model, pixel_values, mask,
                     max_tokens=max_tokens, temperature=temperature, top_p=top_p,
                     prompt_cache_manager=self._get_prompt_cache(),
+                    early_stop=self._early_stop,
                     **kwargs,
                 )
             ):
@@ -254,6 +278,7 @@ class MLXBackend(BaseBackend):
                     input_ids, self._model, pixel_values, mask,
                     max_tokens=max_tokens, temperature=temperature, top_p=top_p,
                     prompt_cache_manager=self._get_prompt_cache(),
+                    early_stop=self._early_stop,
                     **kwargs,
                 )
             ):

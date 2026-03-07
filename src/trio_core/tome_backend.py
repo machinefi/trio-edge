@@ -183,6 +183,52 @@ class ToMeMLXBackend(MLXBackend):
         compressed_grid = CompressedMLXBackend._compute_compressed_grid(
             grid_thw, original_count, compressed_count
         )
+
+        # The grid may not produce exactly compressed_count tokens due to
+        # rounding (e.g., compressed_count=147 but grid gives T*H*W=156).
+        # Align hidden_states and input_ids to match the grid.
+        grid_count = self._original_token_count(compressed_grid)
+        if grid_count != compressed_count:
+            logger.debug(
+                "Grid alignment: compressed=%d, grid=%d, adjusting",
+                compressed_count, grid_count,
+            )
+            if grid_count > compressed_count:
+                # Pad hidden_states by repeating last token
+                pad = mx.repeat(hidden_states[-1:], grid_count - compressed_count, axis=0)
+                hidden_states = mx.concatenate([hidden_states, pad])
+            else:
+                hidden_states = hidden_states[:grid_count]
+
+            # Rebuild new_input_ids with grid_count visual placeholders
+            ids_list = input_ids[0].tolist()
+            new_ids = []
+            vis_count = 0
+            for tid in ids_list:
+                if tid == visual_token_id:
+                    vis_count += 1
+                    if vis_count <= grid_count:
+                        new_ids.append(tid)
+                else:
+                    new_ids.append(tid)
+            new_input_ids = mx.array([new_ids], dtype=input_ids.dtype)
+            new_mask = mx.ones(new_input_ids.shape, dtype=mx.int32)
+
+            # Re-merge embeddings with adjusted counts
+            text_embeds = model.language_model.model.embed_tokens(new_input_ids)
+            if self._is_qwen3:
+                final_embeds, image_mask = model.merge_input_ids_with_image_features(
+                    hidden_states, text_embeds, new_input_ids,
+                    image_token_id, video_token_id,
+                )
+            else:
+                final_embeds = model.merge_input_ids_with_image_features(
+                    image_token_id, video_token_id,
+                    hidden_states, text_embeds, new_input_ids,
+                )
+
+            compressed_count = grid_count
+
         kw_grid = {}
         if n_video > 0:
             kw_grid["video_grid_thw"] = compressed_grid

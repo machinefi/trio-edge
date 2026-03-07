@@ -52,6 +52,12 @@ class EngineConfig(BaseSettings):
         default=0.3, description="Min fraction of tokens to keep (0.0-1.0]"
     )
 
+    # Early stopping
+    early_stop: bool = Field(default=False, description="Enable EOS-probability early stopping")
+    early_stop_threshold: float = Field(
+        default=0.8, description="P(EOS) threshold to trigger early stop (0.0-1.0)"
+    )
+
     # Cache (Phase 2)
     cache_enabled: bool = Field(default=False, description="Enable video cache")
     cache_max_entries: int = Field(default=50, description="Max cache entries")

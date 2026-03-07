@@ -150,6 +150,11 @@ class TrioCore(CallbackMixin):
 
         self._backend = backend
         self._backend.load()
+
+        # Configure early stopping if enabled
+        if self.config.early_stop and hasattr(self._backend, 'set_early_stop'):
+            self._backend.set_early_stop(True, self.config.early_stop_threshold)
+
         self._loaded = True
         self._profile = get_profile(self.config.model)
         logger.info(

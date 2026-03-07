@@ -23,6 +23,7 @@ import functools
 import hashlib
 import logging
 import time
+from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Generator, List, Optional, Tuple
 
 import mlx.core as mx
@@ -34,6 +35,41 @@ from mlx_lm.sample_utils import make_logits_processors, make_sampler
 from mlx_vlm.models import cache
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class EarlyStopConfig:
+    """EOS-probability-based early stopping for decode.
+
+    Checks P(EOS) after generating min_tokens. If the model is confident
+    the response is complete, we stop early instead of generating padding
+    or repetitive tokens.
+
+    Only affects decode — prefill is untouched. Accuracy should be identical
+    to no-early-stop when threshold is set correctly (the model was going to
+    emit EOS anyway).
+    """
+
+    eos_threshold: float = 0.8       # Stop if P(EOS) > this after min_tokens
+    min_tokens: int = 1              # Don't stop before this many tokens
+    eos_token_ids: list[int] = field(default_factory=list)  # From model config
+
+    def should_stop(self, logprobs: mx.array, n_generated: int) -> bool:
+        """Check if we should early-stop based on EOS probability."""
+        if n_generated < self.min_tokens:
+            return False
+        if not self.eos_token_ids:
+            return False
+        # logprobs is (vocab_size,) — convert to probabilities for EOS tokens
+        for eos_id in self.eos_token_ids:
+            p_eos = mx.exp(logprobs[eos_id]).item()
+            if p_eos > self.eos_threshold:
+                logger.debug(
+                    "Early stop: P(EOS=%d)=%.3f > %.3f after %d tokens",
+                    eos_id, p_eos, self.eos_threshold, n_generated,
+                )
+                return True
+        return False
 
 
 class PromptCache:
@@ -62,14 +98,28 @@ class PromptCache:
     def kv_cache(self) -> Optional[List[Any]]:
         return self._kv_cache
 
+    @property
+    def is_trimmable(self) -> bool:
+        """Check if cache supports trim/offset (KVCache vs ArraysCache)."""
+        return (self._kv_cache is not None
+                and len(self._kv_cache) > 0
+                and hasattr(self._kv_cache[0], 'offset'))
+
     def get_or_create_cache(self) -> List[Any]:
-        """Get existing cache (trimmed to 0) or create new one."""
+        """Get existing cache (trimmed to 0) or create new one.
+
+        For KVCache (standard attention): reuse buffers, trim to 0.
+        For ArraysCache (DeltaNet): must recreate — no trim support.
+        """
         if self._kv_cache is not None:
-            # Reuse buffers — trim all content but keep allocated memory
-            for c in self._kv_cache:
-                if hasattr(c, 'trim'):
+            if self.is_trimmable:
+                # KVCache: reuse buffers — trim all content but keep allocated memory
+                for c in self._kv_cache:
                     c.trim(c.offset)
-            return self._kv_cache
+                return self._kv_cache
+            else:
+                # ArraysCache (DeltaNet): can't trim, must recreate
+                pass
 
         self._kv_cache = cache.make_prompt_cache(
             self._model.language_model,
@@ -78,7 +128,13 @@ class PromptCache:
         return self._kv_cache
 
     def check_hit(self, input_ids: mx.array) -> bool:
-        """Check if current input exactly matches cached state."""
+        """Check if current input exactly matches cached state.
+
+        Only works with trimmable caches (KVCache). ArraysCache (DeltaNet)
+        cannot be trimmed, so exact-match reuse is not supported.
+        """
+        if not self.is_trimmable:
+            return False
         h = self._hash_input(input_ids)
         return self._input_hash is not None and self._input_hash == h
 
@@ -88,7 +144,11 @@ class PromptCache:
         self._input_hash = self._hash_input(input_ids)
         self._first_token = (first_token, first_logprobs)
         # Record KV offset right after prefill (before decode starts)
-        self._prefill_offset = kv_cache[0].offset if kv_cache else 0
+        # ArraysCache (DeltaNet) has no offset — cache reuse not supported
+        if kv_cache and hasattr(kv_cache[0], 'offset'):
+            self._prefill_offset = kv_cache[0].offset
+        else:
+            self._prefill_offset = 0
 
     def get_cached_first_token(self) -> Optional[Tuple[mx.array, mx.array]]:
         """Get cached first token from exact-match hit."""
@@ -162,13 +222,18 @@ def generate_step(
     sampler: Optional[Callable[[mx.array], mx.array]] = None,
     logits_processors: Optional[List[Callable[[mx.array, mx.array], mx.array]]] = None,
     prefill_step_size: Optional[int] = 2048,
+    early_stop: Optional[EarlyStopConfig] = None,
     **kwargs,
 ) -> Generator[Tuple[mx.array, mx.array], None, None]:
-    """Generate tokens with optional persistent cache.
+    """Generate tokens with optional persistent cache and early stopping.
 
     When prompt_cache_manager is provided:
     - Reuses GPU buffers across requests (avoids re-allocation)
     - Detects exact-match inputs → skips entire prefill (ViT + LLM)
+
+    When early_stop is provided:
+    - Checks P(EOS) after each decode step
+    - Stops early if model is confident response is complete
 
     Yields:
         (token_id, logprobs) tuples.
@@ -314,6 +379,11 @@ def generate_step(
             break
 
         yield y.item(), logprobs
+
+        # Early stopping: check NEXT step's P(EOS) — already computed at loop top
+        if early_stop is not None and early_stop.should_stop(next_logprobs, n + 1):
+            break
+
         if n % 256 == 0:
             mx.clear_cache()
         y, logprobs = next_y, next_logprobs
