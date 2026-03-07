@@ -321,6 +321,23 @@ class TestVisualSimilarity:
         assert cache.check_visual_hit(embeds, ids, threshold=0.0) is True
 
 
+    def test_arrays_cache_deltanet_works(self):
+        """DeltaNet ArraysCache (no offset/trim) should still support visual similarity."""
+        cache = self._make_cache()
+        # Simulate ArraysCache: a list of plain mx.arrays (no offset attribute)
+        kv = [mx.zeros((1, 32, 128, 128)) for _ in range(2)]
+        cache._kv_cache = kv
+        cache._first_token = (mx.array(42), mx.zeros(100))
+        assert not cache.is_trimmable  # ArraysCache has no offset
+
+        ids = self._ids()
+        embeds = mx.ones((1, 10, 64))
+        cache.save_embeds(embeds, ids)
+
+        # Same embeddings + same input_ids → should hit despite non-trimmable cache
+        assert cache.check_visual_hit(embeds, ids, threshold=0.95) is True
+
+
 class TestVisualSimilarityConfig:
     def test_config_default_disabled(self):
         from trio_core.config import EngineConfig
