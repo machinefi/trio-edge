@@ -63,8 +63,8 @@ def create_app(config: EngineConfig | None = None, backend: str | None = None) -
     """Create and configure the FastAPI app."""
     app = FastAPI(
         title="TrioCore",
-        description="Portable video inference engine for VLMs",
-        version="0.2.1",
+        description="Local VLM inference engine for video",
+        version="0.3.0",
         lifespan=lifespan,
     )
     app.state.config = config or EngineConfig()
