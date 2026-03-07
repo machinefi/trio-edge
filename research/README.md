@@ -278,9 +278,37 @@ Finding: 0.25 is viable (~2% more loss for ~11% more compression). 0.2 is too ag
 - **v1 (without RoPE)**: 82% accuracy — worse than hidden states (90%). K was recomputed post-block without rotary position embeddings, producing different similarity structure than actual attention.
 - **v2 (with RoPE)**: Fixed to apply rotary position embeddings to K before similarity computation, matching what the actual attention mechanism computes. Needs re-benchmarking.
 
+### MVBench — Video Understanding (8 tasks × 20 samples, Qwen2.5-VL-3B, M3 Pro)
+
+| Config | Accuracy | Avg Latency | Avg Visual Tokens |
+|---|---|---|---|
+| Baseline | 70.0% | 3789ms | 1555 |
+| ToMe r=4 | 64.4% (-5.6pp) | 3192ms (-16%) | 541 (-65%) |
+
+Per-task breakdown:
+
+| Task | Baseline | ToMe | Impact | Notes |
+|---|---|---|---|---|
+| object_existence | 95% | 95% | zero | Simple perception |
+| moving_attribute | 90% | 85% | -5pp | |
+| moving_count | 80% | 65% | -15pp | Precision task |
+| counterfactual_inference | 70% | 55% | -15pp | Reasoning task |
+| action_sequence | 65% | 60% | -5pp | |
+| moving_direction | 55% | 55% | zero | |
+| action_prediction | 50% | 50% | zero | |
+| object_interaction | 55% | 50% | -5pp | |
+
+**Key insight: -65% tokens 的真正价值不在单帧速度。** 16 帧 480p 短视频只有 1555 tokens,
+M3 Pro 轻松处理,实际 latency 只降 16%。ToMe 的核心价值在于：
+- **高分辨率** — 1080p 从 748→242 tokens, prefill -73% (quadratic scaling)
+- **长视频/连续流** — KV budget 内能容纳更多帧的历史上下文
+- **OOM 防护** — 64+ 帧视频不压缩直接爆内存
+
+对 Frigate 持续 480p 监控流：**不开 ToMe 是更好的默认值**。
+ToMe 适用于高分辨率或长视频分析场景。
+
 ### Next: Real Video Benchmarks
 
-Current benchmarks (POPE/TextVQA) are image-only. Need video QA to validate optimizations on real video tasks.
 Target use case: Frigate-style security/surveillance monitoring.
 
 | Priority | Benchmark | Scale | Format | Surveillance Relevance |
