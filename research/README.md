@@ -20,7 +20,7 @@ Stage 1: Vision Encoder + ToMe      ████████░░  80%   ToMe +
 Stage 2: Visual Token Count          ████████░░  80%   mid-stream FastV done; adaptive ratio TODO
 Stage 3: LLM Prefill                 ██████░░░░  60%   generate loop + prefix cache done; mlx-vlm dep remaining
 Stage 4: KV Cache                    ████░░░░░░  40%   persistent cache + prefix reuse done; frame-to-frame TODO
-Stage 5: Decode                      ████░░░░░░  40%   streaming + speculative decode done; continuous batching TODO
+Stage 5: Decode                      ████░░░░░░  40%   streaming + speculative decode done; benchmark pending
 ```
 
 ### Priority Ranking (ROI for video inference latency)
@@ -67,8 +67,10 @@ Stage 5: Decode                      ████░░░░░░  40%   strea
 **Stage 5 — Decode** -- 40%
 - Done: auto-regressive, streaming output, early stopping config,
   speculative decoding (draft model + prompt lookup, rejection sampling,
-  KV cache rollback)
-- TODO: continuous batching, integrate speculative decode into generate loop
+  KV cache rollback), integrated into generate loop via `speculative_lookahead` config
+- Note: prompt lookup unlikely to help VLM (input is visual tokens, output is text — low
+  n-gram overlap). Draft model mode ready but needs separate model loading. Benchmark pending.
+- TODO: continuous batching
 
 ### Per-Stage Model Differences (updated 2026-03-06)
 
@@ -192,6 +194,21 @@ Note: Qwen's chat template puts visual tokens very early (position 15), so text 
 is only 3.6% of total. Savings scale with prefix length — multi-turn conversations or
 long system prompts before `<|vision_start|>` would see larger gains.
 
+### mlx-vlm Native Baseline Comparison (4 models × 5 benchmarks, n=50)
+
+trio-core vs raw mlx-vlm.generate() — zero trio-core code in the native path.
+
+| Model | Accuracy diff | Latency diff | Notes |
+|---|---|---|---|
+| Qwen2.5-VL-3B | ±2-6% | trio-core **faster** | POPE/MMBench: trio wins; TextVQA: native wins |
+| Qwen3-VL-4B | ±2-14% | trio-core **faster** | TextVQA +14% (template effect); latency -5~20% |
+| Qwen3.5-0.8B | ±4-12% | native **25% faster** | Tiny model — trio-core overhead proportionally larger |
+| Gemma3-4B | ±2-8% | mixed | POPE-adv native much slower (1071 vs 697ms, thermal?) |
+
+Conclusion: **trio-core adds no meaningful accuracy or latency overhead on 3B+ models.**
+Differences are within noise (n=50) and prompt-template-sensitive, not engine-level.
+Full details: [eval-results/mlxvlm-native-baselines.md](eval-results/mlxvlm-native-baselines.md)
+
 ### Key Findings
 
 1. **Qwen3-VL: zero quality loss** — 91% accuracy with and without ToMe, plus 31% prefill speedup
@@ -218,9 +235,11 @@ Finding: 0.25 is viable (~2% more loss for ~11% more compression). 0.2 is too ag
 
 ### Next Optimization Directions
 
-1. **Frame-to-frame KV reuse** — consecutive video frames share 80%+ context
-3. **Integrate speculative decode** — wire into generate loop, benchmark TPS gain
-4. **Content-aware adaptive r** — quality-preserving compression
+1. **Frame-to-frame KV reuse** — consecutive video frames share 80%+ context (highest ROI, hardest)
+2. **ToMe + FastV compound benchmark** — measure combined visual compression (both done, not measured together)
+3. **Content-aware adaptive r** — quality-preserving compression per image
+4. **Native ToMe** — replace monkey-patch with built-in ViT (cleaner arch, prerequisite for Phase 2)
+5. **Remove mlx-vlm model loading dep** — zero external dependency (Phase 3)
 
 ## Status
 
@@ -241,5 +260,8 @@ Finding: 0.25 is viable (~2% more loss for ~11% more compression). 0.2 is too ag
 - [x] **Shared text prefix KV cache** — three-tier cache (exact hit > prefix hit > full miss), MRoPE-aware
 - [x] **FastV visual token pruning** — attention-based importance scoring, Qwen2.5/3/3.5 support
 - [x] **Mid-stream FastV** — single-pass KV cache pruning (zero double computation), MRoPE position_ids fix
+- [x] **Speculative decoding** — prompt lookup + draft model modes, rejection sampling, KV cache rollback, integrated into generate loop
+- [x] **mlx-vlm native baselines** — 4 models × 5 benchmarks, trio-core matches or beats native on 3B+
+- [ ] ToMe + FastV compound benchmark — measure combined compression
 - [ ] Phase 2: Native Vision Encoder — built-in ToMe, adaptive r
 - [ ] Phase 3: Full native engine — zero mlx-vlm dependency
