@@ -1,0 +1,11 @@
+{
+  "model": "nanollava",
+  "threshold": 0.95,
+  "noise": 0.01,
+  "baseline_cold_ms": 240.88922233204357,
+  "baseline_warm_ms": 240.3434757507057,
+  "similarity_cold_ms": 182.34534733346663,
+  "similarity_warm_ms": 175.88260416596313,
+  "speedup_warm": 1.3664994152799623,
+  "savings_pct": 26.820312631079723
+}

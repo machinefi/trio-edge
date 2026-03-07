@@ -1,0 +1,80 @@
+{
+  "model": "nanollava",
+  "n_frames": 10,
+  "budget": 6000,
+  "avg_ms": 314.40391240103054,
+  "first_ms": 275.8914580044802,
+  "steady_ms": 325.696775875258,
+  "frames": [
+    {
+      "frame": 0,
+      "total_ms": 275.8914580044802,
+      "prompt_tps": 170.48323327809933,
+      "gen_tps": 288.79671880344625,
+      "text": ", and,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,"
+    },
+    {
+      "frame": 1,
+      "total_ms": 262.57345900376095,
+      "prompt_tps": 187.02978508686246,
+      "gen_tps": 277.99113839005327,
+      "text": ", and, and, and, and, and, and, and, and, and, and, and, and, and, and, and, and"
+    },
+    {
+      "frame": 2,
+      "total_ms": 275.2434580033878,
+      "prompt_tps": 180.26913794032276,
+      "gen_tps": 261.8044668236071,
+      "text": "\n, and, and, and, and, and, and, and, and, and, and, and, and, and, and, and,"
+    },
+    {
+      "frame": 3,
+      "total_ms": 290.8357080013957,
+      "prompt_tps": 173.08908501563656,
+      "gen_tps": 242.6737330805056,
+      "text": "\n, and, 4, 4, 4, 4, 4, 4, 4, 4, 4, "
+    },
+    {
+      "frame": 4,
+      "total_ms": 302.47229199449066,
+      "prompt_tps": 167.4943410294693,
+      "gen_tps": 231.46208748245974,
+      "text": "\n, and, and, and, and, and, and, and, and, and, and, and, and, and, and, and,"
+    },
+    {
+      "frame": 5,
+      "total_ms": 318.020582999452,
+      "prompt_tps": 161.42267215213673,
+      "gen_tps": 216.5539100839901,
+      "text": "\n\n, and, 4, 4, 4, 4, 4, 4, 4, 4, 4,"
+    },
+    {
+      "frame": 6,
+      "total_ms": 333.59420800115913,
+      "prompt_tps": 156.38776314337153,
+      "gen_tps": 202.4488939482946,
+      "text": "\n\n, and, 4, 4, 4, 4, 4, 4, 4, 4, 4,"
+    },
+    {
+      "frame": 7,
+      "total_ms": 346.96458299731603,
+      "prompt_tps": 151.15667500317448,
+      "gen_tps": 193.1517153883811,
+      "text": "\n\n, and, 4, 4, 4, 4, 4, 4, 4, 4, 4,"
+    },
+    {
+      "frame": 8,
+      "total_ms": 362.7208750040154,
+      "prompt_tps": 145.1312652535799,
+      "gen_tps": 183.84293494243977,
+      "text": "\n\n, and, 4, 4, 4, 4, 4, 4, 4, 4, 4,"
+    },
+    {
+      "frame": 9,
+      "total_ms": 375.7225000008475,
+      "prompt_tps": 141.75857851804827,
+      "gen_tps": 174.84706605242476,
+      "text": "\n\n, and, 4, 4, 4, 4, 4, 4, 4, 4, 4,"
+    }
+  ]
+}

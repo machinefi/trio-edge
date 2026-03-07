@@ -1,0 +1,53 @@
+{
+  "model": "internvl3-1b",
+  "config": "compressed_50",
+  "n_runs": 3,
+  "avg_prefill_ms": 113.00591700273799,
+  "avg_decode_ms": 105.46866650111042,
+  "avg_latency_ms": 905.8768334980414,
+  "avg_prompt_tps": 14795.734004195689,
+  "avg_gen_tps": 246.89382345397004,
+  "avg_peak_memory_gb": 2.960985636,
+  "prompt_tokens": 1672,
+  "runs": [
+    {
+      "run": 0,
+      "prefill_ms": 113.01970900240121,
+      "decode_ms": 100.55341700353893,
+      "inference_ms": 878.315083005873,
+      "latency_ms": 878.4016670033452,
+      "prompt_tps": 14793.879888369529,
+      "generation_tps": 258.56903499445417,
+      "prompt_tokens": 1672,
+      "completion_tokens": 26,
+      "peak_memory_gb": 2.960985636,
+      "text": "I'm sorry, I'm not able to view or process images. Could you please provide more details or informat"
+    },
+    {
+      "run": 1,
+      "prefill_ms": 112.8011670007254,
+      "decode_ms": 101.35766600433271,
+      "inference_ms": 878.8000419954187,
+      "latency_ms": 878.8840420020279,
+      "prompt_tps": 14822.541685133876,
+      "generation_tps": 256.5173511285134,
+      "prompt_tokens": 1672,
+      "completion_tokens": 26,
+      "peak_memory_gb": 2.960985636,
+      "text": "I'm sorry, I'm not able to view or process images. Could you please provide more details or informat"
+    },
+    {
+      "run": 2,
+      "prefill_ms": 113.21066700475058,
+      "decode_ms": 109.57966699788813,
+      "inference_ms": 932.787208002992,
+      "latency_ms": 932.8696249940549,
+      "prompt_tps": 14768.9263232575,
+      "generation_tps": 237.2702957794267,
+      "prompt_tokens": 1672,
+      "completion_tokens": 26,
+      "peak_memory_gb": 2.960985636,
+      "text": "I'm sorry, I'm not able to view or process images. Could you please provide more details or informat"
+    }
+  ]
+}

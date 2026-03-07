@@ -1,0 +1,53 @@
+{
+  "model": "internvl3-2b",
+  "config": "baseline",
+  "n_runs": 3,
+  "avg_prefill_ms": 40.73466650152113,
+  "avg_decode_ms": 149.30841699970188,
+  "avg_latency_ms": 223.31695799948648,
+  "avg_prompt_tps": 81896.37363153786,
+  "avg_gen_tps": 234.423703408719,
+  "avg_peak_memory_gb": 3.70611896,
+  "prompt_tokens": 3336,
+  "runs": [
+    {
+      "run": 0,
+      "prefill_ms": 40.10145900247153,
+      "decode_ms": 150.10279200214427,
+      "inference_ms": 222.61599999910686,
+      "latency_ms": 222.70804099389352,
+      "prompt_tps": 83188.9931933498,
+      "generation_tps": 233.1735441636556,
+      "prompt_tokens": 3336,
+      "completion_tokens": 35,
+      "peak_memory_gb": 3.70611896,
+      "text": "It seems like you're looking for a specific image or content related to \"The Simpsons.\" Could you pl"
+    },
+    {
+      "run": 1,
+      "prefill_ms": 40.83800000080373,
+      "decode_ms": 150.26345899968874,
+      "inference_ms": 224.5930830031284,
+      "latency_ms": 224.6850000010454,
+      "prompt_tps": 81688.62333939821,
+      "generation_tps": 232.9242267747377,
+      "prompt_tokens": 3336,
+      "completion_tokens": 35,
+      "peak_memory_gb": 3.70611896,
+      "text": "It seems like you're looking for a specific image or content related to \"The Simpsons.\" Could you pl"
+    },
+    {
+      "run": 2,
+      "prefill_ms": 40.631333002238534,
+      "decode_ms": 148.35337499971502,
+      "inference_ms": 221.86012499878416,
+      "latency_ms": 221.94891599792754,
+      "prompt_tps": 82104.1239236775,
+      "generation_tps": 235.9231800427003,
+      "prompt_tokens": 3336,
+      "completion_tokens": 35,
+      "peak_memory_gb": 3.70611896,
+      "text": "It seems like you're looking for a specific image or content related to \"The Simpsons.\" Could you pl"
+    }
+  ]
+}

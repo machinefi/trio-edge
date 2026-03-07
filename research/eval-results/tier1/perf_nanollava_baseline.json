@@ -1,0 +1,53 @@
+{
+  "model": "nanollava",
+  "config": "baseline",
+  "n_runs": 3,
+  "avg_prefill_ms": 7.826021002983907,
+  "avg_decode_ms": 187.94235450332053,
+  "avg_latency_ms": 204.83074999719975,
+  "avg_prompt_tps": 3583.5194621335754,
+  "avg_gen_tps": 340.5632603558893,
+  "avg_peak_memory_gb": 4.48855314,
+  "prompt_tokens": 28,
+  "runs": [
+    {
+      "run": 0,
+      "prefill_ms": 8.210249994590413,
+      "decode_ms": 187.8512920011417,
+      "inference_ms": 205.56391699938104,
+      "latency_ms": 205.64612499583745,
+      "prompt_tps": 3410.3711846105416,
+      "generation_tps": 340.6950216749695,
+      "prompt_tokens": 28,
+      "completion_tokens": 64,
+      "peak_memory_gb": 4.48855314,
+      "text": ", and,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,"
+    },
+    {
+      "run": 1,
+      "prefill_ms": 7.513584001571871,
+      "decode_ms": 186.08354200114263,
+      "inference_ms": 202.53037500515347,
+      "latency_ms": 202.61012499395292,
+      "prompt_tps": 3726.5837440750365,
+      "generation_tps": 343.9315444651576,
+      "prompt_tokens": 28,
+      "completion_tokens": 64,
+      "peak_memory_gb": 4.48855314,
+      "text": ", and,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,"
+    },
+    {
+      "run": 2,
+      "prefill_ms": 8.138458004395943,
+      "decode_ms": 189.80116700549843,
+      "inference_ms": 206.9702909939224,
+      "latency_ms": 207.05137500044657,
+      "prompt_tps": 3440.4551801921143,
+      "generation_tps": 337.1949762466211,
+      "prompt_tokens": 28,
+      "completion_tokens": 64,
+      "peak_memory_gb": 4.48855314,
+      "text": ", and,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,"
+    }
+  ]
+}
