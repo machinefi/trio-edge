@@ -440,6 +440,7 @@ def generate_step(
     early_stop: Optional[EarlyStopConfig] = None,
     speculative_lookahead: int = 0,
     speculative_stats: Optional[dict] = None,
+    inputs_embeds: Optional[mx.array] = None,
     **kwargs,
 ) -> Generator[Tuple[mx.array, mx.array], None, None]:
     """Generate tokens with optional persistent cache and early stopping.
@@ -447,6 +448,11 @@ def generate_step(
     When prompt_cache_manager is provided:
     - Reuses GPU buffers across requests (avoids re-allocation)
     - Detects exact-match inputs → skips entire prefill (ViT + LLM)
+
+    When inputs_embeds is provided:
+    - Skips model.get_input_embeddings() (ViT + embedding)
+    - Uses pre-computed embeddings directly (e.g., ToMe path)
+    - Caller must set position_ids on model.language_model before calling
 
     When early_stop is provided:
     - Checks P(EOS) after each decode step
@@ -553,20 +559,25 @@ def generate_step(
         kwargs = dict(prompt_cache_manager._cached_kwargs)
     else:
         with mx.stream(_generation_stream):
-            # Get input embeddings (ViT forward + embedding projection)
-            embedding_output = model.get_input_embeddings(
-                input_ids, pixel_values, mask=mask, **kwargs
-            )
+            if inputs_embeds is not None:
+                # Pre-computed embeddings (e.g., ToMe path)
+                # Caller already set position_ids and kwargs (deepstack etc.)
+                pass
+            else:
+                # Get input embeddings (ViT forward + embedding projection)
+                embedding_output = model.get_input_embeddings(
+                    input_ids, pixel_values, mask=mask, **kwargs
+                )
 
-            inputs_embeds = embedding_output.inputs_embeds
+                inputs_embeds = embedding_output.inputs_embeds
 
-            kwargs.update(
-                {
-                    k: v
-                    for k, v in embedding_output.to_dict().items()
-                    if k != "inputs_embeds" and v is not None
-                }
-            )
+                kwargs.update(
+                    {
+                        k: v
+                        for k, v in embedding_output.to_dict().items()
+                        if k != "inputs_embeds" and v is not None
+                    }
+                )
 
             if prefix_hit:
                 # Prefix cache hit: skip text prefix prefill, only prefill
