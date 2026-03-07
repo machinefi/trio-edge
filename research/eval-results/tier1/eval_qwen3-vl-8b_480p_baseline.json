@@ -1,0 +1,322 @@
+{
+  "model": "mlx-community/Qwen3-VL-8B-Instruct-4bit",
+  "device": "Apple M3 Ultra",
+  "timestamp": "2026-03-07 09:15:18",
+  "cases": [
+    {
+      "name": "solid",
+      "complexity": "solid",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 323,
+          "std": 0.0,
+          "min": 323,
+          "max": 323
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 204.0402359998552,
+          "std": 322.7517816476758,
+          "min": 17.601833002117928,
+          "max": 576.7218749970198
+        },
+        "decode_ms": {
+          "mean": 619.9448056674252,
+          "std": 3.2784690854457077,
+          "min": 617.830082999717,
+          "max": 623.721417003253
+        },
+        "inference_ms": {
+          "mean": 848.3666663329738,
+          "std": 342.6807198217129,
+          "min": 650.1797499950044,
+          "max": 1244.0600830013864
+        },
+        "latency_ms": {
+          "mean": 848.5356670013667,
+          "std": 342.7151840407304,
+          "min": 650.3249170054914,
+          "max": 1244.2688750015805
+        },
+        "prompt_tps": {
+          "mean": 12353.183273899198,
+          "std": 10213.63824287592,
+          "min": 560.0619882879753,
+          "max": 18350.361576611667
+        },
+        "generation_tps": {
+          "mean": 103.23691579451237,
+          "std": 0.5443242586994894,
+          "min": 102.60991246299662,
+          "max": 103.58835181554169
+        },
+        "peak_memory_gb": {
+          "mean": 6.756391389,
+          "std": 0.0,
+          "min": 6.756391389,
+          "max": 6.756391389
+        },
+        "output_text": "The image provided is entirely blank, displaying a uniform, solid gray color across the entire frame. There are no discernible objects, text, patterns, or any other visual elements present. The screen is devoid of any variation in shade or texture, creating a monochromatic and featureless visual field. This could be interpreted"
+      }
+    },
+    {
+      "name": "gradient",
+      "complexity": "gradient",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 323,
+          "std": 0.0,
+          "min": 323,
+          "max": 323
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 172.03433333634166,
+          "std": 267.6013096645982,
+          "min": 17.51695800339803,
+          "max": 481.03370900207665
+        },
+        "decode_ms": {
+          "mean": 619.4043056699835,
+          "std": 3.8307320469593678,
+          "min": 617.1709590053069,
+          "max": 623.827583003731
+        },
+        "inference_ms": {
+          "mean": 805.6350833333757,
+          "std": 271.68206489619007,
+          "min": 648.570290999487,
+          "max": 1119.3464169991785
+        },
+        "latency_ms": {
+          "mean": 805.7884169975296,
+          "std": 271.6898205067881,
+          "min": 648.7224579977919,
+          "max": 1119.5087089945446
+        },
+        "prompt_tps": {
+          "mean": 12504.285803152947,
+          "std": 10247.535398176302,
+          "min": 671.4706141282203,
+          "max": 18439.274669571212
+        },
+        "generation_tps": {
+          "mean": 103.32770629552792,
+          "std": 0.6367612390561695,
+          "min": 102.59244981095559,
+          "max": 103.69898172647115
+        },
+        "peak_memory_gb": {
+          "mean": 6.834875328,
+          "std": 0.0,
+          "min": 6.834875328,
+          "max": 6.834875328
+        },
+        "output_text": "The image displays a smooth, horizontal color gradient that transitions across the frame. \n\n- On the left side, the color is a bright, vivid green, almost neon in tone.\n- As you move toward the center and right, the green gradually shifts into a deeper, more muted olive or forest green.\n- The gradient"
+      }
+    },
+    {
+      "name": "scene",
+      "complexity": "scene",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 323,
+          "std": 0.0,
+          "min": 323,
+          "max": 323
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 172.40118066547439,
+          "std": 268.1244907429406,
+          "min": 17.540499997267034,
+          "max": 482.00466699927347
+        },
+        "decode_ms": {
+          "mean": 619.268083331311,
+          "std": 2.476356253275061,
+          "min": 617.7624999982072,
+          "max": 622.1261669998057
+        },
+        "inference_ms": {
+          "mean": 805.7711249978942,
+          "std": 270.8633384254817,
+          "min": 649.3699159982498,
+          "max": 1118.5371669998858
+        },
+        "latency_ms": {
+          "mean": 805.9200416658617,
+          "std": 270.8657188878027,
+          "min": 649.5289169979515,
+          "max": 1118.6888329975773
+        },
+        "prompt_tps": {
+          "mean": 12458.749406674971,
+          "std": 10209.439281659175,
+          "min": 670.117992862685,
+          "max": 18414.526384671262
+        },
+        "generation_tps": {
+          "mean": 103.34890887674173,
+          "std": 0.41232829296780793,
+          "min": 102.87302382511743,
+          "max": 103.59968434501242
+        },
+        "peak_memory_gb": {
+          "mean": 6.83487684,
+          "std": 0.0,
+          "min": 6.83487684,
+          "max": 6.83487684
+        },
+        "output_text": "This is a stylized, abstract digital illustration composed of geometric shapes and blocks, set against a plain, light gray background. The composition suggests a minimalist, blocky world or scene, reminiscent of early video game graphics or digital art.\n\nHere is a detailed breakdown of what is visible:\n\n**Foreground and Ground:**\n-"
+      }
+    },
+    {
+      "name": "medium",
+      "complexity": "medium",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 323,
+          "std": 0.0,
+          "min": 323,
+          "max": 323
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 171.77295833729053,
+          "std": 266.5024594251689,
+          "min": 17.78483300586231,
+          "max": 479.50345900608227
+        },
+        "decode_ms": {
+          "mean": 620.2504446676661,
+          "std": 4.282577935321826,
+          "min": 617.2795419988688,
+          "max": 625.1594580025994
+        },
+        "inference_ms": {
+          "mean": 806.3793476637026,
+          "std": 270.7834763590615,
+          "min": 649.415333995421,
+          "max": 1119.052333997388
+        },
+        "latency_ms": {
+          "mean": 806.5281249995072,
+          "std": 270.78992317382415,
+          "min": 649.5553749991814,
+          "max": 1119.208542004344
+        },
+        "prompt_tps": {
+          "mean": 12249.72117199683,
+          "std": 10025.967291415436,
+          "min": 673.6134931529303,
+          "max": 18161.54247237134
+        },
+        "generation_tps": {
+          "mean": 103.18739330480385,
+          "std": 0.7098236648345541,
+          "min": 102.37388106465133,
+          "max": 103.6807404838913
+        },
+        "peak_memory_gb": {
+          "mean": 6.834878352,
+          "std": 0.0,
+          "min": 6.834878352,
+          "max": 6.834878352
+        },
+        "output_text": "The image is a vibrant, abstract composition made up of a grid of colored squares, arranged in horizontal rows. Each row contains 10 equally sized squares, and there are 10 rows in total, forming a 10x10 grid. The colors are rich, varied, and intentionally non-repeating"
+      }
+    },
+    {
+      "name": "high",
+      "complexity": "high",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 323,
+          "std": 0.0,
+          "min": 323,
+          "max": 323
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 171.87645800004248,
+          "std": 266.9569938238597,
+          "min": 17.499458001111634,
+          "max": 480.13170799822547
+        },
+        "decode_ms": {
+          "mean": 619.295208666396,
+          "std": 2.019120401661526,
+          "min": 618.0944579973584,
+          "max": 621.62633400294
+        },
+        "inference_ms": {
+          "mean": 805.3357776661869,
+          "std": 269.0285691993828,
+          "min": 649.9724999957834,
+          "max": 1115.9832080011256
+        },
+        "latency_ms": {
+          "mean": 805.4866109984383,
+          "std": 269.0198034682262,
+          "min": 650.1112919941079,
+          "max": 1116.1239160064724
+        },
+        "prompt_tps": {
+          "mean": 12358.892561004663,
+          "std": 10123.742589065454,
+          "min": 672.7320745939858,
+          "max": 18457.714517757166
+        },
+        "generation_tps": {
+          "mean": 103.3440139675351,
+          "std": 0.33630568743470096,
+          "min": 102.95574125355074,
+          "max": 103.54404439632351
+        },
+        "peak_memory_gb": {
+          "mean": 6.834878352,
+          "std": 0.0,
+          "min": 6.834878352,
+          "max": 6.834878352
+        },
+        "output_text": "The image is completely filled with static, resembling the visual noise of a television screen that is not receiving a signal. There are no discernible shapes, objects, people, or text. The entire frame is composed of a grainy, pixelated texture with a mix of colors\u2014primarily shades of gray, with spe"
+      }
+    }
+  ]
+}

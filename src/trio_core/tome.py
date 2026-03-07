@@ -159,39 +159,61 @@ def compute_k_metric(
     Computes K = RoPE(W_k @ LayerNorm(hidden_states)), matching what the
     actual attention mechanism uses for similarity.
 
+    Supports multiple ViT architectures:
+      - Combined qkv + norm1 (Qwen ViT, InternViT)
+      - Separate q_proj/k_proj/v_proj + layer_norm1 (SigLIP)
+
     Args:
         hidden_states: (N, D) token features
-        block: ViT block with .norm1 and .attn.qkv
+        block: ViT block with norm + attention projections
         rotary_pos_emb: (N, rope_dim) rotary position embeddings.
             If provided, applies RoPE to K for accurate similarity matching.
     """
-    normed = block.norm1(hidden_states)
+    # Find the pre-attention norm (use `is not None` — nn.Module can be falsy)
+    norm = getattr(block, 'norm1', None)
+    if norm is None:
+        norm = getattr(block, 'layer_norm1', None)
+    if norm is None:
+        return hidden_states
+
+    normed = norm(hidden_states)
     seq_len = normed.shape[0]
 
-    # QKV projection: (seq_len, 3 * hidden_dim)
-    qkv = block.attn.qkv(normed)
-    num_heads = block.attn.num_heads
-    head_dim = block.attn.head_dim
+    # Find the attention module
+    attn = getattr(block, 'attn', None)
+    if attn is None:
+        attn = getattr(block, 'self_attn', None)
+    if attn is None:
+        return hidden_states
 
-    # Reshape to (seq_len, 3, num_heads, head_dim), extract K
-    qkv = qkv.reshape(seq_len, 3, num_heads, head_dim)
-    k = qkv[:, 1, :, :]  # (seq_len, num_heads, head_dim)
+    # Extract K based on attention architecture
+    if hasattr(attn, 'qkv'):
+        # Combined QKV projection (Qwen ViT, InternViT)
+        qkv = attn.qkv(normed)
+        num_heads = attn.num_heads
+        head_dim = getattr(attn, 'head_dim', None) or (qkv.shape[-1] // (3 * num_heads))
+
+        qkv = qkv.reshape(seq_len, 3, num_heads, head_dim)
+        k = qkv[:, 1, :, :]  # (seq_len, num_heads, head_dim)
+    elif hasattr(attn, 'k_proj'):
+        # Separate projections (SigLIP, standard ViT)
+        k_out = attn.k_proj(normed)
+        num_heads = getattr(attn, 'num_heads',
+                   getattr(attn, 'n_heads', 1))
+        head_dim = getattr(attn, 'head_dim', k_out.shape[-1] // num_heads)
+        k = k_out.reshape(seq_len, num_heads, head_dim)
+    else:
+        return hidden_states
 
     # Apply rotary position embeddings if available
     if rotary_pos_emb is not None:
-        # rotary_pos_emb: (seq_len, rope_dim) where rope_dim = head_dim // 2 * 2
-        # apply_rotary expects (1, seq_len, num_heads, head_dim) and (seq_len, rope_dim)
         freqs = rotary_pos_emb.reshape(seq_len, -1)
-        # Inline rotary application matching mlx_vlm's apply_rotary_pos_emb_vision
         cos = mx.cos(freqs)
         sin = mx.sin(freqs)
-        # cos/sin: (seq_len, rope_dim) → tile to (seq_len, head_dim)
-        cos = mx.tile(cos, (1, 2))[:, :head_dim]  # (seq_len, head_dim)
+        cos = mx.tile(cos, (1, 2))[:, :head_dim]
         sin = mx.tile(sin, (1, 2))[:, :head_dim]
-        # Expand for num_heads: (seq_len, 1, head_dim)
         cos = mx.expand_dims(cos, axis=1)
         sin = mx.expand_dims(sin, axis=1)
-        # Rotate half
         x1 = k[..., : head_dim // 2]
         x2 = k[..., head_dim // 2 :]
         rotated = mx.concatenate([-x2, x1], axis=-1)

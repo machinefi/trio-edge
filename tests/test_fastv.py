@@ -120,12 +120,12 @@ class TestFastVOriginalTokenCount:
     def test_single_image(self):
         from trio_core.fastv_backend import FastVMLXBackend
         grid_thw = mx.array([[1, 28, 28]], dtype=mx.int32)
-        assert FastVMLXBackend._original_token_count(grid_thw) == 196
+        assert FastVMLXBackend._static_token_count(grid_thw) == 196
 
     def test_video(self):
         from trio_core.fastv_backend import FastVMLXBackend
         grid_thw = mx.array([[4, 14, 14]], dtype=mx.int32)
-        assert FastVMLXBackend._original_token_count(grid_thw) == 196
+        assert FastVMLXBackend._static_token_count(grid_thw) == 196
 
 
 # ---------------------------------------------------------------------------

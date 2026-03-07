@@ -141,7 +141,9 @@ class MLXBackend(BaseBackend):
 
         logger.info("[MLX] Loading model: %s", self.model_name)
         t0 = time.monotonic()
-        self._model, self._processor = load(self.model_name)
+        self._model, self._processor = load(
+            self.model_name, trust_remote_code=True,
+        )
         self._config = load_config(self.model_name)
         self._prompt_cache = None  # Lazily created on first generate
         self._early_stop = None   # Set via set_early_stop() after load

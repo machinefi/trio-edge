@@ -1,0 +1,322 @@
+{
+  "model": "mlx-community/Qwen3.5-4B-MLX-4bit",
+  "device": "Apple M3 Ultra",
+  "timestamp": "2026-03-07 09:16:48",
+  "cases": [
+    {
+      "name": "solid",
+      "complexity": "solid",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 325,
+          "std": 0.0,
+          "min": 325,
+          "max": 325
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 308.42138900091715,
+          "std": 36.79401710594817,
+          "min": 287.16608400281984,
+          "max": 350.90745799971046
+        },
+        "decode_ms": {
+          "mean": 419.19076366806013,
+          "std": 2.086336366756785,
+          "min": 416.8188750045374,
+          "max": 420.7419579979614
+        },
+        "inference_ms": {
+          "mean": 752.2226530005961,
+          "std": 53.07911362337178,
+          "min": 721.436250001716,
+          "max": 813.5129169968423
+        },
+        "latency_ms": {
+          "mean": 752.5377916681464,
+          "std": 53.37113156355779,
+          "min": 721.5827500040177,
+          "max": 814.165249998041
+        },
+        "prompt_tps": {
+          "mean": 1063.1906337943662,
+          "std": 118.6632617694405,
+          "min": 926.1701129198233,
+          "max": 1131.7492493187624
+        },
+        "generation_tps": {
+          "mean": 152.6776472600408,
+          "std": 0.7617787097666315,
+          "min": 152.11223597602333,
+          "max": 153.54391040785595
+        },
+        "peak_memory_gb": {
+          "mean": 4.018669836666667,
+          "std": 0.009692731862499488,
+          "min": 4.007477634,
+          "max": 4.024266686
+        },
+        "output_text": "The user has provided a completely black image and asked for a detailed description.\n\n1.  **Analyze the image:** I am looking at a square or rectangular frame. The entire frame is filled with a solid, uniform black color. There are no gradients, textures, objects, or variations in shade. It is"
+      }
+    },
+    {
+      "name": "gradient",
+      "complexity": "gradient",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 325,
+          "std": 0.0,
+          "min": 325,
+          "max": 325
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 287.2685416659806,
+          "std": 0.6199741206900828,
+          "min": 286.7843339990941,
+          "max": 287.9672909984947
+        },
+        "decode_ms": {
+          "mean": 421.2623193331334,
+          "std": 3.582228616174179,
+          "min": 417.3702080006478,
+          "max": 424.4212080011493
+        },
+        "inference_ms": {
+          "mean": 723.0887086698203,
+          "std": 2.92310172683589,
+          "min": 720.3010840021307,
+          "max": 726.1306670043268
+        },
+        "latency_ms": {
+          "mean": 723.2485413308799,
+          "std": 2.91736309524833,
+          "min": 720.4598329990404,
+          "max": 726.2794579946785
+        },
+        "prompt_tps": {
+          "mean": 1131.3491073260284,
+          "std": 2.4392395985795803,
+          "min": 1128.600400667376,
+          "max": 1133.2557656410431
+        },
+        "generation_tps": {
+          "mean": 151.93168306842134,
+          "std": 1.2952343573972431,
+          "min": 150.7935955920155,
+          "max": 153.34108370260262
+        },
+        "peak_memory_gb": {
+          "mean": 4.024266686,
+          "std": 0.0,
+          "min": 4.024266686,
+          "max": 4.024266686
+        },
+        "output_text": "The user wants a detailed description of the image provided.\n\n1.  **Analyze the image:**\n    *   **Subject:** It's a gradient background.\n    *   **Colors:**\n        *   Top left: Bright, neon green.\n        *   Bottom left: A slightly darker,"
+      }
+    },
+    {
+      "name": "scene",
+      "complexity": "scene",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 325,
+          "std": 0.0,
+          "min": 325,
+          "max": 325
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 288.0379166648102,
+          "std": 0.8457824234288391,
+          "min": 287.06262500054436,
+          "max": 288.56974999507656
+        },
+        "decode_ms": {
+          "mean": 422.1884026677193,
+          "std": 4.529274630733397,
+          "min": 419.4251250009984,
+          "max": 427.4155000020983
+        },
+        "inference_ms": {
+          "mean": 725.5194166694613,
+          "std": 3.5347071182075998,
+          "min": 723.3967080028378,
+          "max": 729.5998330009752
+        },
+        "latency_ms": {
+          "mean": 725.6705140025588,
+          "std": 3.5338700317259875,
+          "min": 723.5481250027078,
+          "max": 729.7499590058578
+        },
+        "prompt_tps": {
+          "mean": 1128.330169341788,
+          "std": 3.3187388529344806,
+          "min": 1126.2441749543914,
+          "max": 1132.1571381832925
+        },
+        "generation_tps": {
+          "mean": 151.6026505611839,
+          "std": 1.6164447774213972,
+          "min": 149.7371995158945,
+          "max": 152.58980968259272
+        },
+        "peak_memory_gb": {
+          "mean": 4.024266686,
+          "std": 0.0,
+          "min": 4.024266686,
+          "max": 4.024266686
+        },
+        "output_text": "The user wants a detailed description of the provided image.\n\n1.  **Analyze the overall composition:**\n    *   The image is a simple 2D graphic, likely a pixel art or vector illustration.\n    *   It features a horizontal layout with a distinct separation between a top section (background)"
+      }
+    },
+    {
+      "name": "medium",
+      "complexity": "medium",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 325,
+          "std": 0.0,
+          "min": 325,
+          "max": 325
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 287.3018613293728,
+          "std": 0.44503985388429246,
+          "min": 286.82041699357796,
+          "max": 287.6982079978916
+        },
+        "decode_ms": {
+          "mean": 420.44195866522693,
+          "std": 2.5170847474800406,
+          "min": 418.3519169964711,
+          "max": 423.2361250033137
+        },
+        "inference_ms": {
+          "mean": 721.624291332167,
+          "std": 2.263911505956801,
+          "min": 720.1900830041268,
+          "max": 724.2341659948579
+        },
+        "latency_ms": {
+          "mean": 721.7750696678801,
+          "std": 2.2629691921096637,
+          "min": 720.3369170019869,
+          "max": 724.3835420013056
+        },
+        "prompt_tps": {
+          "mean": 1131.216201008431,
+          "std": 1.753042406676715,
+          "min": 1129.6559761761944,
+          "max": 1133.113198169839
+        },
+        "generation_tps": {
+          "mean": 152.2244020197592,
+          "std": 0.909234509827181,
+          "min": 151.21582544377307,
+          "max": 152.9812519074458
+        },
+        "peak_memory_gb": {
+          "mean": 4.024266686,
+          "std": 0.0,
+          "min": 4.024266686,
+          "max": 4.024266686
+        },
+        "output_text": "The user wants a detailed description of the image provided.\n\n1.  **Analyze the Image:**\n    *   **Structure:** It's a grid of colored squares. It looks like a pixel art or a mosaic.\n    *   **Dimensions:** Let's count the grid.\n        *   Horizontal"
+      }
+    },
+    {
+      "name": "high",
+      "complexity": "high",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 325,
+          "std": 0.0,
+          "min": 325,
+          "max": 325
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 287.3098749963295,
+          "std": 0.5448161577394791,
+          "min": 286.7638339957921,
+          "max": 287.8534579940606
+        },
+        "decode_ms": {
+          "mean": 421.047194332156,
+          "std": 4.396946944136105,
+          "min": 416.0912500010454,
+          "max": 424.4802079992951
+        },
+        "inference_ms": {
+          "mean": 722.5437633314868,
+          "std": 3.206686576432361,
+          "min": 718.8704159998451,
+          "max": 724.7838330004015
+        },
+        "latency_ms": {
+          "mean": 722.6904859999195,
+          "std": 3.2055588448857284,
+          "min": 719.0187910018722,
+          "max": 724.9320420014556
+        },
+        "prompt_tps": {
+          "mean": 1131.1855504893936,
+          "std": 2.1450609098486537,
+          "min": 1129.0467110063548,
+          "max": 1133.336779158731
+        },
+        "generation_tps": {
+          "mean": 152.01306778058216,
+          "std": 1.5951030172736442,
+          "min": 150.77263625941845,
+          "max": 153.81241494465266
+        },
+        "peak_memory_gb": {
+          "mean": 4.024266686,
+          "std": 0.0,
+          "min": 4.024266686,
+          "max": 4.024266686
+        },
+        "output_text": "The user wants a detailed description of the image.\n\n1.  **Analyze the image:**\n    *   **Visual Content:** The image is a solid, uniform color. It looks like a flat, greyish-blue or slate color.\n    *   **Texture:** There is a very subtle, grain"
+      }
+    }
+  ]
+}

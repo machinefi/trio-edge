@@ -1,0 +1,8 @@
+{
+  "fastvlm-0.5b": {
+    "model": "fastvlm-0.5b",
+    "hf_id": "InsightKeeper/FastVLM-0.5B-MLX-4bit",
+    "pope": null,
+    "eval": null
+  }
+}

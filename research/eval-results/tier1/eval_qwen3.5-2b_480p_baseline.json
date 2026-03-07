@@ -1,0 +1,322 @@
+{
+  "model": "mlx-community/Qwen3.5-2B-4bit",
+  "device": "Apple M3 Ultra",
+  "timestamp": "2026-03-07 09:16:11",
+  "cases": [
+    {
+      "name": "solid",
+      "complexity": "solid",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 327,
+          "std": 0.0,
+          "min": 327,
+          "max": 327
+        },
+        "completion_tokens": {
+          "mean": 47.333333333333336,
+          "std": 28.867513459481287,
+          "min": 14,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 194.64513933538305,
+          "std": 26.132434858303064,
+          "min": 179.11770900536794,
+          "max": 224.8159590017167
+        },
+        "decode_ms": {
+          "mean": 189.9903473337569,
+          "std": 112.16185972613607,
+          "min": 60.4771670041373,
+          "max": 254.93366699811304
+        },
+        "inference_ms": {
+          "mean": 410.0392916686057,
+          "std": 65.68833549860366,
+          "min": 334.19175000017276,
+          "max": 448.52895800431725
+        },
+        "latency_ms": {
+          "mean": 410.345763998824,
+          "std": 65.41570617747345,
+          "min": 334.81304199813167,
+          "max": 448.6782919993857
+        },
+        "prompt_tps": {
+          "mean": 1698.9290706661504,
+          "std": 211.70927209741657,
+          "min": 1454.5230750166763,
+          "max": 1825.6151321709915
+        },
+        "generation_tps": {
+          "mean": 244.65067367180833,
+          "std": 11.396952063201866,
+          "min": 231.49232501321114,
+          "max": 251.4139994741295
+        },
+        "peak_memory_gb": {
+          "mean": 2.6986486153333336,
+          "std": 0.0036386554613709603,
+          "min": 2.694447058,
+          "max": 2.700750134
+        },
+        "output_text": "This image is a simple, minimalist composition. Here is a detailed description of what is visible:\n\n-   **Overall Composition**: The image consists of a single, large, solid gray rectangle that fills the entire frame. There are no other objects, shapes, or colors present.\n\n-   **Color and Texture**:"
+      }
+    },
+    {
+      "name": "gradient",
+      "complexity": "gradient",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 327,
+          "std": 0.0,
+          "min": 327,
+          "max": 327
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 180.52562499845712,
+          "std": 0.4360338975603591,
+          "min": 180.17029199836543,
+          "max": 181.01220799871953
+        },
+        "decode_ms": {
+          "mean": 255.42795832977086,
+          "std": 1.2840489030184359,
+          "min": 254.0701249963604,
+          "max": 256.62262499827193
+        },
+        "inference_ms": {
+          "mean": 448.91216633307823,
+          "std": 1.3369701105779186,
+          "min": 447.38029099971754,
+          "max": 449.8439579983824
+        },
+        "latency_ms": {
+          "mean": 449.0586249982395,
+          "std": 1.335665070908265,
+          "min": 447.5278329991852,
+          "max": 449.98683399899164
+        },
+        "prompt_tps": {
+          "mean": 1811.384231741331,
+          "std": 4.370811785606388,
+          "min": 1806.5079897943301,
+          "max": 1814.9496033617277
+        },
+        "generation_tps": {
+          "mean": 250.56411091851865,
+          "std": 1.260800917481866,
+          "min": 249.3934429999341,
+          "max": 251.89895900164103
+        },
+        "peak_memory_gb": {
+          "mean": 2.700750134,
+          "std": 0.0,
+          "min": 2.700750134,
+          "max": 2.700750134
+        },
+        "output_text": "This image is a digital graphic featuring a vibrant, abstract gradient. Here is a detailed description of its composition and visual elements:\n\n-   **Overall Composition:** The image is a rectangular canvas, likely representing a screen or a piece of paper. It is filled entirely with a smooth color gradient, creating a seamless and continuous"
+      }
+    },
+    {
+      "name": "scene",
+      "complexity": "scene",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 327,
+          "std": 0.0,
+          "min": 327,
+          "max": 327
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 179.9672780010345,
+          "std": 0.2929503104555505,
+          "min": 179.7108329992625,
+          "max": 180.2865420031594
+        },
+        "decode_ms": {
+          "mean": 255.67963900296795,
+          "std": 1.4950542120474313,
+          "min": 253.9565000042785,
+          "max": 256.6322089987807
+        },
+        "inference_ms": {
+          "mean": 448.4538333344972,
+          "std": 1.4368301972156652,
+          "min": 446.8139579985291,
+          "max": 449.49191700288793
+        },
+        "latency_ms": {
+          "mean": 448.598055333908,
+          "std": 1.4382678814016168,
+          "min": 446.9561660007457,
+          "max": 449.63524999911897
+        },
+        "prompt_tps": {
+          "mean": 1817.0001846179866,
+          "std": 2.9562347538286766,
+          "min": 1813.779311349094,
+          "max": 1819.5898073731703
+        },
+        "generation_tps": {
+          "mean": 250.31896944036885,
+          "std": 1.4685845873447536,
+          "min": 249.38412933313478,
+          "max": 252.01166341055168
+        },
+        "peak_memory_gb": {
+          "mean": 2.700750134,
+          "std": 0.0,
+          "min": 2.700750134,
+          "max": 2.700750134
+        },
+        "output_text": "Here is a detailed description of the image, broken down by its components:\n\n### Overall Composition\nThe image is a minimalist geometric composition set against a light gray background. It features five distinct shapes arranged in a loose diagonal line from the bottom left to the top right.\n\n### Detailed Element Analysis\n\n1.  **"
+      }
+    },
+    {
+      "name": "medium",
+      "complexity": "medium",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 327,
+          "std": 0.0,
+          "min": 327,
+          "max": 327
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 179.84573600066747,
+          "std": 0.2210144189887835,
+          "min": 179.59870800405042,
+          "max": 180.02474999957485
+        },
+        "decode_ms": {
+          "mean": 256.3155556684554,
+          "std": 1.9658685230545085,
+          "min": 254.046833004395,
+          "max": 257.51558400224894
+        },
+        "inference_ms": {
+          "mean": 449.0667916664582,
+          "std": 1.5391353059963133,
+          "min": 447.28966699767625,
+          "max": 449.9729160015704
+        },
+        "latency_ms": {
+          "mean": 449.2128749989206,
+          "std": 1.5372562024842749,
+          "min": 447.43791699875146,
+          "max": 450.11766599782277
+        },
+        "prompt_tps": {
+          "mean": 1818.2267573853137,
+          "std": 2.2355879071196485,
+          "min": 1816.4169093459218,
+          "max": 1820.7257927079593
+        },
+        "generation_tps": {
+          "mean": 249.7020553032833,
+          "std": 1.9236206532927043,
+          "min": 248.5286482679086,
+          "max": 251.92205406824655
+        },
+        "peak_memory_gb": {
+          "mean": 2.700750134,
+          "std": 0.0,
+          "min": 2.700750134,
+          "max": 2.700750134
+        },
+        "output_text": "This image is a vibrant, abstract composition consisting of 40 distinct squares arranged in a grid. The overall structure is a 8x5 grid, creating a total of 40 squares.\n\nEach square is filled with a solid, flat color. The colors range from bright, saturated hues to more muted tones"
+      }
+    },
+    {
+      "name": "high",
+      "complexity": "high",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 327,
+          "std": 0.0,
+          "min": 327,
+          "max": 327
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 179.80305533274077,
+          "std": 0.2377478099422211,
+          "min": 179.61920800007647,
+          "max": 180.07154099905165
+        },
+        "decode_ms": {
+          "mean": 258.0228196675307,
+          "std": 0.19086534219045787,
+          "min": 257.83316700108116,
+          "max": 258.2148750007036
+        },
+        "inference_ms": {
+          "mean": 450.6767359974522,
+          "std": 0.2281090833462525,
+          "min": 450.4257079970557,
+          "max": 450.8713329996681
+        },
+        "latency_ms": {
+          "mean": 450.82562499980367,
+          "std": 0.226989156710652,
+          "min": 450.57762500073295,
+          "max": 451.0230829982902
+        },
+        "prompt_tps": {
+          "mean": 1818.658644649021,
+          "std": 2.4032728248663946,
+          "min": 1815.9449193680314,
+          "max": 1820.5179927074435
+        },
+        "generation_tps": {
+          "mean": 248.0401672569626,
+          "std": 0.18347843515873186,
+          "min": 247.85558926388578,
+          "max": 248.22252600159712
+        },
+        "peak_memory_gb": {
+          "mean": 2.700750134,
+          "std": 0.0,
+          "min": 2.700750134,
+          "max": 2.700750134
+        },
+        "output_text": "The image you've provided is a blank, white screen with no discernible content. It appears to be a uniform field of white, devoid of any objects, text, or graphical elements. There are no visible details to describe beyond this basic observation. If you have any specific questions or need further assistance, feel free to"
+      }
+    }
+  ]
+}

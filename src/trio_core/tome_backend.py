@@ -50,7 +50,7 @@ class ToMeMLXBackend(MLXBackend):
         self.tome_adaptive = adaptive
         self.tome_content_aware = content_aware
         self._native_vision = None
-        self._is_qwen3: bool = False
+        self._adapter = None
 
     @property
     def backend_name(self) -> str:
@@ -59,9 +59,17 @@ class ToMeMLXBackend(MLXBackend):
     def load(self) -> None:
         super().load()
 
-        # Auto-detect model type from vision_tower
-        model_type = getattr(self._model.vision_tower, 'model_type', '')
-        self._is_qwen3 = model_type in ('qwen3_vl', 'qwen3_5', 'qwen3_5_moe')
+        from trio_core.model_adapter import get_adapter
+        self._adapter = get_adapter(self._model)
+
+        if not self._adapter.supports_tome:
+            logger.warning(
+                "[ToMe] Model family '%s' does not support in-ViT ToMe. "
+                "ToMe will be disabled. Consider using FastV instead.",
+                self._adapter.family,
+            )
+            self._native_vision = None
+            return
 
         self._native_vision = create_tome_vision(
             self._model.vision_tower,
@@ -72,17 +80,6 @@ class ToMeMLXBackend(MLXBackend):
             content_aware=self.tome_content_aware,
         )
         self._model.vision_tower = self._native_vision
-
-    def _get_visual_token_ids(self, model):
-        """Get visual token IDs, handling Qwen2.5 vs Qwen3 config differences."""
-        if self._is_qwen3:
-            return (
-                getattr(model.config, 'video_token_index', None) or
-                getattr(model.config, 'video_token_id', None),
-                getattr(model.config, 'image_token_index', None) or
-                getattr(model.config, 'image_token_id', None),
-            )
-        return model.config.video_token_id, model.config.image_token_id
 
     def _prepare_tome_embeds(self, input_ids, pixel_values, kwargs):
         """Run ToMe vision encoding and build compressed embeddings.
@@ -97,23 +94,20 @@ class ToMeMLXBackend(MLXBackend):
         grid_thw = video_grid_thw if video_grid_thw is not None else image_grid_thw
 
         model = self._model
+        adapter = self._adapter
 
         # Step 1: Run vision encoder (with ToMe wrapping)
-        dtype = model.vision_tower.patch_embed.proj.weight.dtype
-        pv = pixel_values.astype(dtype)
+        vision_out = adapter.run_vision_encoder(pixel_values, grid_thw)
+        hidden_states = vision_out.hidden_states
+        deepstack_embeds = vision_out.deepstack_embeds
 
-        vision_output = model.vision_tower(pv, grid_thw, output_hidden_states=False)
-
-        # Qwen3-VL returns (hidden_states, deepstack_feature_lists) tuple
-        deepstack_embeds = None
-        if isinstance(vision_output, tuple):
-            hidden_states = vision_output[0]
-            if len(vision_output) > 1:
-                deepstack_embeds = vision_output[1]
+        if grid_thw is not None:
+            original_count = adapter.original_token_count(grid_thw)
         else:
-            hidden_states = vision_output
-
-        original_count = self._original_token_count(grid_thw)
+            # Standard ViT (no grid_thw) — estimate from hidden_states + merge log
+            merge_log = self._native_vision._merge_log if self._native_vision else []
+            total_merged = sum(e.get("merged", 0) for e in merge_log)
+            original_count = hidden_states.shape[0] + total_merged
         compressed_count = hidden_states.shape[0]
 
         logger.info(
@@ -124,7 +118,7 @@ class ToMeMLXBackend(MLXBackend):
         )
 
         # Step 2: Build compressed input sequence
-        video_token_id, image_token_id = self._get_visual_token_ids(model)
+        video_token_id, image_token_id = adapter.get_visual_token_ids()
 
         n_video = mx.sum(input_ids == video_token_id).item()
         visual_token_id = video_token_id if n_video > 0 else image_token_id
@@ -148,79 +142,65 @@ class ToMeMLXBackend(MLXBackend):
         text_embeds = model.language_model.model.embed_tokens(new_input_ids)
 
         # Merge compressed visual tokens at placeholder positions
-        image_mask = None
-        if self._is_qwen3:
-            final_embeds, image_mask = model.merge_input_ids_with_image_features(
-                hidden_states, text_embeds, new_input_ids,
-                image_token_id, video_token_id,
-            )
-        else:
-            final_embeds = model.merge_input_ids_with_image_features(
-                image_token_id, video_token_id,
-                hidden_states, text_embeds, new_input_ids,
+        merge_result = adapter.merge_visual_features(hidden_states, text_embeds, new_input_ids)
+        final_embeds = merge_result.embeds
+        image_mask = merge_result.image_mask
+
+        # Compute position IDs for compressed sequence (MRoPE models only)
+        if adapter.uses_mrope:
+            compressed_grid = CompressedMLXBackend._compute_compressed_grid(
+                grid_thw, original_count, compressed_count,
+                spatial_merge_size=adapter.spatial_merge_size,
             )
 
-        # Compute position IDs for compressed sequence
-        compressed_grid = CompressedMLXBackend._compute_compressed_grid(
-            grid_thw, original_count, compressed_count
-        )
-
-        # Align hidden_states and input_ids to match grid token count
-        grid_count = self._original_token_count(compressed_grid)
-        if grid_count != compressed_count:
-            logger.debug(
-                "Grid alignment: compressed=%d, grid=%d, adjusting",
-                compressed_count, grid_count,
-            )
-            if grid_count > compressed_count:
-                pad = mx.repeat(hidden_states[-1:], grid_count - compressed_count, axis=0)
-                hidden_states = mx.concatenate([hidden_states, pad])
-            else:
-                hidden_states = hidden_states[:grid_count]
-
-            # Rebuild with adjusted counts
-            ids_list = input_ids[0].tolist()
-            new_ids = []
-            vis_count = 0
-            for tid in ids_list:
-                if tid == visual_token_id:
-                    vis_count += 1
-                    if vis_count <= grid_count:
-                        new_ids.append(tid)
+            # Align hidden_states and input_ids to match grid token count
+            grid_count = adapter.original_token_count(compressed_grid)
+            if grid_count != compressed_count:
+                logger.debug(
+                    "Grid alignment: compressed=%d, grid=%d, adjusting",
+                    compressed_count, grid_count,
+                )
+                if grid_count > compressed_count:
+                    pad = mx.repeat(hidden_states[-1:], grid_count - compressed_count, axis=0)
+                    hidden_states = mx.concatenate([hidden_states, pad])
                 else:
-                    new_ids.append(tid)
-            new_input_ids = mx.array([new_ids], dtype=input_ids.dtype)
-            new_mask = mx.ones(new_input_ids.shape, dtype=mx.int32)
+                    hidden_states = hidden_states[:grid_count]
 
-            text_embeds = model.language_model.model.embed_tokens(new_input_ids)
-            if self._is_qwen3:
-                final_embeds, image_mask = model.merge_input_ids_with_image_features(
-                    hidden_states, text_embeds, new_input_ids,
-                    image_token_id, video_token_id,
-                )
+                # Rebuild with adjusted counts
+                ids_list = input_ids[0].tolist()
+                new_ids = []
+                vis_count = 0
+                for tid in ids_list:
+                    if tid == visual_token_id:
+                        vis_count += 1
+                        if vis_count <= grid_count:
+                            new_ids.append(tid)
+                    else:
+                        new_ids.append(tid)
+                new_input_ids = mx.array([new_ids], dtype=input_ids.dtype)
+                new_mask = mx.ones(new_input_ids.shape, dtype=mx.int32)
+
+                text_embeds = model.language_model.model.embed_tokens(new_input_ids)
+                merge_result = adapter.merge_visual_features(hidden_states, text_embeds, new_input_ids)
+                final_embeds = merge_result.embeds
+                image_mask = merge_result.image_mask
+                compressed_count = grid_count
+
+            kw_grid = {}
+            if n_video > 0:
+                kw_grid["video_grid_thw"] = compressed_grid
             else:
-                final_embeds = model.merge_input_ids_with_image_features(
-                    image_token_id, video_token_id,
-                    hidden_states, text_embeds, new_input_ids,
-                )
+                kw_grid["image_grid_thw"] = compressed_grid
 
-            compressed_count = grid_count
-
-        kw_grid = {}
-        if n_video > 0:
-            kw_grid["video_grid_thw"] = compressed_grid
-        else:
-            kw_grid["image_grid_thw"] = compressed_grid
-
-        position_ids, rope_deltas = model.language_model.get_rope_index(
-            new_input_ids, attention_mask=new_mask, **kw_grid,
-        )
-        model.language_model._position_ids = position_ids
-        model.language_model._rope_deltas = rope_deltas
+            position_ids, rope_deltas = adapter.compute_position_ids(
+                new_input_ids, attention_mask=new_mask, **kw_grid,
+            )
+            model.language_model._position_ids = position_ids
+            model.language_model._rope_deltas = rope_deltas
 
         # Build extra kwargs for Qwen3 deepstack
         extra_kwargs = {}
-        if self._is_qwen3 and deepstack_embeds is not None:
+        if adapter.has_deepstack and deepstack_embeds is not None:
             visual_pos_masks = image_mask[..., 0] if image_mask is not None else None
             extra_kwargs["visual_pos_masks"] = visual_pos_masks
             mx.eval(deepstack_embeds)
@@ -367,10 +347,15 @@ class ToMeMLXBackend(MLXBackend):
                     completion_tokens=n_tokens,
                 )
 
-    @staticmethod
-    def _original_token_count(grid_thw) -> int:
+    def _original_token_count(self, grid_thw) -> int:
         """Compute expected token count without ToMe (after PatchMerger)."""
-        spatial_merge_size = 2
+        if self._adapter is not None:
+            return self._adapter.original_token_count(grid_thw)
+        return self._static_token_count(grid_thw)
+
+    @staticmethod
+    def _static_token_count(grid_thw, spatial_merge_size: int = 2) -> int:
+        """Static helper for token count computation."""
         total = 0
         for i in range(grid_thw.shape[0]):
             t = grid_thw[i, 0].item()

@@ -66,7 +66,7 @@ class FastVMLXBackend(MLXBackend):
         self.tome_metric = tome_metric
         self.tome_min_keep_ratio = tome_min_keep_ratio
         self.tome_adaptive = tome_adaptive
-        self._is_qwen3: bool = False
+        self._adapter = None
         self._last_prune_log: dict | None = None
 
     @property
@@ -75,17 +75,17 @@ class FastVMLXBackend(MLXBackend):
 
     def load(self) -> None:
         super().load()
-        model_type = getattr(self._model.vision_tower, 'model_type', '')
-        self._is_qwen3 = model_type in ('qwen3_vl', 'qwen3_5', 'qwen3_5_moe')
+
+        from trio_core.model_adapter import get_adapter
+        self._adapter = get_adapter(self._model)
 
         # Optionally wrap vision tower with ToMe (compound: ToMe + FastV)
-        if self.tome_r > 0:
-            from trio_core.tome_vision import ToMeQwen25VisionWrapper, ToMeQwen3VisionWrapper
+        if self.tome_r > 0 and self._adapter.supports_tome:
+            from trio_core.native_vision import create_tome_vision
 
-            wrapper_cls = ToMeQwen3VisionWrapper if self._is_qwen3 else ToMeQwen25VisionWrapper
-            self._tome_wrapper = wrapper_cls(
+            self._tome_wrapper = create_tome_vision(
                 self._model.vision_tower,
-                r=self.tome_r,
+                tome_r=self.tome_r,
                 metric=self.tome_metric,
                 min_keep_ratio=self.tome_min_keep_ratio,
                 adaptive=self.tome_adaptive,
@@ -97,22 +97,16 @@ class FastVMLXBackend(MLXBackend):
             )
         else:
             self._tome_wrapper = None
+            if self.tome_r > 0 and not self._adapter.supports_tome:
+                logger.warning(
+                    "[FastV] Model family '%s' does not support ToMe — "
+                    "running FastV only.", self._adapter.family,
+                )
 
         logger.info(
             "[FastV] Loaded model with prune_ratio=%.2f, prune_after_layer=%d",
             self.prune_ratio, self.prune_after_layer,
         )
-
-    def _get_visual_token_ids(self, model):
-        """Get visual token IDs, handling Qwen2.5 vs Qwen3 config differences."""
-        if self._is_qwen3:
-            return (
-                getattr(model.config, 'video_token_index', None) or
-                getattr(model.config, 'video_token_id', None),
-                getattr(model.config, 'image_token_index', None) or
-                getattr(model.config, 'image_token_id', None),
-            )
-        return model.config.video_token_id, model.config.image_token_id
 
     def generate(
         self, frames: np.ndarray, prompt: str, *,
@@ -137,26 +131,18 @@ class FastVMLXBackend(MLXBackend):
         grid_thw = video_grid_thw if video_grid_thw is not None else image_grid_thw
 
         model = self._model
+        adapter = self._adapter
 
-        # Step 1: Run vision encoder normally (no ToMe)
-        dtype = model.vision_tower.patch_embed.proj.weight.dtype
-        pv = pixel_values.astype(dtype)
+        # Step 1: Run vision encoder
+        vision_out = adapter.run_vision_encoder(pixel_values, grid_thw)
+        hidden_states = vision_out.hidden_states
+        deepstack_embeds = vision_out.deepstack_embeds
 
-        vision_output = model.vision_tower(pv, grid_thw, output_hidden_states=False)
-
-        deepstack_embeds = None
-        if isinstance(vision_output, tuple):
-            hidden_states = vision_output[0]
-            if len(vision_output) > 1:
-                deepstack_embeds = vision_output[1]
-        else:
-            hidden_states = vision_output
-
-        original_count = self._original_token_count(grid_thw)
+        original_count = adapter.original_token_count(grid_thw)
         compressed_count = hidden_states.shape[0]
 
         # Step 2: Build input sequence (trim if ToMe compressed visual tokens)
-        video_token_id, image_token_id = self._get_visual_token_ids(model)
+        video_token_id, image_token_id = adapter.get_visual_token_ids()
 
         n_video = mx.sum(input_ids == video_token_id).item()
         visual_token_id = video_token_id if n_video > 0 else image_token_id
@@ -174,7 +160,8 @@ class FastVMLXBackend(MLXBackend):
 
             # Compute compressed grid for position IDs
             grid_thw = CompressedMLXBackend._compute_compressed_grid(
-                grid_thw, original_count, compressed_count
+                grid_thw, original_count, compressed_count,
+                spatial_merge_size=adapter.spatial_merge_size,
             )
             # Align to grid (rounding may change count)
             grid_count = self._original_token_count(grid_thw)
@@ -203,34 +190,29 @@ class FastVMLXBackend(MLXBackend):
 
         text_embeds = model.language_model.model.embed_tokens(input_ids)
 
-        if self._is_qwen3:
-            final_embeds, image_mask = model.merge_input_ids_with_image_features(
-                hidden_states, text_embeds, input_ids,
-                image_token_id, video_token_id,
-            )
-        else:
-            final_embeds = model.merge_input_ids_with_image_features(
-                image_token_id, video_token_id,
-                hidden_states, text_embeds, input_ids,
-            )
+        merge_result = adapter.merge_visual_features(hidden_states, text_embeds, input_ids)
+        final_embeds = merge_result.embeds
 
         # Build visual_mask: True for visual token positions
         visual_mask = (input_ids[0] == visual_token_id)
 
         # Step 3: Compute position IDs for sequence (uses compressed grid if ToMe active)
-        new_mask = mx.ones(input_ids.shape, dtype=mx.int32)
-        kw_grid = {}
-        if n_video > 0:
-            kw_grid["video_grid_thw"] = grid_thw
-        else:
-            kw_grid["image_grid_thw"] = grid_thw
+        position_ids = None
+        rope_deltas = None
+        if adapter.uses_mrope:
+            new_mask = mx.ones(input_ids.shape, dtype=mx.int32)
+            kw_grid = {}
+            if n_video > 0:
+                kw_grid["video_grid_thw"] = grid_thw
+            else:
+                kw_grid["image_grid_thw"] = grid_thw
 
-        position_ids, rope_deltas = model.language_model.get_rope_index(
-            input_ids, attention_mask=new_mask, **kw_grid,
-        )
+            position_ids, rope_deltas = adapter.compute_position_ids(
+                input_ids, attention_mask=new_mask, **kw_grid,
+            )
 
         # Warn if Qwen3 deepstack is present — mid-stream doesn't support it yet
-        if self._is_qwen3 and deepstack_embeds is not None:
+        if adapter.has_deepstack and deepstack_embeds is not None:
             logger.warning(
                 "[FastV] Qwen3 deepstack_visual_embeds detected but not supported "
                 "in mid-stream mode — deepstack will be ignored. Quality may degrade."
@@ -274,12 +256,13 @@ class FastVMLXBackend(MLXBackend):
         # Step 8: Prune hidden state to match
         h = h[:, all_keep, :]
 
-        # Step 9: Set position info for AR decode
-        position_ids = position_ids[:, :, all_keep]
-        max_pos = position_ids.max()
-        rope_deltas = max_pos + 1 - pruned_ids.shape[1]
-        model.language_model._position_ids = position_ids
-        model.language_model._rope_deltas = rope_deltas
+        # Step 9: Set position info for AR decode (MRoPE models only)
+        if position_ids is not None:
+            position_ids = position_ids[:, :, all_keep]
+            max_pos = position_ids.max()
+            rope_deltas = max_pos + 1 - pruned_ids.shape[1]
+            model.language_model._position_ids = position_ids
+            model.language_model._rope_deltas = rope_deltas
 
         # Step 10: Run remaining layers (target_layer+1 → end) with pruned cache + h
         start_layer = target_layer + 1
@@ -420,13 +403,8 @@ class FastVMLXBackend(MLXBackend):
                 k = k.reshape(B, L, n_kv, head_dim).transpose(0, 2, 1, 3)
                 v = v.reshape(B, L, n_kv, head_dim).transpose(0, 2, 1, 3)
 
-                # Apply MRoPE (same as Attention.__call__)
-                cos, sin = attn.rotary_emb(v, position_ids)
-                if self._is_qwen3:
-                    from mlx_vlm.models.qwen3_vl.language import apply_multimodal_rotary_pos_emb
-                else:
-                    from mlx_vlm.models.qwen2_5_vl.language import apply_multimodal_rotary_pos_emb
-                q, k = apply_multimodal_rotary_pos_emb(q, k, cos, sin, unqueeze_dim=1)
+                # Apply RoPE via adapter (handles MRoPE vs standard)
+                q, k = self._adapter.apply_rope_at_layer(q, k, v, position_ids, layer)
 
                 # Extract importance from post-RoPE Q/K (before cache update)
                 importance = self._score_visual(q, k, visual_mask, n_heads, n_kv, head_dim)
@@ -576,10 +554,15 @@ class FastVMLXBackend(MLXBackend):
         pruned_ids = input_ids[:, all_keep]
         return pruned_embeds, pruned_ids, all_keep
 
-    @staticmethod
-    def _original_token_count(grid_thw) -> int:
+    def _original_token_count(self, grid_thw) -> int:
         """Compute expected token count without pruning (after PatchMerger)."""
-        spatial_merge_size = 2
+        if self._adapter is not None:
+            return self._adapter.original_token_count(grid_thw)
+        return self._static_token_count(grid_thw)
+
+    @staticmethod
+    def _static_token_count(grid_thw, spatial_merge_size: int = 2) -> int:
+        """Static helper for token count computation."""
         total = 0
         for i in range(grid_thw.shape[0]):
             t = grid_thw[i, 0].item()

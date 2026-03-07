@@ -70,7 +70,7 @@ class TestOriginalTokenCount:
     def _count(self, grid_thw_list):
         from trio_core.tome_backend import ToMeMLXBackend
         grid_thw = mx.array(grid_thw_list, dtype=mx.int32)
-        return ToMeMLXBackend._original_token_count(grid_thw)
+        return ToMeMLXBackend._static_token_count(grid_thw)
 
     def test_single_image(self):
         # t=1, h=28, w=28 → spatial_merge=2 → 1 * 14 * 14 = 196
@@ -98,59 +98,51 @@ class TestOriginalTokenCount:
 # ---------------------------------------------------------------------------
 
 class TestGetVisualTokenIds:
-    """Test Qwen2.5 vs Qwen3 config attribute differences."""
-
-    def _make_backend_with_qwen_flag(self, is_qwen3):
-        from unittest.mock import patch
-        from trio_core.tome_backend import ToMeMLXBackend
-
-        with patch.object(ToMeMLXBackend.__bases__[0], "__init__", return_value=None):
-            backend = ToMeMLXBackend("fake-model")
-        backend._is_qwen3 = is_qwen3
-        return backend
+    """Test visual token ID retrieval via ModelAdapter."""
 
     def test_qwen25_uses_direct_token_id(self):
         """Qwen2.5 reads config.video_token_id and config.image_token_id directly."""
         from unittest.mock import MagicMock
+        from trio_core.model_adapter import Qwen25VLAdapter
 
-        backend = self._make_backend_with_qwen_flag(is_qwen3=False)
         model = MagicMock()
         model.config.video_token_id = 151652
         model.config.image_token_id = 151655
 
-        vid_id, img_id = backend._get_visual_token_ids(model)
+        adapter = Qwen25VLAdapter(model)
+        vid_id, img_id = adapter.get_visual_token_ids()
         assert vid_id == 151652
         assert img_id == 151655
 
     def test_qwen3_uses_token_index_fallback(self):
         """Qwen3 tries video_token_index first, falls back to video_token_id."""
         from unittest.mock import MagicMock
+        from trio_core.model_adapter import Qwen3VLAdapter
 
-        backend = self._make_backend_with_qwen_flag(is_qwen3=True)
         model = MagicMock()
-        # Qwen3 has token_index attributes
         model.config.video_token_index = 151900
         model.config.image_token_index = 151901
         model.config.video_token_id = None
         model.config.image_token_id = None
 
-        vid_id, img_id = backend._get_visual_token_ids(model)
+        adapter = Qwen3VLAdapter(model)
+        vid_id, img_id = adapter.get_visual_token_ids()
         assert vid_id == 151900
         assert img_id == 151901
 
     def test_qwen3_fallback_to_token_id(self):
         """Qwen3 falls back to video_token_id when video_token_index is missing."""
         from unittest.mock import MagicMock
+        from trio_core.model_adapter import Qwen3VLAdapter
 
-        backend = self._make_backend_with_qwen_flag(is_qwen3=True)
         model = MagicMock()
-        # No token_index attributes
         model.config.video_token_index = None
         model.config.image_token_index = None
         model.config.video_token_id = 151652
         model.config.image_token_id = 151655
 
-        vid_id, img_id = backend._get_visual_token_ids(model)
+        adapter = Qwen3VLAdapter(model)
+        vid_id, img_id = adapter.get_visual_token_ids()
         assert vid_id == 151652
         assert img_id == 151655
 

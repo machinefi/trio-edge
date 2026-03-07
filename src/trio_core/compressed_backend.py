@@ -37,6 +37,12 @@ class CompressedMLXBackend(MLXBackend):
         super().__init__(model_name, **kwargs)
         self.compressor = compressor
         self.last_compression: CompressionResult | None = None
+        self._adapter = None
+
+    def load(self) -> None:
+        super().load()
+        from trio_core.model_adapter import get_adapter
+        self._adapter = get_adapter(self._model)
 
     @property
     def backend_name(self) -> str:
@@ -60,14 +66,11 @@ class CompressedMLXBackend(MLXBackend):
         grid_thw = video_grid_thw if video_grid_thw is not None else image_grid_thw
 
         model = self._model
+        adapter = self._adapter
 
         # ── Step 1: Run vision encoder ─────────────────────────────────
-        dtype = model.vision_tower.patch_embed.proj.weight.dtype
-        pv = pixel_values.astype(dtype)
-
-        hidden_states = model.vision_tower(
-            pv, grid_thw, output_hidden_states=False
-        )
+        vision_out = adapter.run_vision_encoder(pixel_values, grid_thw)
+        hidden_states = vision_out.hidden_states
         original_count = hidden_states.shape[0]
 
         # ── Step 2: Compress visual tokens ─────────────────────────────
@@ -83,8 +86,7 @@ class CompressedMLXBackend(MLXBackend):
         )
 
         # ── Step 3: Build compressed input sequence ────────────────────
-        video_token_id = model.config.video_token_id
-        image_token_id = model.config.image_token_id
+        video_token_id, image_token_id = adapter.get_visual_token_ids()
 
         n_video = mx.sum(input_ids == video_token_id).item()
         visual_token_id = video_token_id if n_video > 0 else image_token_id
@@ -108,27 +110,28 @@ class CompressedMLXBackend(MLXBackend):
         text_embeds = model.language_model.model.embed_tokens(new_input_ids)
 
         # Merge compressed visual tokens at placeholder positions
-        final_embeds = model.merge_input_ids_with_image_features(
-            image_token_id, video_token_id,
+        merge_result = adapter.merge_visual_features(
             compressed_hidden, text_embeds, new_input_ids,
         )
+        final_embeds = merge_result.embeds
 
-        # Compute 3D position IDs for compressed sequence
-        compressed_grid = self._compute_compressed_grid(
-            grid_thw, original_count, compressed_count
-        )
-        kw_grid = {}
-        if n_video > 0:
-            kw_grid["video_grid_thw"] = compressed_grid
-        else:
-            kw_grid["image_grid_thw"] = compressed_grid
+        # Compute position IDs for compressed sequence (MRoPE models only)
+        if adapter.uses_mrope:
+            compressed_grid = self._compute_compressed_grid(
+                grid_thw, original_count, compressed_count,
+                spatial_merge_size=adapter.spatial_merge_size,
+            )
+            kw_grid = {}
+            if n_video > 0:
+                kw_grid["video_grid_thw"] = compressed_grid
+            else:
+                kw_grid["image_grid_thw"] = compressed_grid
 
-        position_ids, rope_deltas = model.language_model.get_rope_index(
-            new_input_ids, attention_mask=new_mask, **kw_grid,
-        )
-        # Store on model so language_model.__call__ picks them up
-        model.language_model._position_ids = position_ids
-        model.language_model._rope_deltas = rope_deltas
+            position_ids, rope_deltas = adapter.compute_position_ids(
+                new_input_ids, attention_mask=new_mask, **kw_grid,
+            )
+            model.language_model._position_ids = position_ids
+            model.language_model._rope_deltas = rope_deltas
 
         # ── Step 4: Own generate loop ──────────────────────────────────
         prompt_cache = make_prompt_cache(model.language_model)
@@ -222,16 +225,15 @@ class CompressedMLXBackend(MLXBackend):
         )
 
     @staticmethod
-    def _compute_compressed_grid(grid_thw, original_count: int, compressed_count: int):
+    def _compute_compressed_grid(grid_thw, original_count: int, compressed_count: int,
+                                  spatial_merge_size: int = 2):
         """Compute grid_thw that produces exactly compressed_count tokens.
 
-        grid_thw values are pre-merge (before PatchMerger's 2x2 spatial merge).
+        grid_thw values are pre-merge (before PatchMerger's NxN spatial merge).
         Total visual tokens = T * (H/merge) * (W/merge).
         We scale H, W to match the compressed count.
         """
         import mlx.core as mx
-
-        spatial_merge_size = 2  # Qwen2.5-VL uses 2
 
         new_grids = []
         for i in range(grid_thw.shape[0]):

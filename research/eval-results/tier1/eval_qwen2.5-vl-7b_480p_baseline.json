@@ -1,0 +1,322 @@
+{
+  "model": "mlx-community/Qwen2.5-VL-7B-Instruct-4bit",
+  "device": "Apple M3 Ultra",
+  "timestamp": "2026-03-07 09:13:34",
+  "cases": [
+    {
+      "name": "solid",
+      "complexity": "solid",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 419,
+          "std": 0.0,
+          "min": 419,
+          "max": 419
+        },
+        "completion_tokens": {
+          "mean": 42,
+          "std": 0.0,
+          "min": 42,
+          "max": 42
+        },
+        "prefill_ms": {
+          "mean": 218.69944433516744,
+          "std": 349.0005871774389,
+          "min": 16.01058300002478,
+          "max": 621.6882500011707
+        },
+        "decode_ms": {
+          "mean": 364.69273633459426,
+          "std": 3.1460050891231113,
+          "min": 362.75783400196815,
+          "max": 368.32279200461926
+        },
+        "inference_ms": {
+          "mean": 607.1024860017739,
+          "std": 361.3976167252995,
+          "min": 396.0684580015368,
+          "max": 1024.3994170014048
+        },
+        "latency_ms": {
+          "mean": 607.4096386679836,
+          "std": 361.63743957449765,
+          "min": 396.21550000447314,
+          "max": 1024.9833330017282
+        },
+        "prompt_tps": {
+          "mean": 16538.83974428427,
+          "std": 13844.018755183431,
+          "min": 673.9712387988851,
+          "max": 26170.190054875045
+        },
+        "generation_tps": {
+          "mean": 115.17112708624457,
+          "std": 0.9886272118982236,
+          "min": 114.03041275673557,
+          "max": 115.77971876348818
+        },
+        "peak_memory_gb": {
+          "mean": 6.391418862,
+          "std": 0.0,
+          "min": 6.391418862,
+          "max": 6.391418862
+        },
+        "output_text": "The image you provided is a completely black image. There are no discernible objects, patterns, or any other visual elements present. It appears to be a uniform black background without any variation in shading or texture."
+      }
+    },
+    {
+      "name": "gradient",
+      "complexity": "gradient",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 419,
+          "std": 0.0,
+          "min": 419,
+          "max": 419
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 191.08236133373188,
+          "std": 301.63330535784297,
+          "min": 16.90700000472134,
+          "max": 539.3784999978379
+        },
+        "decode_ms": {
+          "mean": 546.0616249959761,
+          "std": 2.6809480618603727,
+          "min": 544.395999997505,
+          "max": 549.1542499948991
+        },
+        "inference_ms": {
+          "mean": 753.4142220004773,
+          "std": 303.37724870779533,
+          "min": 577.7207909995923,
+          "max": 1103.7235420008074
+        },
+        "latency_ms": {
+          "mean": 753.5677080037809,
+          "std": 303.37899724334414,
+          "min": 577.870333007013,
+          "max": 1103.8790410020738
+        },
+        "prompt_tps": {
+          "mean": 16754.111972790048,
+          "std": 13836.79820266399,
+          "min": 776.8199881932252,
+          "max": 24782.634404861463
+        },
+        "generation_tps": {
+          "mean": 117.20476710588152,
+          "std": 0.5738174494926026,
+          "min": 116.54284747972808,
+          "max": 117.56148098129545
+        },
+        "peak_memory_gb": {
+          "mean": 6.42127154,
+          "std": 0.0,
+          "min": 6.42127154,
+          "max": 6.42127154
+        },
+        "output_text": "The image you provided is a gradient background that transitions from a bright green on the left side to a pinkish-red on the right side. The transition is smooth and continuous, creating a seamless blend of colors. The green is vibrant and saturated, while the pinkish-red is more muted and less saturated. The overall effect"
+      }
+    },
+    {
+      "name": "scene",
+      "complexity": "scene",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 419,
+          "std": 0.0,
+          "min": 419,
+          "max": 419
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 190.4687500015522,
+          "std": 302.04053425991094,
+          "min": 15.886833003605716,
+          "max": 539.2350420006551
+        },
+        "decode_ms": {
+          "mean": 545.0604446668876,
+          "std": 1.8786896786247875,
+          "min": 543.8617920008255,
+          "max": 547.2256249995553
+        },
+        "inference_ms": {
+          "mean": 751.214375331377,
+          "std": 303.7534914935843,
+          "min": 575.3365419950569,
+          "max": 1101.9582090011681
+        },
+        "latency_ms": {
+          "mean": 751.359750002545,
+          "std": 303.7535960186945,
+          "min": 575.4837499989662,
+          "max": 1102.1037080063252
+        },
+        "prompt_tps": {
+          "mean": 17627.08491388935,
+          "std": 14596.129114019805,
+          "min": 777.0266532483454,
+          "max": 26374.041944351193
+        },
+        "generation_tps": {
+          "mean": 117.41909824105406,
+          "std": 0.4039248955024788,
+          "min": 116.95358747144199,
+          "max": 117.67695569227054
+        },
+        "peak_memory_gb": {
+          "mean": 6.42127154,
+          "std": 0.0,
+          "min": 6.42127154,
+          "max": 6.42127154
+        },
+        "output_text": "The image appears to be a simple, abstract representation of various shapes and colors. Here is a detailed description:\n\n1. **Background**: The background is a solid light gray color.\n2. **Shapes and Colors**:\n   - **Top Right**: There is a large blue rectangle, which is the most prominent shape in"
+      }
+    },
+    {
+      "name": "medium",
+      "complexity": "medium",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 419,
+          "std": 0.0,
+          "min": 419,
+          "max": 419
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 190.6386113332701,
+          "std": 302.03929986832406,
+          "min": 16.08887499605771,
+          "max": 539.4035000063013
+        },
+        "decode_ms": {
+          "mean": 545.4997223302295,
+          "std": 2.7028366581128807,
+          "min": 543.8511669999571,
+          "max": 548.6189999937778
+        },
+        "inference_ms": {
+          "mean": 751.5555693341108,
+          "std": 304.8035086583345,
+          "min": 574.9261250020936,
+          "max": 1103.5115409977152
+        },
+        "latency_ms": {
+          "mean": 751.709097334242,
+          "std": 304.80123853251797,
+          "min": 575.0686660030624,
+          "max": 1103.6624170010327
+        },
+        "prompt_tps": {
+          "mean": 17443.97039470608,
+          "std": 14436.64430473136,
+          "min": 776.7839845219863,
+          "max": 26042.840167672904
+        },
+        "generation_tps": {
+          "mean": 117.32553086315137,
+          "std": 0.5796732857234025,
+          "min": 116.6565503577635,
+          "max": 117.67925469948482
+        },
+        "peak_memory_gb": {
+          "mean": 6.42127154,
+          "std": 0.0,
+          "min": 6.42127154,
+          "max": 6.42127154
+        },
+        "output_text": "The image is a grid of colored squares, arranged in a 10x10 pattern. Each square is a different color, and the colors vary widely, including shades of red, blue, green, yellow, purple, and brown, among others. The colors are distributed randomly across the grid, with no apparent"
+      }
+    },
+    {
+      "name": "high",
+      "complexity": "high",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 419,
+          "std": 0.0,
+          "min": 419,
+          "max": 419
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 190.79969433126584,
+          "std": 301.6773059238825,
+          "min": 16.127791997860186,
+          "max": 539.1461659964989
+        },
+        "decode_ms": {
+          "mean": 545.9709309992226,
+          "std": 2.7563148303011733,
+          "min": 544.3619590005255,
+          "max": 549.1535839973949
+        },
+        "inference_ms": {
+          "mean": 752.4514579975706,
+          "std": 303.85579327464194,
+          "min": 575.485415996809,
+          "max": 1103.309416997945
+        },
+        "latency_ms": {
+          "mean": 752.5977916666307,
+          "std": 303.85186475243773,
+          "min": 575.6259579939069,
+          "max": 1103.4511670004576
+        },
+        "prompt_tps": {
+          "mean": 17074.70906621141,
+          "std": 14134.355924207033,
+          "min": 777.1547428619216,
+          "max": 25979.997761354585
+        },
+        "generation_tps": {
+          "mean": 117.2243441358046,
+          "std": 0.5900833179199986,
+          "min": 116.54298881950592,
+          "max": 117.56883254205906
+        },
+        "peak_memory_gb": {
+          "mean": 6.42127154,
+          "std": 0.0,
+          "min": 6.42127154,
+          "max": 6.42127154
+        },
+        "output_text": "The image appears to be a close-up of a textured surface, possibly a fabric or a material with a rough, grainy texture. The colors are predominantly shades of brown and beige, with some subtle variations in hue and tone. The texture looks uneven, with small, irregular bumps and dips that suggest a natural or hand"
+      }
+    }
+  ]
+}

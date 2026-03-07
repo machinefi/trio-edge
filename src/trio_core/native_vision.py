@@ -415,8 +415,12 @@ def create_tome_vision(
 ):
     """Create a native ToMe vision encoder from a loaded mlx-vlm vision model.
 
-    Auto-detects model type (Qwen2.5-VL vs Qwen3-VL/Qwen3.5) and returns
-    the appropriate native implementation.
+    Auto-detects model type and returns the appropriate native implementation:
+      - Qwen2.5-VL: windowed attention, fullatt_block_indexes
+      - Qwen3-VL / Qwen3.5: full attention, deepstack features
+      - SigLIP (nanoLLaVA): standard ViT, batched, class token
+      - InternViT: NOT supported (pixel_shuffle disrupts spatial structure)
+      - FastVLM: NOT supported (CNN encoder, not ViT)
 
     Args:
         vision_model: Loaded mlx-vlm VisionModel instance.
@@ -430,8 +434,25 @@ def create_tome_vision(
 
     Returns:
         Native vision model with built-in ToMe.
+
+    Raises:
+        ValueError: If vision model architecture doesn't support ToMe.
     """
     model_type = getattr(vision_model, 'model_type', '')
+    vt_type = type(vision_model).__name__.lower()
+
+    # Reject unsupported architectures
+    if 'intern' in vt_type:
+        raise ValueError(
+            "InternViT does not support ToMe — pixel_shuffle after ViT "
+            "disrupts spatial structure. Use FastV instead."
+        )
+    if 'fastvlm' in vt_type or 'fastvithd' in vt_type:
+        raise ValueError(
+            "FastVLM does not support ToMe — CNN encoder is fundamentally "
+            "different from ViT. Use FastV instead."
+        )
+
     kwargs = dict(
         tome_r=tome_r, skip_first=skip_first, skip_last=skip_last,
         min_keep_ratio=min_keep_ratio, metric=metric, adaptive=adaptive,
@@ -440,8 +461,21 @@ def create_tome_vision(
 
     if model_type in ('qwen3_vl', 'qwen3_5', 'qwen3_5_moe'):
         cls = NativeToMeQwen3Vision
+    elif model_type in ('qwen2_vl', 'qwen2_5_vl', ''):
+        # Check if this is a standard ViT (SigLIP, etc.)
+        if 'siglip' in vt_type or 'clip' in vt_type:
+            from trio_core.native_vision_standard import NativeToMeStandardVision
+            cls = NativeToMeStandardVision
+        else:
+            # Default to Qwen2.5-VL (backward compatible)
+            cls = NativeToMeQwen25Vision
     else:
-        cls = NativeToMeQwen25Vision
+        # Unknown model_type — try standard ViT wrapper
+        if 'siglip' in vt_type or 'clip' in vt_type:
+            from trio_core.native_vision_standard import NativeToMeStandardVision
+            cls = NativeToMeStandardVision
+        else:
+            cls = NativeToMeQwen25Vision
 
     native = cls(vision_model, **kwargs)
     logger.info(

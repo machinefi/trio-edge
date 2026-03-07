@@ -12,7 +12,7 @@ Every VLM inference decomposes into 5 stages. This is the map we optimize agains
         ToMe 在这里              更少了            量化在这里        缓存在这里    batch在这里
 ```
 
-### Per-Stage Status (updated 2026-03-06)
+### Per-Stage Status (updated 2026-03-07)
 
 ```
 Stage 0: 输入 (Video Pipeline)      ██████████ 100%   done
@@ -27,7 +27,7 @@ Stage 5: Decode                      ████░░░░░░  40%   strea
 
 | # | What | Expected Gain | Difficulty | Stage | Status |
 |---|------|---------------|------------|-------|--------|
-| 1 | ~~Frame-to-frame KV reuse~~ | ~~-60~80% video latency~~ | ~~High~~ | ~~4~~ | DONE (1.6x Qwen2.5, 1.7x Qwen3) |
+| 1 | ~~Frame-to-frame KV reuse~~ | ~~-60~80% video latency~~ | ~~High~~ | ~~4~~ | DONE (1.6x Qwen2.5, 1.7x Qwen3, 1.35x Qwen3.5) |
 | 2 | ~~Mid-stream FastV (true KV prune)~~ | ~~-30~50% visual tokens~~ | ~~Medium~~ | ~~2~~ | DONE |
 | 3 | ~~Shared text prefix KV~~ | ~~-20~40% prefill~~ | ~~Medium~~ | ~~3~~ | DONE |
 | 4 | ~~Speculative decoding~~ | ~~+30~50% decode TPS~~ | ~~Medium~~ | ~~5~~ | DONE (0% accept for VLM) |
@@ -64,10 +64,13 @@ Stage 5: Decode                      ████░░░░░░  40%   strea
   text prefix KV reuse across frames (15 tokens saved per inference),
   frame-to-frame KV reuse via visual embedding similarity gating
   (four-tier cache: exact hit > visual similarity hit > prefix hit > full miss,
-  1.6x speedup Qwen2.5, 1.7x speedup Qwen3),
+  1.6x speedup Qwen2.5, 1.7x speedup Qwen3, 1.35x speedup Qwen3.5).
+  DeltaNet support via state snapshot/restore (recurrent state is "all or nothing" —
+  snapshotted after prefill, restored on visual hit, inspired by MARCONI MLSys '25).
   StreamMem bounded KV cache (saliency-based eviction + prototype merging,
   budget guard for long video single-pass prefill),
-  attention sink (StreamingLLM-style, protect first N tokens from eviction)
+  attention sink (StreamingLLM-style, protect first N tokens from eviction).
+  Hybrid model support (KVCache layers evicted, DeltaNet state unchanged)
 - Note: cross-frame incremental streaming NOT viable — VLMs not trained for
   appended visual KV across requests; generate_step does full prefill per call.
   StreamMem works for long single-video prefill, not cross-request accumulation.
@@ -108,7 +111,8 @@ Stage 3: LLM Prefill
 Stage 4: KV Cache
   KV heads          2(3B)/4(7B)      4                  2(0.8B)/4(4B+)  4-8           3-4
   DeltaNet layers   0                0                  18(0.8B)/24(4B)  0             0
-  cache type        KVCache          KVCache            KVCache+Delta    KVCache       KVCache
+  cache type        KVCache          KVCache            KVCache+ArraysC  KVCache       KVCache
+  visual reuse      trim KV          trim KV            state snapshot   trim KV       trim KV
 
 Stage 5: Decode
   eos handling      same             same               same             different     different
@@ -210,11 +214,13 @@ long system prompts before `<|vision_start|>` would see larger gains.
 |---|---|---|---|---|
 | Qwen2.5-VL-3B | **1.57x** | **36.4%** | 1.42x | Identical |
 | Qwen3-VL-4B | **1.71x** | **41.5%** | 1.59x | Near-identical |
-| Qwen3.5-0.8B | 1.00x | 0% | 1.00x | N/A (DeltaNet cache not trimmable) |
+| Qwen3.5-0.8B | **1.35x** | **25.8%** | 1.34x | Correct (DeltaNet state snapshot) |
 
 Settings: threshold=0.95, noise=0.01, 3 runs × 5 frames each.
 "Warm" = frames 2-5 (similar to previous frame, KV reuse triggers).
 "Cold" = frame 1 (always full prefill).
+Note: Qwen3.5 uses DeltaNet (recurrent state, not KV cache). State is snapshotted after
+prefill and restored on visual hit — "all or nothing" reuse (no partial trim).
 
 ### mlx-vlm Native Baseline Comparison (4 models × 5 benchmarks, n=50)
 
@@ -274,6 +280,7 @@ Finding: 0.25 is viable (~2% more loss for ~11% more compression). 0.2 is too ag
 
 1. **Remove mlx-vlm model loading dep** — zero external dependency (Phase 3)
 2. **Continuous batching** — concurrent request handling for server mode
+3. **Session-based API** — cross-request KV cache persistence via session_id for StreamMem
 
 ## Status
 
@@ -299,9 +306,9 @@ Finding: 0.25 is viable (~2% more loss for ~11% more compression). 0.2 is too ag
 - [x] **Native ToMe ViT** — NativeToMeQwen25Vision / NativeToMeQwen3Vision, proper OO subclass, no monkey-patch
 - [x] **Unified ToMe generate path** — ToMeMLXBackend delegates to generate_step (gets PromptCache, early stopping, speculative, streaming for free). Fixed mx.eval() deepstack bug.
 - [x] **ToMe + FastV compound benchmark** — 85% token reduction too aggressive, recommend using one or the other
-- [x] **Frame-to-frame KV reuse** — visual embedding similarity gating, four-tier cache hierarchy (1.6x Qwen2.5, 1.7x Qwen3). Input_ids check prevents wrong-answer reuse; p10 cosine for robust visual discrimination.
+- [x] **Frame-to-frame KV reuse** — visual embedding similarity gating, four-tier cache hierarchy (1.6x Qwen2.5, 1.7x Qwen3, 1.35x Qwen3.5). Input_ids check prevents wrong-answer reuse; p10 cosine for robust visual discrimination. DeltaNet support via ArraysCache state snapshot/restore.
 - [x] **Content-aware adaptive r** — per-image diversity scoring, dynamic r scaling [0.2, 1.0], stacks with layer-adaptive
-- [x] **StreamMem bounded KV cache** — saliency-based eviction + prototype merging for long video single-pass prefill
+- [x] **StreamMem bounded KV cache** — saliency-based eviction + prototype merging + attention sink. Hybrid model support (KVCache eviction + DeltaNet passthrough). Proxy query scoring (chat template end-tokens as stand-in query)
 - [x] **Attention sink (StreamingLLM)** — protect first N visual tokens from eviction, prevents model collapse after repeated eviction rounds
 - [x] **Cross-frame streaming analysis** — VLMs not trained for appended visual KV across requests; StreamMem works for single-video prefill only
 - [ ] Phase 2: Native Vision Encoder — built-in ToMe, adaptive r

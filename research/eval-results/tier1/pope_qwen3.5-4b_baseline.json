@@ -1,0 +1,469 @@
+{
+  "name": "POPE-random (n=50)",
+  "n_samples": 50,
+  "accuracy": 0.38,
+  "f1": 0.5757575757575758,
+  "yes_rate": 0.82,
+  "avg_latency_ms": 382.1897684002761,
+  "avg_prompt_tokens": 280.72,
+  "total_time_s": 19.110203742980957,
+  "metadata": {
+    "backend": "mlx",
+    "model": "mlx-community/Qwen3.5-4B-MLX-4bit",
+    "device": "Apple M3 Ultra",
+    "max_tokens": 16,
+    "timestamp": "2026-03-07 09:16:24"
+  },
+  "predictions": [
+    {
+      "id": "1",
+      "question": "Is there a snowboard in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "The user is asking a yes/no question about the presence of a snowboard in",
+      "correct": true,
+      "latency_ms": 450.99604099959834,
+      "prompt_tokens": 292
+    },
+    {
+      "id": "2",
+      "question": "Is there a car in the image?",
+      "answer_gt": "no",
+      "answer_pred": "The user is asking a yes/no question about the presence of a car in the",
+      "correct": false,
+      "latency_ms": 394.65762499457924,
+      "prompt_tokens": 291
+    },
+    {
+      "id": "3",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "The user is asking a simple yes/no question about the presence of a person in",
+      "correct": true,
+      "latency_ms": 395.72104200487956,
+      "prompt_tokens": 291
+    },
+    {
+      "id": "4",
+      "question": "Is there a sandwich in the image?",
+      "answer_gt": "no",
+      "answer_pred": "The user is asking a question about the presence of a sandwich in the image.",
+      "correct": false,
+      "latency_ms": 394.7353330004262,
+      "prompt_tokens": 291
+    },
+    {
+      "id": "5",
+      "question": "Is there a skis in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "The user is asking a yes/no question about the presence of skis in the",
+      "correct": true,
+      "latency_ms": 394.94145800563274,
+      "prompt_tokens": 292
+    },
+    {
+      "id": "6",
+      "question": "Is there a couch in the image?",
+      "answer_gt": "no",
+      "answer_pred": "The user is asking a question about the presence of a specific object (a couch",
+      "correct": false,
+      "latency_ms": 394.23241700569633,
+      "prompt_tokens": 291
+    },
+    {
+      "id": "7",
+      "question": "Is there a truck in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "The user is asking a yes/no question about the presence of a truck in the",
+      "correct": true,
+      "latency_ms": 322.4087499984307,
+      "prompt_tokens": 223
+    },
+    {
+      "id": "8",
+      "question": "Is there a pizza in the image?",
+      "answer_gt": "no",
+      "answer_pred": "The user is asking a yes or no question about the presence of a pizza in",
+      "correct": false,
+      "latency_ms": 319.7822910005925,
+      "prompt_tokens": 223
+    },
+    {
+      "id": "9",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "The user is asking for a confirmation of the presence of a person in the image",
+      "correct": false,
+      "latency_ms": 319.3146670018905,
+      "prompt_tokens": 223
+    },
+    {
+      "id": "10",
+      "question": "Is there a sink in the image?",
+      "answer_gt": "no",
+      "answer_pred": "The user is asking a yes/no question about the presence of a sink in the",
+      "correct": false,
+      "latency_ms": 319.07187499746215,
+      "prompt_tokens": 223
+    },
+    {
+      "id": "11",
+      "question": "Is there an umbrella in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "The user is asking a simple yes or no question about the presence of an umbrella",
+      "correct": true,
+      "latency_ms": 319.98991599539295,
+      "prompt_tokens": 223
+    },
+    {
+      "id": "12",
+      "question": "Is there a cell phone in the image?",
+      "answer_gt": "no",
+      "answer_pred": "The user is asking a yes/no question about the presence of a cell phone in",
+      "correct": false,
+      "latency_ms": 320.77920799929416,
+      "prompt_tokens": 224
+    },
+    {
+      "id": "13",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "The user is asking for a confirmation of the presence of a person in the image",
+      "correct": false,
+      "latency_ms": 394.88504199835006,
+      "prompt_tokens": 291
+    },
+    {
+      "id": "14",
+      "question": "Is there a sheep in the image?",
+      "answer_gt": "no",
+      "answer_pred": "The user is asking a yes/no question about the presence of a sheep in the",
+      "correct": false,
+      "latency_ms": 402.30699999665376,
+      "prompt_tokens": 291
+    },
+    {
+      "id": "15",
+      "question": "Is there a bicycle in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "The user is asking a yes/no question about the presence of a bicycle in the",
+      "correct": true,
+      "latency_ms": 394.84537500538863,
+      "prompt_tokens": 291
+    },
+    {
+      "id": "16",
+      "question": "Is there a broccoli in the image?",
+      "answer_gt": "no",
+      "answer_pred": "The user is asking a question about the presence of \"broccoli\" in the",
+      "correct": false,
+      "latency_ms": 394.9363749998156,
+      "prompt_tokens": 291
+    },
+    {
+      "id": "17",
+      "question": "Is there a car in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "The user is asking for the presence of a car in the image. I need",
+      "correct": false,
+      "latency_ms": 394.5739999981015,
+      "prompt_tokens": 291
+    },
+    {
+      "id": "18",
+      "question": "Is there a tennis racket in the image?",
+      "answer_gt": "no",
+      "answer_pred": "The user is asking a yes/no question about the presence of a tennis racket in",
+      "correct": false,
+      "latency_ms": 394.51050000207033,
+      "prompt_tokens": 292
+    },
+    {
+      "id": "19",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "The user is asking for a confirmation of the presence of a person in the image",
+      "correct": false,
+      "latency_ms": 395.67929199984064,
+      "prompt_tokens": 291
+    },
+    {
+      "id": "20",
+      "question": "Is there a teddy bear in the image?",
+      "answer_gt": "no",
+      "answer_pred": "The user is asking a yes/no question about the presence of a teddy bear",
+      "correct": false,
+      "latency_ms": 394.0134170043166,
+      "prompt_tokens": 293
+    },
+    {
+      "id": "21",
+      "question": "Is there a potted plant in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "The user is asking a yes/no question about the presence of a potted plant",
+      "correct": true,
+      "latency_ms": 395.70104199810885,
+      "prompt_tokens": 293
+    },
+    {
+      "id": "22",
+      "question": "Is there a broccoli in the image?",
+      "answer_gt": "no",
+      "answer_pred": "The user is asking a yes/no question about the presence of broccoli in the image",
+      "correct": false,
+      "latency_ms": 394.69104199815774,
+      "prompt_tokens": 291
+    },
+    {
+      "id": "23",
+      "question": "Is there a car in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "The user is asking a yes or no question about the presence of a car in",
+      "correct": true,
+      "latency_ms": 394.18791700154543,
+      "prompt_tokens": 291
+    },
+    {
+      "id": "24",
+      "question": "Is there an orange in the image?",
+      "answer_gt": "no",
+      "answer_pred": "The user is asking a yes/no question about the presence of an orange in the",
+      "correct": false,
+      "latency_ms": 394.2564589960966,
+      "prompt_tokens": 291
+    },
+    {
+      "id": "25",
+      "question": "Is there a traffic light in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "The user is asking a yes or no question about the presence of a traffic light",
+      "correct": true,
+      "latency_ms": 295.9746670021559,
+      "prompt_tokens": 192
+    },
+    {
+      "id": "26",
+      "question": "Is there a train in the image?",
+      "answer_gt": "no",
+      "answer_pred": "The user is asking a yes or no question about the presence of a train in",
+      "correct": false,
+      "latency_ms": 295.58600000018487,
+      "prompt_tokens": 191
+    },
+    {
+      "id": "27",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "The user is asking for a confirmation of the presence of a person in the image",
+      "correct": false,
+      "latency_ms": 296.0990830033552,
+      "prompt_tokens": 191
+    },
+    {
+      "id": "28",
+      "question": "Is there a surfboard in the image?",
+      "answer_gt": "no",
+      "answer_pred": "The user is asking a yes/no question about the presence of a surfboard in",
+      "correct": false,
+      "latency_ms": 294.1077080031391,
+      "prompt_tokens": 192
+    },
+    {
+      "id": "29",
+      "question": "Is there a car in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "The user is asking for a simple yes or no answer regarding the presence of a",
+      "correct": true,
+      "latency_ms": 295.6984999982524,
+      "prompt_tokens": 191
+    },
+    {
+      "id": "30",
+      "question": "Is there a kite in the image?",
+      "answer_gt": "no",
+      "answer_pred": "The user is asking a yes/no question about the presence of a kite in the",
+      "correct": false,
+      "latency_ms": 295.9513340028934,
+      "prompt_tokens": 191
+    },
+    {
+      "id": "31",
+      "question": "Is there a dog in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "The user is asking a simple yes or no question about the presence of a dog",
+      "correct": true,
+      "latency_ms": 395.83133300038753,
+      "prompt_tokens": 291
+    },
+    {
+      "id": "32",
+      "question": "Is there a toaster in the image?",
+      "answer_gt": "no",
+      "answer_pred": "The user is asking a yes or no question about the presence of a toaster in",
+      "correct": false,
+      "latency_ms": 395.13787499890896,
+      "prompt_tokens": 291
+    },
+    {
+      "id": "33",
+      "question": "Is there a dining table in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "The user is asking a yes or no question about the presence of a dining table",
+      "correct": true,
+      "latency_ms": 394.6778750032536,
+      "prompt_tokens": 292
+    },
+    {
+      "id": "34",
+      "question": "Is there a sports ball in the image?",
+      "answer_gt": "no",
+      "answer_pred": "The user is asking a yes or no question about the presence of a sports ball",
+      "correct": false,
+      "latency_ms": 394.1997090005316,
+      "prompt_tokens": 292
+    },
+    {
+      "id": "35",
+      "question": "Is there a bed in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "The user is asking a yes or no question about the presence of a bed in",
+      "correct": true,
+      "latency_ms": 395.11016700271284,
+      "prompt_tokens": 291
+    },
+    {
+      "id": "36",
+      "question": "Is there a book in the image?",
+      "answer_gt": "no",
+      "answer_pred": "The user is asking a yes or no question about the presence of a book in",
+      "correct": false,
+      "latency_ms": 394.29283299978124,
+      "prompt_tokens": 291
+    },
+    {
+      "id": "37",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "The user is asking for a confirmation of the presence of a person in the image",
+      "correct": false,
+      "latency_ms": 422.9279589999351,
+      "prompt_tokens": 331
+    },
+    {
+      "id": "38",
+      "question": "Is there a traffic light in the image?",
+      "answer_gt": "no",
+      "answer_pred": "The user is asking a yes/no question about the presence of a traffic light in",
+      "correct": false,
+      "latency_ms": 423.0996670012246,
+      "prompt_tokens": 332
+    },
+    {
+      "id": "39",
+      "question": "Is there a spoon in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "The user is asking a yes/no question about the presence of a spoon in the",
+      "correct": true,
+      "latency_ms": 423.7631669966504,
+      "prompt_tokens": 331
+    },
+    {
+      "id": "40",
+      "question": "Is there a bird in the image?",
+      "answer_gt": "no",
+      "answer_pred": "The user is asking a yes/no question about the presence of a bird in the",
+      "correct": false,
+      "latency_ms": 424.99449999741046,
+      "prompt_tokens": 331
+    },
+    {
+      "id": "41",
+      "question": "Is there a fork in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "The user is asking a yes/no question about the presence of a fork in the",
+      "correct": true,
+      "latency_ms": 423.26712499925634,
+      "prompt_tokens": 331
+    },
+    {
+      "id": "42",
+      "question": "Is there a truck in the image?",
+      "answer_gt": "no",
+      "answer_pred": "The user is asking a yes/no question about the presence of a truck in the",
+      "correct": false,
+      "latency_ms": 423.0832079992979,
+      "prompt_tokens": 331
+    },
+    {
+      "id": "43",
+      "question": "Is there a tv in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "The user is asking a yes/no question about the presence of a TV in the",
+      "correct": true,
+      "latency_ms": 423.03491700295126,
+      "prompt_tokens": 331
+    },
+    {
+      "id": "44",
+      "question": "Is there a bowl in the image?",
+      "answer_gt": "no",
+      "answer_pred": "The user is asking a yes/no question about the presence of a bowl in the",
+      "correct": false,
+      "latency_ms": 425.0931669957936,
+      "prompt_tokens": 331
+    },
+    {
+      "id": "45",
+      "question": "Is there a toaster in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "The user is asking a yes/no question about the presence of a toaster in the",
+      "correct": true,
+      "latency_ms": 425.83574999298435,
+      "prompt_tokens": 331
+    },
+    {
+      "id": "46",
+      "question": "Is there a cow in the image?",
+      "answer_gt": "no",
+      "answer_pred": "The user is asking a yes/no question about the presence of a cow in the",
+      "correct": false,
+      "latency_ms": 423.46433400234673,
+      "prompt_tokens": 331
+    },
+    {
+      "id": "47",
+      "question": "Is there a microwave in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "The user is asking a simple yes/no question about the presence of a microwave in",
+      "correct": true,
+      "latency_ms": 422.95349999767495,
+      "prompt_tokens": 331
+    },
+    {
+      "id": "48",
+      "question": "Is there a laptop in the image?",
+      "answer_gt": "no",
+      "answer_pred": "The user is asking a yes/no question about the presence of a laptop in the",
+      "correct": false,
+      "latency_ms": 424.25370900309645,
+      "prompt_tokens": 331
+    },
+    {
+      "id": "49",
+      "question": "Is there a backpack in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "The user is asking a yes/no question about the presence of a backpack in the",
+      "correct": true,
+      "latency_ms": 395.8357910014456,
+      "prompt_tokens": 291
+    },
+    {
+      "id": "50",
+      "question": "Is there a cell phone in the image?",
+      "answer_gt": "no",
+      "answer_pred": "The user is asking a yes/no question about the presence of a cell phone in",
+      "correct": false,
+      "latency_ms": 393.9964580058586,
+      "prompt_tokens": 292
+    }
+  ]
+}

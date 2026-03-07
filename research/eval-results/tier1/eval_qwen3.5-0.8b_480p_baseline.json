@@ -1,0 +1,322 @@
+{
+  "model": "mlx-community/Qwen3.5-0.8B-MLX-4bit",
+  "device": "Apple M3 Ultra",
+  "timestamp": "2026-03-07 09:15:46",
+  "cases": [
+    {
+      "name": "solid",
+      "complexity": "solid",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 327,
+          "std": 0.0,
+          "min": 327,
+          "max": 327
+        },
+        "completion_tokens": {
+          "mean": 48.666666666666664,
+          "std": 9.814954576223638,
+          "min": 43,
+          "max": 60
+        },
+        "prefill_ms": {
+          "mean": 97.0886806632431,
+          "std": 20.798082613121355,
+          "min": 84.5961669983808,
+          "max": 121.09762499312637
+        },
+        "decode_ms": {
+          "mean": 153.3933196697035,
+          "std": 29.68930205189234,
+          "min": 136.04187500459375,
+          "max": 187.67470899911132
+        },
+        "inference_ms": {
+          "mean": 275.42365233481786,
+          "std": 69.22304806506767,
+          "min": 233.5125829995377,
+          "max": 355.32345800311305
+        },
+        "latency_ms": {
+          "mean": 275.85622233406565,
+          "std": 69.70608780863185,
+          "min": 233.6618749977788,
+          "max": 356.3138750032522
+        },
+        "prompt_tps": {
+          "mean": 3462.352104141555,
+          "std": 660.323994373682,
+          "min": 2700.3006873054765,
+          "max": 3865.423359030663
+        },
+        "generation_tps": {
+          "mean": 316.96137259825144,
+          "std": 2.4232220097359827,
+          "min": 315.10286183598157,
+          "max": 319.7021075454771
+        },
+        "peak_memory_gb": {
+          "mean": 1.164782586,
+          "std": 0.05449678935295817,
+          "min": 1.101855114,
+          "max": 1.196247062
+        },
+        "output_text": "The image provided is a blank or featureless canvas, with no discernible content, text, or visual elements to describe. It appears to be an empty or void, with no specific details to identify or analyze."
+      }
+    },
+    {
+      "name": "gradient",
+      "complexity": "gradient",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 327,
+          "std": 0.0,
+          "min": 327,
+          "max": 327
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 84.92058333407233,
+          "std": 0.4386727216007029,
+          "min": 84.41612499882467,
+          "max": 85.21250000194414
+        },
+        "decode_ms": {
+          "mean": 196.28018033351205,
+          "std": 0.8978082530767173,
+          "min": 195.71758300298825,
+          "max": 197.31558299827157
+        },
+        "inference_ms": {
+          "mean": 293.4289996652903,
+          "std": 1.1790492761354412,
+          "min": 292.33054100041045,
+          "max": 294.67479099548655
+        },
+        "latency_ms": {
+          "mean": 293.57277766879025,
+          "std": 1.1799282696213262,
+          "min": 292.47362499882,
+          "max": 294.81958300311817
+        },
+        "prompt_tps": {
+          "mean": 3850.725244699201,
+          "std": 19.94895282915606,
+          "min": 3837.4651605402896,
+          "max": 3873.667501375511
+        },
+        "generation_tps": {
+          "mean": 326.0690420890233,
+          "std": 1.487593496306253,
+          "min": 324.35350025324976,
+          "max": 327.0017901203227
+        },
+        "peak_memory_gb": {
+          "mean": 1.196247062,
+          "std": 0.0,
+          "min": 1.196247062,
+          "max": 1.196247062
+        },
+        "output_text": "The image displays a gradient background with a smooth transition from green to a deep magenta or pinkish-red hue, which is characteristic of a digital gradient used in web design, particularly for backgrounds, overlays, or decorative elements. The gradient is subtle, with the colors blending gradually, creating a modern and visually appealing effect that"
+      }
+    },
+    {
+      "name": "scene",
+      "complexity": "scene",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 327,
+          "std": 0.0,
+          "min": 327,
+          "max": 327
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 84.6990556625921,
+          "std": 0.3915926320408302,
+          "min": 84.28937499411404,
+          "max": 85.06962499814108
+        },
+        "decode_ms": {
+          "mean": 195.6407360000109,
+          "std": 0.6590186545568874,
+          "min": 195.15700000192737,
+          "max": 196.39133300370304
+        },
+        "inference_ms": {
+          "mean": 292.39443033293355,
+          "std": 0.25670443355875205,
+          "min": 292.1064159963862,
+          "max": 292.5991250012885
+        },
+        "latency_ms": {
+          "mean": 292.5374719973964,
+          "std": 0.25897204444251865,
+          "min": 292.246624994732,
+          "max": 292.7430830022786
+        },
+        "prompt_tps": {
+          "mean": 3860.7828688156,
+          "std": 17.862143364658394,
+          "min": 3843.9102089276344,
+          "max": 3879.4925223117925
+        },
+        "generation_tps": {
+          "mean": 327.1327056922606,
+          "std": 1.1000709458798938,
+          "min": 325.8799613055901,
+          "max": 327.94109357782673
+        },
+        "peak_memory_gb": {
+          "mean": 1.1979837686666668,
+          "std": 0.00300806418451018,
+          "min": 1.196247062,
+          "max": 1.201457182
+        },
+        "output_text": "The image displays a geometric composition with several distinct shapes and colors arranged on a light gray background.\n\nIn the top right corner, there is a large light blue square with a thick black border, giving it a distinct appearance.\n\nTo the left of this blue square, there are three smaller squares placed horizontally. The first"
+      }
+    },
+    {
+      "name": "medium",
+      "complexity": "medium",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 327,
+          "std": 0.0,
+          "min": 327,
+          "max": 327
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 84.84301366843283,
+          "std": 0.4636068390739298,
+          "min": 84.30962500278838,
+          "max": 85.14912499958882
+        },
+        "decode_ms": {
+          "mean": 196.8860833342963,
+          "std": 1.1509414950861645,
+          "min": 195.72387500375044,
+          "max": 198.02541699755238
+        },
+        "inference_ms": {
+          "mean": 293.99890266601386,
+          "std": 1.7816768496791144,
+          "min": 292.0717499946477,
+          "max": 295.5861250011367
+        },
+        "latency_ms": {
+          "mean": 294.1422636649804,
+          "std": 1.7784649370915109,
+          "min": 292.2183330010739,
+          "max": 295.72616599762114
+        },
+        "prompt_tps": {
+          "mean": 3854.254051937121,
+          "std": 21.125267007194733,
+          "min": 3840.321318646305,
+          "max": 3878.560721734738
+        },
+        "generation_tps": {
+          "mean": 325.06847231473,
+          "std": 1.9006237032500808,
+          "min": 323.19083565313764,
+          "max": 326.9912778845894
+        },
+        "peak_memory_gb": {
+          "mean": 1.201457182,
+          "std": 0.0,
+          "min": 1.201457182,
+          "max": 1.201457182
+        },
+        "output_text": "The image displays a colorful, abstract geometric pattern composed of numerous small, overlapping squares or blocks arranged in a grid-like fashion. Each individual square is filled with a distinct, vibrant color, creating a visually striking mosaic effect. The colors include shades of green, purple, blue, pink, yellow, and white, among others"
+      }
+    },
+    {
+      "name": "high",
+      "complexity": "high",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 327,
+          "std": 0.0,
+          "min": 327,
+          "max": 327
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 84.88391700181334,
+          "std": 0.16458972732831026,
+          "min": 84.70070900511928,
+          "max": 85.01929200429004
+        },
+        "decode_ms": {
+          "mean": 196.04231999740782,
+          "std": 1.263376584078493,
+          "min": 195.30170899815857,
+          "max": 197.5010839960305
+        },
+        "inference_ms": {
+          "mean": 293.1777083310105,
+          "std": 0.9858188747089036,
+          "min": 292.4484589966596,
+          "max": 294.2992909956956
+        },
+        "latency_ms": {
+          "mean": 293.32279167041025,
+          "std": 0.9897376329140825,
+          "min": 292.59008400549646,
+          "max": 294.4487080021645
+        },
+        "prompt_tps": {
+          "mean": 3852.3295319617446,
+          "std": 7.475450835368787,
+          "min": 3846.185874889428,
+          "max": 3860.652453100909
+        },
+        "generation_tps": {
+          "mean": 326.4691289442221,
+          "std": 2.0961039517305444,
+          "min": 324.0488543409023,
+          "max": 327.6981052971914
+        },
+        "peak_memory_gb": {
+          "mean": 1.201457182,
+          "std": 0.0,
+          "min": 1.201457182,
+          "max": 1.201457182
+        },
+        "output_text": "```\nThe user wants a detailed description of the image provided.\n\n```\n<description>\nThe image displays a noisy, static-like pattern that resembles television or computer screen static. It is characterized by a dense field of small, irregular, colorful speckles of varying brightness and texture, creating a grainy,"
+      }
+    }
+  ]
+}

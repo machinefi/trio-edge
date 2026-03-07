@@ -1,0 +1,322 @@
+{
+  "model": "mlx-community/Qwen2.5-VL-3B-Instruct-4bit",
+  "device": "Apple M3 Ultra",
+  "timestamp": "2026-03-07 09:12:50",
+  "cases": [
+    {
+      "name": "solid",
+      "complexity": "solid",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 419,
+          "std": 0.0,
+          "min": 419,
+          "max": 419
+        },
+        "completion_tokens": {
+          "mean": 15,
+          "std": 0.0,
+          "min": 15,
+          "max": 15
+        },
+        "prefill_ms": {
+          "mean": 147.06098599951173,
+          "std": 226.91039799667485,
+          "min": 16.01591699727578,
+          "max": 409.07454099942703
+        },
+        "decode_ms": {
+          "mean": 106.34444400056964,
+          "std": 1.8220386764700838,
+          "min": 105.13599999831058,
+          "max": 108.44016600458416
+        },
+        "inference_ms": {
+          "mean": 275.9804586676182,
+          "std": 242.57153341380516,
+          "min": 135.54575000307523,
+          "max": 556.0775839985581
+        },
+        "latency_ms": {
+          "mean": 276.14991700344643,
+          "std": 242.6083014957654,
+          "min": 135.69479200668866,
+          "max": 556.2895000039134
+        },
+        "prompt_tps": {
+          "mean": 17740.903729777652,
+          "std": 14477.16919660337,
+          "min": 1024.2632039049013,
+          "max": 26161.474242859123
+        },
+        "generation_tps": {
+          "mean": 141.07844078296966,
+          "std": 2.394314265241796,
+          "min": 138.3251294484914,
+          "max": 142.6723481989141
+        },
+        "peak_memory_gb": {
+          "mean": 3.824384145,
+          "std": 0.0,
+          "min": 3.824384145,
+          "max": 3.824384145
+        },
+        "output_text": "The image is completely black with no visible content, objects, or details."
+      }
+    },
+    {
+      "name": "gradient",
+      "complexity": "gradient",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 419,
+          "std": 0.0,
+          "min": 419,
+          "max": 419
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 127.63223600146982,
+          "std": 193.29641852988024,
+          "min": 15.985707999789156,
+          "max": 350.8317080049892
+        },
+        "decode_ms": {
+          "mean": 440.1501390020712,
+          "std": 1.6137906483624345,
+          "min": 438.8443330026348,
+          "max": 441.95433400454937
+        },
+        "inference_ms": {
+          "mean": 581.8795556673043,
+          "std": 194.55471782225092,
+          "min": 469.44462500687223,
+          "max": 806.5319579982315
+        },
+        "latency_ms": {
+          "mean": 582.0324026669065,
+          "std": 194.54658963820984,
+          "min": 469.5985409998684,
+          "max": 806.6754169994965
+        },
+        "prompt_tps": {
+          "mean": 17821.192998446648,
+          "std": 14399.509570282273,
+          "min": 1194.3048203443498,
+          "max": 26210.9128982918
+        },
+        "generation_tps": {
+          "mean": 145.4062307805017,
+          "std": 0.5323092074738378,
+          "min": 144.81134152503006,
+          "max": 145.83759020448773
+        },
+        "peak_memory_gb": {
+          "mean": 3.84327808,
+          "std": 0.0,
+          "min": 3.84327808,
+          "max": 3.84327808
+        },
+        "output_text": "The image is a gradient background that transitions from a bright green at the top left corner to a bright pink at the bottom right corner. The gradient appears smooth and continuous, with no distinct patterns or textures. The colors blend seamlessly into each other, creating a gradient effect that fades from one color to another. The overall appearance"
+      }
+    },
+    {
+      "name": "scene",
+      "complexity": "scene",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 419,
+          "std": 0.0,
+          "min": 419,
+          "max": 419
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 127.30748600006336,
+          "std": 193.05716657083315,
+          "min": 15.615249998518268,
+          "max": 350.2305410002009
+        },
+        "decode_ms": {
+          "mean": 441.45033333673683,
+          "std": 3.8183948524719833,
+          "min": 437.9498750058701,
+          "max": 445.5222500037052
+        },
+        "inference_ms": {
+          "mean": 582.7996113318173,
+          "std": 196.22578878189967,
+          "min": 467.540083998756,
+          "max": 809.370167000452
+        },
+        "latency_ms": {
+          "mean": 582.9435969984237,
+          "std": 196.22464576412224,
+          "min": 467.6847499940777,
+          "max": 809.5128329950967
+        },
+        "prompt_tps": {
+          "mean": 18030.571517449174,
+          "std": 14583.943659814888,
+          "min": 1196.354831887033,
+          "max": 26832.743634572547
+        },
+        "generation_tps": {
+          "mean": 144.9838895118912,
+          "std": 1.2517252894918736,
+          "min": 143.65163580375108,
+          "max": 146.13544529300793
+        },
+        "peak_memory_gb": {
+          "mean": 3.843688424,
+          "std": 0.0,
+          "min": 3.843688424,
+          "max": 3.843688424
+        },
+        "output_text": "The image depicts a simple bar chart with four vertical bars of different colors and lengths. The bars are aligned along the same horizontal axis, which represents a continuous variable. The vertical axis is not labeled, but it appears to be divided into four equal segments, each representing a different category or value.\n\nThe colors and lengths of"
+      }
+    },
+    {
+      "name": "medium",
+      "complexity": "medium",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 419,
+          "std": 0.0,
+          "min": 419,
+          "max": 419
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 127.33077766703595,
+          "std": 193.0996093884993,
+          "min": 15.830625001399312,
+          "max": 350.3029999992577
+        },
+        "decode_ms": {
+          "mean": 440.98919466826675,
+          "std": 3.086192215826822,
+          "min": 437.7924170039478,
+          "max": 443.95141700078966
+        },
+        "inference_ms": {
+          "mean": 582.0380420021442,
+          "std": 195.66402268035765,
+          "min": 467.2645000027842,
+          "max": 807.961709004303
+        },
+        "latency_ms": {
+          "mean": 582.1803193345355,
+          "std": 195.66942708593317,
+          "min": 467.4057910015108,
+          "max": 808.110250000027
+        },
+        "prompt_tps": {
+          "mean": 18028.202748761465,
+          "std": 14577.041034550528,
+          "min": 1196.1073699080164,
+          "max": 26467.68525961315
+        },
+        "generation_tps": {
+          "mean": 145.1330150691537,
+          "std": 1.0165203745509073,
+          "min": 144.1599182909831,
+          "max": 146.18800489507538
+        },
+        "peak_memory_gb": {
+          "mean": 3.843689168,
+          "std": 0.0,
+          "min": 3.843689168,
+          "max": 3.843689168
+        },
+        "output_text": "The image is a grid of squares, each filled with a different color. The colors range from bright and vibrant to more muted and subdued tones. The grid is organized in a 10x10 pattern, with each square containing a single color. The colors include shades of red, blue, green, yellow,"
+      }
+    },
+    {
+      "name": "high",
+      "complexity": "high",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 419,
+          "std": 0.0,
+          "min": 419,
+          "max": 419
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 127.60606933200808,
+          "std": 193.5015729285036,
+          "min": 15.609290996508207,
+          "max": 351.04220799985336
+        },
+        "decode_ms": {
+          "mean": 441.6447223314511,
+          "std": 2.306424143871204,
+          "min": 439.4285419984953,
+          "max": 444.03187499847263
+        },
+        "inference_ms": {
+          "mean": 583.2516526667556,
+          "std": 195.5737691464568,
+          "min": 468.9547500020126,
+          "max": 809.0751249983441
+        },
+        "latency_ms": {
+          "mean": 583.3975830003814,
+          "std": 195.57623440889776,
+          "min": 469.1009579983074,
+          "max": 809.2239160032477
+        },
+        "prompt_tps": {
+          "mean": 17984.677957483,
+          "std": 14548.871465336073,
+          "min": 1193.5886638457305,
+          "max": 26842.98730119966
+        },
+        "generation_tps": {
+          "mean": 144.91549376633364,
+          "std": 0.7563728417122139,
+          "min": 144.1337967014646,
+          "max": 145.64370286220313
+        },
+        "peak_memory_gb": {
+          "mean": 3.843689168,
+          "std": 0.0,
+          "min": 3.843689168,
+          "max": 3.843689168
+        },
+        "output_text": "The image appears to be a piece of abstract art with a predominantly gray and black color scheme. The background is a gradient of dark shades, transitioning from black at the edges to a lighter gray in the center. There are no distinct shapes, patterns, or recognizable forms within the image. The overall effect is one of a"
+      }
+    }
+  ]
+}

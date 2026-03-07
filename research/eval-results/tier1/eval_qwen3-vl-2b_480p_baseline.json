@@ -1,0 +1,322 @@
+{
+  "model": "mlx-community/Qwen3-VL-2B-Instruct-4bit",
+  "device": "Apple M3 Ultra",
+  "timestamp": "2026-03-07 09:14:05",
+  "cases": [
+    {
+      "name": "solid",
+      "complexity": "solid",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 323,
+          "std": 0.0,
+          "min": 323,
+          "max": 323
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 86.3971526681174,
+          "std": 125.82446039321592,
+          "min": 13.639167002111208,
+          "max": 231.68666599667634
+        },
+        "decode_ms": {
+          "mean": 289.6911249990808,
+          "std": 3.564802024848563,
+          "min": 287.106625000888,
+          "max": 293.75791699567344
+        },
+        "inference_ms": {
+          "mean": 398.62931933263707,
+          "std": 146.85878924086458,
+          "min": 313.2512919983128,
+          "max": 568.2058749953285
+        },
+        "latency_ms": {
+          "mean": 398.7956389973988,
+          "std": 146.89972562719493,
+          "min": 313.40170899784425,
+          "max": 568.4194999994361
+        },
+        "prompt_tps": {
+          "mean": 16123.647186323917,
+          "std": 12757.606903290092,
+          "min": 1394.1242522978582,
+          "max": 23681.798158934693
+        },
+        "generation_tps": {
+          "mean": 220.9471235841686,
+          "std": 2.7017613260969453,
+          "min": 217.86646860292998,
+          "max": 222.9136997441353
+        },
+        "peak_memory_gb": {
+          "mean": 2.743826323,
+          "std": 0.0,
+          "min": 2.743826323,
+          "max": 2.743826323
+        },
+        "output_text": "The image is a digital rendering of a dark, abstract scene. The background is a solid, uniform dark gray or charcoal color, with a slight gradient that darkens slightly towards the edges. In the center of the image, there is a large, stylized letter \"E\" that is prominently displayed. The \"E"
+      }
+    },
+    {
+      "name": "gradient",
+      "complexity": "gradient",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 323,
+          "std": 0.0,
+          "min": 323,
+          "max": 323
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 72.61737533311437,
+          "std": 102.38770866444754,
+          "min": 13.270000003103632,
+          "max": 190.84420899889665
+        },
+        "decode_ms": {
+          "mean": 288.7029999983497,
+          "std": 2.595028726919941,
+          "min": 287.1273749988177,
+          "max": 291.698125001858
+        },
+        "inference_ms": {
+          "mean": 374.06243066410144,
+          "std": 105.75081980267741,
+          "min": 313.0007499930798,
+          "max": 496.17295899952296
+        },
+        "latency_ms": {
+          "mean": 374.20408300386043,
+          "std": 105.75393460335452,
+          "min": 313.1406250031432,
+          "max": 496.3182080027764
+        },
+        "prompt_tps": {
+          "mean": 16514.88936733678,
+          "std": 12843.27432620969,
+          "min": 1692.479964125437,
+          "max": 24340.617929499298
+        },
+        "generation_tps": {
+          "mean": 221.69298445571712,
+          "std": 1.9824585928003415,
+          "min": 219.40490704077152,
+          "max": 222.89759031253476
+        },
+        "peak_memory_gb": {
+          "mean": 2.755609038,
+          "std": 0.0,
+          "min": 2.755609038,
+          "max": 2.755609038
+        },
+        "output_text": "This is a digital image of a gradient background. The background is a smooth transition of color from a bright, vibrant green on the left side, which gradually shifts towards a deep, rich magenta or fuchsia on the right. The gradient starts with a bright, almost neon green, which gradually fades into a more muted"
+      }
+    },
+    {
+      "name": "scene",
+      "complexity": "scene",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 323,
+          "std": 0.0,
+          "min": 323,
+          "max": 323
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 72.56606966257095,
+          "std": 102.75468678568016,
+          "min": 13.151332997949794,
+          "max": 191.21691699547227
+        },
+        "decode_ms": {
+          "mean": 288.7150416645454,
+          "std": 2.0059171566068823,
+          "min": 287.4366670002928,
+          "max": 291.02695799520006
+        },
+        "inference_ms": {
+          "mean": 373.3916529987861,
+          "std": 104.6614258927174,
+          "min": 312.87129200063646,
+          "max": 494.24420899595134
+        },
+        "latency_ms": {
+          "mean": 373.53676400137675,
+          "std": 104.65596389972463,
+          "min": 313.0077500027255,
+          "max": 494.3829999974696
+        },
+        "prompt_tps": {
+          "mean": 16826.853798586526,
+          "std": 13110.641883328795,
+          "min": 1689.1810885521606,
+          "max": 24560.248003023997
+        },
+        "generation_tps": {
+          "mean": 221.67896474429514,
+          "std": 1.5341183317204818,
+          "min": 219.9108991169662,
+          "max": 222.6577446360899
+        },
+        "peak_memory_gb": {
+          "mean": 2.755610558,
+          "std": 0.0,
+          "min": 2.755610558,
+          "max": 2.755610558
+        },
+        "output_text": "This is a digital illustration of a simple, abstract scene. The background is a solid, light gray color. In the foreground, there are several rectangular shapes, all of which are colored. There are four rectangles in total. The first rectangle is a bright green color. The second rectangle is a bright purple color. The"
+      }
+    },
+    {
+      "name": "medium",
+      "complexity": "medium",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 323,
+          "std": 0.0,
+          "min": 323,
+          "max": 323
+        },
+        "completion_tokens": {
+          "mean": 64,
+          "std": 0.0,
+          "min": 64,
+          "max": 64
+        },
+        "prefill_ms": {
+          "mean": 72.48348633341568,
+          "std": 102.18583507206608,
+          "min": 13.378333002037834,
+          "max": 190.47745900024893
+        },
+        "decode_ms": {
+          "mean": 290.0339446665991,
+          "std": 3.127261578698642,
+          "min": 287.7397080010269,
+          "max": 293.5960419999901
+        },
+        "inference_ms": {
+          "mean": 374.83662499774556,
+          "std": 105.3034897737457,
+          "min": 313.41866699949605,
+          "max": 496.42849999509053
+        },
+        "latency_ms": {
+          "mean": 374.98377766557195,
+          "std": 105.31157595751124,
+          "min": 313.5565000047791,
+          "max": 496.58495799667435
+        },
+        "prompt_tps": {
+          "mean": 16532.8572465931,
+          "std": 12850.75745720057,
+          "min": 1695.7387068019314,
+          "max": 24143.5162326128
+        },
+        "generation_tps": {
+          "mean": 220.68083753720043,
+          "std": 2.3665329361258056,
+          "min": 217.9865898873465,
+          "max": 222.42324649808708
+        },
+        "peak_memory_gb": {
+          "mean": 2.755612062,
+          "std": 0.0,
+          "min": 2.755612062,
+          "max": 2.755612062
+        },
+        "output_text": "This image is a digital illustration of a grid composed of numerous colored squares, arranged in a 10x10 pattern. Each square is a distinct color, and the entire image is a mosaic of various hues. The colors include shades of green, blue, purple, red, orange, yellow, and various other"
+      }
+    },
+    {
+      "name": "high",
+      "complexity": "high",
+      "prompt": "Describe what you see in detail.",
+      "n_runs": 3,
+      "summary": {
+        "prompt_tokens": {
+          "mean": 323,
+          "std": 0.0,
+          "min": 323,
+          "max": 323
+        },
+        "completion_tokens": {
+          "mean": 16,
+          "std": 0.0,
+          "min": 16,
+          "max": 16
+        },
+        "prefill_ms": {
+          "mean": 72.58338900040447,
+          "std": 102.34247493745242,
+          "min": 13.458499997796025,
+          "max": 190.75829200301087
+        },
+        "decode_ms": {
+          "mean": 75.01386100193486,
+          "std": 2.6630737914978013,
+          "min": 73.41641600214643,
+          "max": 78.0881250029779
+        },
+        "inference_ms": {
+          "mean": 160.0543753350697,
+          "std": 105.26358626101562,
+          "min": 99.10441700048978,
+          "max": 281.6021250037011
+        },
+        "latency_ms": {
+          "mean": 160.1967496656774,
+          "std": 105.26298552882018,
+          "min": 99.23970799718518,
+          "max": 281.74379099800717
+        },
+        "prompt_tps": {
+          "mean": 16519.95554586078,
+          "std": 12840.482001411803,
+          "min": 1693.2422523205537,
+          "max": 23999.702793988537
+        },
+        "generation_tps": {
+          "mean": 213.4696809259067,
+          "std": 7.426560870293386,
+          "min": 204.89671123989515,
+          "max": 217.93490980998334
+        },
+        "peak_memory_gb": {
+          "mean": 2.755612062,
+          "std": 0.0,
+          "min": 2.755612062,
+          "max": 2.755612062
+        },
+        "output_text": "The image is completely obscured by static, making it impossible to discern any content."
+      }
+    }
+  ]
+}

@@ -59,6 +59,9 @@ class ModelProfile:
     model_size_gb: float     # Approximate model size on disk (4-bit)
     inference_memory_gb: float  # Approximate memory during inference
 
+    # Optimization support
+    supports_tome: bool = True  # Whether in-ViT ToMe is applicable
+
     def compute_visual_tokens(self, frames: int, height: int, width: int) -> int:
         """Compute the number of visual tokens for given video dimensions.
 
@@ -313,6 +316,7 @@ PROFILES: dict[str, ModelProfile] = {
         kv_heads=4,
         model_size_gb=1.5,      # 5B params but 2GB memory footprint
         inference_memory_gb=2.0,
+        supports_tome=False,    # MobileNet-v5, not standard ViT
     ),
     "gemma3n-e4b": ModelProfile(
         family="gemma3n",
@@ -332,6 +336,7 @@ PROFILES: dict[str, ModelProfile] = {
         kv_heads=8,
         model_size_gb=2.5,      # 8B params but 4GB memory footprint
         inference_memory_gb=3.0,
+        supports_tome=False,    # MobileNet-v5, not standard ViT
     ),
     # ── Phi-4 Multimodal ─────────────────────────────────────────────
     "phi4-multimodal": ModelProfile(
@@ -411,6 +416,7 @@ PROFILES: dict[str, ModelProfile] = {
         kv_heads=3,
         model_size_gb=0.3,
         inference_memory_gb=0.5,
+        supports_tome=False,    # Pixel shuffle disrupts spatial structure
     ),
     "smolvlm-500m": ModelProfile(
         family="smolvlm",
@@ -430,6 +436,7 @@ PROFILES: dict[str, ModelProfile] = {
         kv_heads=3,
         model_size_gb=0.5,
         inference_memory_gb=0.8,
+        supports_tome=False,    # Pixel shuffle disrupts spatial structure
     ),
     "smolvlm-2.2b": ModelProfile(
         family="smolvlm",
@@ -449,6 +456,7 @@ PROFILES: dict[str, ModelProfile] = {
         kv_heads=4,
         model_size_gb=1.5,
         inference_memory_gb=2.0,
+        supports_tome=False,    # Pixel shuffle disrupts spatial structure
     ),
     # ── InternVL3 (LLaVA-style: InternViT-300M + MLP + Qwen2.5 LLM) ──
     "internvl3-1b": ModelProfile(
@@ -467,6 +475,7 @@ PROFILES: dict[str, ModelProfile] = {
         deltanet_layers=0,
         full_attn_layers=24,    # Qwen2.5-0.5B LLM
         kv_heads=2,
+        supports_tome=False,    # pixel_shuffle disrupts spatial structure
         model_size_gb=0.6,
         inference_memory_gb=1.0,
     ),
@@ -486,6 +495,7 @@ PROFILES: dict[str, ModelProfile] = {
         deltanet_layers=0,
         full_attn_layers=28,    # Qwen2.5-1.5B LLM
         kv_heads=2,
+        supports_tome=False,    # pixel_shuffle disrupts spatial structure
         model_size_gb=1.0,
         inference_memory_gb=1.6,
     ),
@@ -506,6 +516,7 @@ PROFILES: dict[str, ModelProfile] = {
         deltanet_layers=0,
         full_attn_layers=24,    # Qwen2-0.5B LLM
         kv_heads=2,
+        supports_tome=False,    # CNN encoder, not ViT
         model_size_gb=0.1,
         inference_memory_gb=0.5,
     ),
@@ -525,6 +536,7 @@ PROFILES: dict[str, ModelProfile] = {
         deltanet_layers=0,
         full_attn_layers=28,    # Qwen2-1.5B LLM
         kv_heads=2,
+        supports_tome=False,    # CNN encoder, not ViT
         model_size_gb=0.3,
         inference_memory_gb=1.0,
     ),
