@@ -67,6 +67,46 @@ Stage 5: Decode                      ██░░░░░░░░  20%   strea
 - Done: auto-regressive, streaming output, early stopping config
 - TODO: speculative decoding (draft model), continuous batching
 
+### Per-Stage Model Differences (updated 2026-03-06)
+
+```
+                    Qwen2.5-VL       Qwen3-VL         Qwen3.5          Gemma3        SmolVLM
+                    ──────────       ────────         ───────          ──────        ───────
+Stage 1: ViT
+  patch             14               14               16               14(SigLIP)    14/16(SigLIP)
+  merge_factor      28               28               32               14(no merge)  14/16(no merge)
+  windowed attn     YES              no               no               no            no
+  deepstack         no               YES(tuple)       YES(empty)       no            no
+  ToMe wrapper      Qwen25Wrapper    Qwen3Wrapper     Qwen3Wrapper     N/A           N/A
+  ViT blocks        32               32               12(0.8B)/27(9B)  varies        varies
+
+Stage 2: Visual Tokens
+  token type        image+video      image+video      image+video      image only    image only
+  token config      image_token_id   image_token_index image_token_index fixed 256    fixed 64
+  merge signature   (img,vid,feat,   (feat,embed,ids, same as Qwen3    different     different
+                     embed,ids)       img,vid)
+
+Stage 3: LLM Prefill
+  LLM type          Qwen2(GQA)       Qwen2(GQA)       DeltaNet+Attn    Gemma2        SmolLM
+  RoPE              3D MRoPE         3D MRoPE          3D MRoPE         standard      standard
+  position_ids      get_rope_index   get_rope_index    get_rope_index   simple seq    simple seq
+  layers            36(3B)/28(7B)    32                 24(0.8B)         26-48         24
+
+Stage 4: KV Cache
+  KV heads          2(3B)/4(7B)      4                  2(0.8B)/4(4B+)  4-8           3-4
+  DeltaNet layers   0                0                  18(0.8B)/24(4B)  0             0
+  cache type        KVCache          KVCache            KVCache+Delta    KVCache       KVCache
+
+Stage 5: Decode
+  eos handling      same             same               same             different     different
+  stopping_criteria same             same               same             different     different
+```
+
+Key takeaway: Qwen family shares the same LLM layer loop (Stage 3-5).
+Differences are in Stage 1-2 (ViT architecture, token merge signature),
+already abstracted via wrappers + `_is_qwen3` flag.
+Gemma/SmolVLM have entirely different ViT — ToMe/FastV not yet supported.
+
 ## Documents
 
 - [visual-token-compression.md](visual-token-compression.md) — Core research direction: three key papers, prototype results, compatibility analysis with KV cache / batch scheduling / quantization.
