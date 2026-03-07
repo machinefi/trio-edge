@@ -156,7 +156,6 @@ class MLXBackend(BaseBackend):
         )
         self._loaded = True
         logger.info("[MLX] Model loaded in %.1fs (video_model=%s)", time.monotonic() - t0, self._is_video_model)
-        logger.info("[MLX] Model loaded in %.1fs", time.monotonic() - t0)
 
     def _get_prompt_cache(self):
         """Get or create the persistent PromptCache."""
