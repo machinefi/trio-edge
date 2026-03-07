@@ -49,6 +49,7 @@ def bench_generate(model, processor, input_ids, pixel_values, mask, kwargs,
     tic = time.perf_counter()
     n_tokens = 0
     prefill_time = 0
+    spec_stats = {}
 
     for n, (token, logprobs) in enumerate(
         generate_step(
@@ -56,6 +57,7 @@ def bench_generate(model, processor, input_ids, pixel_values, mask, kwargs,
             max_tokens=max_tokens, temperature=temperature,
             prompt_cache_manager=cache_mgr,
             speculative_lookahead=speculative_lookahead,
+            speculative_stats=spec_stats,
             **kwargs,
         )
     ):
@@ -81,6 +83,7 @@ def bench_generate(model, processor, input_ids, pixel_values, mask, kwargs,
         "gen_tokens": n_tokens,
         "prompt_tps": input_ids.size / max(prefill_time, 1e-9),
         "gen_tps": n_tokens / max(decode_time, 1e-9) if n_tokens > 0 else 0,
+        "spec_stats": spec_stats,
     }
 
 
@@ -156,9 +159,15 @@ def main():
             std_results.append(r_std)
             spec_results.append(r_spec)
 
+            ss = r_spec['spec_stats']
+            acc_rate = ss.get('acceptance_rate', 0) * 100
+            drafted = ss.get('drafted', 0)
+            accepted = ss.get('accepted', 0)
+            fallbacks = ss.get('fallbacks', 0)
             print(f"Run {i+1}/{args.runs}:  "
                   f"std decode={r_std['decode_ms']:.0f}ms ({r_std['gen_tps']:.1f} t/s, {r_std['gen_tokens']} tok)  |  "
-                  f"spec decode={r_spec['decode_ms']:.0f}ms ({r_spec['gen_tps']:.1f} t/s, {r_spec['gen_tokens']} tok)")
+                  f"spec decode={r_spec['decode_ms']:.0f}ms ({r_spec['gen_tps']:.1f} t/s, {r_spec['gen_tokens']} tok)  "
+                  f"accept={acc_rate:.0f}% ({accepted}/{drafted} drafted, {fallbacks} fallbacks)")
 
     # Summary
     def avg(results, key):
@@ -181,6 +190,14 @@ def main():
         sign = "+" if diff_pct > 0 else ""
         print(f"  {label:<25} {a:>12.1f} {b:>12.1f} {sign}{diff_pct:>8.1f}%")
 
+    # Acceptance rate summary
+    all_drafted = sum(r['spec_stats'].get('drafted', 0) for r in spec_results)
+    all_accepted = sum(r['spec_stats'].get('accepted', 0) for r in spec_results)
+    all_fallbacks = sum(r['spec_stats'].get('fallbacks', 0) for r in spec_results)
+    avg_acc = all_accepted / max(all_drafted, 1) * 100
+    print(f"  {'Acceptance rate':<25} {'—':>12} {avg_acc:>11.1f}%")
+    print(f"  {'Drafted/Accepted':<25} {'—':>12} {all_accepted:>5}/{all_drafted:<5}")
+    print(f"  {'Fallback rounds':<25} {'—':>12} {all_fallbacks:>12}")
     print(f"{'='*70}")
 
     # Correctness check

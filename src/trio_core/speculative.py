@@ -46,9 +46,10 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class SpecStats:
-    """Statistics from one speculative decode round."""
-    drafted: int        # tokens drafted
-    accepted: int       # tokens accepted (including resampled)
+    """Statistics from speculative decoding."""
+    drafted: int        # total draft candidates proposed
+    accepted: int       # draft candidates accepted by target
+    fallbacks: int      # rounds where no n-gram match was found
     acceptance_rate: float
 
 
@@ -148,6 +149,7 @@ class SpeculativeDecoder:
         # Stats
         self._total_drafted = 0
         self._total_accepted = 0
+        self._total_fallbacks = 0
 
     def decode(
         self,
@@ -167,7 +169,7 @@ class SpeculativeDecoder:
         Yields:
             (token, logprobs) pairs, same interface as standard decode.
         """
-        y = first_token
+        y = first_token.squeeze()  # ensure scalar
         n = 0
 
         while n < max_tokens:
@@ -183,8 +185,7 @@ class SpeculativeDecoder:
                     resampled = sampler(target_logprobs[0][None])
                     yield resampled.squeeze(), target_logprobs[0]
                     n += 1
-                    self._total_drafted += 0
-                    self._total_accepted += 1
+                    self._total_fallbacks += 1
                     y = resampled.squeeze()
                     continue
 
@@ -237,7 +238,7 @@ class SpeculativeDecoder:
             y = resampled_token
 
             self._total_drafted += k
-            self._total_accepted += accepted + 1
+            self._total_accepted += accepted
 
         logger.debug(
             "Speculative decode: %d drafted, %d accepted (%.1f%% rate)",
@@ -381,5 +382,6 @@ class SpeculativeDecoder:
         return SpecStats(
             drafted=self._total_drafted,
             accepted=self._total_accepted,
+            fallbacks=self._total_fallbacks,
             acceptance_rate=self.acceptance_rate,
         )
