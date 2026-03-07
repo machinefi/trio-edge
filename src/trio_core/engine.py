@@ -136,6 +136,21 @@ class TrioCore(CallbackMixin):
             backend=self._backend_override,
         )
 
+        # If FastV is enabled and we got an MLX backend, swap to FastVMLXBackend
+        if self.config.fastv_enabled and backend.backend_name == "mlx":
+            if self.config.tome_enabled:
+                logger.warning(
+                    "Both fastv_enabled and tome_enabled are set; using FastV (they are mutually exclusive)"
+                )
+            from trio_core.fastv_backend import FastVMLXBackend
+
+            backend = FastVMLXBackend(
+                self.config.model,
+                prune_ratio=self.config.fastv_ratio,
+                prune_after_layer=self.config.fastv_layer,
+                device_info=backend.device_info,
+            )
+
         # If ToMe is enabled and we got an MLX backend, swap to ToMeMLXBackend
         if self.config.tome_enabled and backend.backend_name == "mlx":
             from trio_core.tome_backend import ToMeMLXBackend
@@ -145,6 +160,7 @@ class TrioCore(CallbackMixin):
                 tome_r=self.config.tome_r,
                 metric=self.config.tome_metric,
                 min_keep_ratio=self.config.tome_min_keep_ratio,
+                adaptive=self.config.tome_adaptive,
                 device_info=backend.device_info,
             )
 

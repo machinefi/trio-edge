@@ -591,7 +591,7 @@ class TransformersBackend(BaseBackend):
 
 # ── Auto Backend Selection ───────────────────────────────────────────────────
 
-_BACKEND_MAP = {
+_BACKEND_MAP: dict[str, type[BaseBackend]] = {
     "mlx": MLXBackend,
     "transformers": TransformersBackend,
 }

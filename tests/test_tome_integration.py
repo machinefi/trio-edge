@@ -231,6 +231,84 @@ class TestShouldMerge:
 
 
 # ---------------------------------------------------------------------------
+# BaseToMeVisionWrapper._get_layer_r (adaptive mode)
+# ---------------------------------------------------------------------------
+
+class TestGetLayerR:
+    def _make_wrapper(self, r=4, skip_first=2, skip_last=2, adaptive=False):
+        from unittest.mock import MagicMock
+        vm = MagicMock()
+        return BaseToMeVisionWrapper(
+            vm, r=r, skip_first=skip_first, skip_last=skip_last,
+            adaptive=adaptive,
+        )
+
+    def test_constant_mode_returns_r(self):
+        """Non-adaptive: all mergeable layers return self.r."""
+        wrapper = self._make_wrapper(r=4, adaptive=False)
+        n_blocks = 10  # mergeable: layers 2-7
+        for layer in range(2, 8):
+            assert wrapper._get_layer_r(layer, n_blocks) == 4
+
+    def test_constant_mode_skipped_layers_return_zero(self):
+        wrapper = self._make_wrapper(r=4, adaptive=False)
+        n_blocks = 10
+        assert wrapper._get_layer_r(0, n_blocks) == 0
+        assert wrapper._get_layer_r(1, n_blocks) == 0
+        assert wrapper._get_layer_r(8, n_blocks) == 0
+        assert wrapper._get_layer_r(9, n_blocks) == 0
+
+    def test_adaptive_linear_ramp(self):
+        """Adaptive mode: r ramps linearly from 0 to r_max."""
+        wrapper = self._make_wrapper(r=4, skip_first=2, skip_last=2, adaptive=True)
+        n_blocks = 10  # mergeable: layers 2-7, n_mergeable=6
+
+        # position = layer - skip_first + 1
+        # r = int(4 * position / 6)
+        expected = {
+            2: int(4 * 1 / 6),  # 0
+            3: int(4 * 2 / 6),  # 1
+            4: int(4 * 3 / 6),  # 2
+            5: int(4 * 4 / 6),  # 2
+            6: int(4 * 5 / 6),  # 3
+            7: int(4 * 6 / 6),  # 4
+        }
+        for layer, exp_r in expected.items():
+            actual = wrapper._get_layer_r(layer, n_blocks)
+            assert actual == exp_r, f"Layer {layer}: expected r={exp_r}, got {actual}"
+
+    def test_adaptive_skipped_layers_return_zero(self):
+        wrapper = self._make_wrapper(r=4, adaptive=True)
+        n_blocks = 10
+        assert wrapper._get_layer_r(0, n_blocks) == 0
+        assert wrapper._get_layer_r(9, n_blocks) == 0
+
+    def test_adaptive_qwen25vl_32_blocks(self):
+        """Simulate Qwen2.5-VL: 32 blocks, skip 2+2 = 28 mergeable."""
+        wrapper = self._make_wrapper(r=4, skip_first=2, skip_last=2, adaptive=True)
+        n_blocks = 32
+
+        # Layer 2: position=1, r=int(4*1/28)=0
+        assert wrapper._get_layer_r(2, n_blocks) == 0
+        # Layer 15: position=14, r=int(4*14/28)=2
+        assert wrapper._get_layer_r(15, n_blocks) == 2
+        # Layer 29: position=28, r=int(4*28/28)=4
+        assert wrapper._get_layer_r(29, n_blocks) == 4
+
+    def test_adaptive_ramp_is_monotonic(self):
+        """r values should be non-decreasing across layers."""
+        wrapper = self._make_wrapper(r=8, skip_first=2, skip_last=2, adaptive=True)
+        n_blocks = 32
+        prev_r = 0
+        for layer in range(2, 30):
+            layer_r = wrapper._get_layer_r(layer, n_blocks)
+            assert layer_r >= prev_r, (
+                f"Layer {layer}: r={layer_r} < prev_r={prev_r}, not monotonic"
+            )
+            prev_r = layer_r
+
+
+# ---------------------------------------------------------------------------
 # BaseToMeVisionWrapper._get_metric
 # ---------------------------------------------------------------------------
 

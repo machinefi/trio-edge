@@ -51,6 +51,18 @@ class EngineConfig(BaseSettings):
     tome_min_keep_ratio: float = Field(
         default=0.3, description="Min fraction of tokens to keep (0.0-1.0]"
     )
+    tome_adaptive: bool = Field(
+        default=False, description="Linearly ramp r from 0 in early layers to r_max in deep layers"
+    )
+
+    # FastV (visual token pruning in LLM layers)
+    fastv_enabled: bool = Field(default=False, description="Enable FastV visual token pruning")
+    fastv_ratio: float = Field(
+        default=0.5, description="Fraction of visual tokens to prune (0.0-1.0)"
+    )
+    fastv_layer: int = Field(
+        default=2, description="LLM layer to compute attention importance at"
+    )
 
     # Early stopping
     early_stop: bool = Field(default=False, description="Enable EOS-probability early stopping")

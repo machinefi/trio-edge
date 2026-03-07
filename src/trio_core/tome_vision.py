@@ -34,6 +34,7 @@ class BaseToMeVisionWrapper:
         skip_last: int = 2,
         min_keep_ratio: float = 0.3,
         metric: str = "keys",  # "keys" or "hidden"
+        adaptive: bool = False,
     ):
         self.vision_model = vision_model
         self.r = r
@@ -41,8 +42,23 @@ class BaseToMeVisionWrapper:
         self.skip_last = skip_last
         self.min_keep_ratio = min_keep_ratio
         self.metric = metric
+        self.adaptive = adaptive
         self._merge_log: list[dict] = []
         self._initial_seq_len: int = 0
+
+    def _get_layer_r(self, layer_num: int, n_blocks: int) -> int:
+        """Get r for this layer. Linear ramp if adaptive, else constant."""
+        if not self._should_merge(layer_num, n_blocks):
+            return 0
+        if not self.adaptive:
+            return self.r
+        start = self.skip_first
+        end = n_blocks - self.skip_last
+        position = layer_num - start + 1
+        n_mergeable = end - start
+        if n_mergeable <= 0:
+            return 0
+        return max(0, int(self.r * position / n_mergeable))
 
     def _should_merge(self, layer_num: int, n_blocks: int) -> bool:
         """Whether to merge after this layer. Override for model-specific skip logic."""
@@ -68,12 +84,13 @@ class BaseToMeVisionWrapper:
         token_size: mx.array | None,
         block,
         orig_len: int,
+        r: int | None = None,
     ) -> tuple[mx.array, mx.array, mx.array | None]:
         """Merge tokens in a single segment (window or full sequence)."""
         n = hidden_states.shape[0]
         min_keep = max(4, int(orig_len * self.min_keep_ratio))
         max_removable = max(0, n - min_keep)
-        r = min(self.r, n // 2, max_removable)
+        r = min(r if r is not None else self.r, n // 2, max_removable)
 
         if r <= 0:
             return hidden_states, rotary_pos_emb, token_size
@@ -164,7 +181,8 @@ class ToMeQwen25VisionWrapper(BaseToMeVisionWrapper):
                 rotary_pos_emb=rotary_pos_emb,
             )
 
-            if self._should_merge(layer_num, n_blocks):
+            layer_r = self._get_layer_r(layer_num, n_blocks)
+            if layer_r > 0:
                 before = hidden_states.shape[0]
 
                 # Track initial window sizes
@@ -178,6 +196,7 @@ class ToMeQwen25VisionWrapper(BaseToMeVisionWrapper):
                         hidden_states, rotary_pos_emb,
                         cu_window_seqlens, token_size,
                         blk, initial_window_sizes,
+                        r=layer_r,
                     )
                 )
                 after = hidden_states.shape[0]
@@ -221,7 +240,9 @@ class ToMeQwen25VisionWrapper(BaseToMeVisionWrapper):
         hidden_states, rotary_pos_emb,
         cu_window_seqlens, token_size,
         block, initial_window_sizes,
+        r: int | None = None,
     ):
+        effective_r = r if r is not None else self.r
         n_windows = cu_window_seqlens.shape[0] - 1
         seqlens_list = cu_window_seqlens.tolist()
 
@@ -245,7 +266,7 @@ class ToMeQwen25VisionWrapper(BaseToMeVisionWrapper):
             orig_size = initial_window_sizes.get(w, window_len)
             min_keep = max(4, int(orig_size * self.min_keep_ratio))
             max_removable = max(0, window_len - min_keep)
-            r_window = min(self.r, window_len // 2, max_removable)
+            r_window = min(effective_r, window_len // 2, max_removable)
 
             if r_window <= 0:
                 merged_hs.append(w_hs)
@@ -328,12 +349,13 @@ class ToMeQwen3VisionWrapper(BaseToMeVisionWrapper):
                 deepstack_feature_lists.append(ds_merger(hidden_states))
 
             # ToMe merge
-            if self._should_merge(layer_num, n_blocks):
+            layer_r = self._get_layer_r(layer_num, n_blocks)
+            if layer_r > 0:
                 before = hidden_states.shape[0]
 
                 hidden_states, rotary_pos_emb, token_size = self._merge_segment(
                     hidden_states, rotary_pos_emb, token_size,
-                    blk, self._initial_seq_len,
+                    blk, self._initial_seq_len, r=layer_r,
                 )
                 after = hidden_states.shape[0]
 

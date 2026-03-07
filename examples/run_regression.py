@@ -41,8 +41,13 @@ def build_config_key(args) -> str:
     # Shorten model name
     model_short = model.split("/")[-1].lower().replace("-instruct", "").replace("-4bit", "")
     parts.append(model_short)
-    if args.tome:
-        parts.append(f"tome_r{args.tome}")
+    if args.fastv is not None:
+        parts.append(f"fastv_{args.fastv}")
+    elif args.tome:
+        suffix = f"tome_r{args.tome}"
+        if args.tome_adaptive:
+            suffix += "_adaptive"
+        parts.append(suffix)
     else:
         parts.append("baseline")
     return "_".join(parts)
@@ -64,11 +69,18 @@ def run_benchmarks(args) -> dict:
     }
     if args.model:
         config_kwargs["model"] = args.model
+    if args.fastv is not None:
+        config_kwargs["fastv_enabled"] = True
+        config_kwargs["fastv_ratio"] = args.fastv
+        if args.fastv_layer is not None:
+            config_kwargs["fastv_layer"] = args.fastv_layer
     if args.tome:
         config_kwargs["tome_enabled"] = True
         config_kwargs["tome_r"] = args.tome
         config_kwargs["tome_metric"] = "hidden"
         config_kwargs["tome_min_keep_ratio"] = 0.3
+        if args.tome_adaptive:
+            config_kwargs["tome_adaptive"] = True
 
     config = EngineConfig(**config_kwargs)
     engine = TrioCore(config)
@@ -87,6 +99,8 @@ def run_benchmarks(args) -> dict:
         "model": config.model,
         "config_key": build_config_key(args),
         "tome_r": args.tome,
+        "tome_adaptive": getattr(args, "tome_adaptive", False),
+        "fastv_ratio": getattr(args, "fastv", None),
         "samples_per_bench": n,
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "benchmarks": {},
@@ -238,6 +252,12 @@ def main():
                         help="Model name (default: auto)")
     parser.add_argument("--tome", type=int, default=None, metavar="R",
                         help="Enable ToMe with r tokens merged per layer")
+    parser.add_argument("--tome-adaptive", action="store_true",
+                        help="Use adaptive r (linear ramp from 0 to r_max)")
+    parser.add_argument("--fastv", type=float, default=None, metavar="RATIO",
+                        help="Enable FastV with given prune ratio (0.0-1.0)")
+    parser.add_argument("--fastv-layer", type=int, default=None,
+                        help="FastV: LLM layer to compute importance at (default: 2)")
     parser.add_argument("--samples", "-n", type=int, default=DEFAULT_SAMPLES,
                         help=f"Samples per benchmark (default: {DEFAULT_SAMPLES})")
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD,

@@ -34,6 +34,7 @@ class ToMeMLXBackend(MLXBackend):
     def __init__(
         self, model_name: str, tome_r: int = 8,
         metric: str = "keys", min_keep_ratio: float = 0.3,
+        adaptive: bool = False,
         **kwargs,
     ):
         super().__init__(model_name, **kwargs)
@@ -50,6 +51,7 @@ class ToMeMLXBackend(MLXBackend):
         self.tome_r = tome_r
         self.tome_metric = metric
         self.tome_min_keep_ratio = min_keep_ratio
+        self.tome_adaptive = adaptive
         self._wrapper: BaseToMeVisionWrapper | None = None
         self._is_qwen3: bool = False
 
@@ -74,13 +76,14 @@ class ToMeMLXBackend(MLXBackend):
             r=self.tome_r,
             metric=self.tome_metric,
             min_keep_ratio=self.tome_min_keep_ratio,
+            adaptive=self.tome_adaptive,
         )
         self._model.vision_tower = self._wrapper
 
         logger.info(
-            "[ToMe] Wrapped vision_tower (%s) with r=%d, metric=%s, min_keep=%.0f%%",
+            "[ToMe] Wrapped vision_tower (%s) with r=%d, metric=%s, min_keep=%.0f%%, adaptive=%s",
             wrapper_cls.__name__, self.tome_r, self.tome_metric,
-            self.tome_min_keep_ratio * 100,
+            self.tome_min_keep_ratio * 100, self.tome_adaptive,
         )
 
     def _get_visual_token_ids(self, model):
