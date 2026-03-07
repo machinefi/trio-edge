@@ -210,6 +210,20 @@ Conclusion: **trio-core adds no meaningful accuracy or latency overhead on 3B+ m
 Differences are within noise (n=50) and prompt-template-sensitive, not engine-level.
 Full details: [eval-results/mlxvlm-native-baselines.md](eval-results/mlxvlm-native-baselines.md)
 
+### Speculative Decode Benchmark (Qwen2.5-VL-3B, M3 Pro, lookahead=5)
+
+| Scenario | Acceptance Rate | Decode Overhead | Verdict |
+|---|---|---|---|
+| A: "Describe image" | 0.0% | +37% slower | No benefit |
+| B: JSON output | 0.0% | +18% slower | Pure overhead |
+| C: Repetitive list | 2.2% | +37% slower | Negligible |
+
+**Prompt lookup speculative decoding is not useful for VLM inference.**
+VLM outputs are conditioned on visual content (pixels), not text patterns in the prompt.
+N-gram matching against prompt tokens cannot predict image-conditioned outputs.
+Even with 0% acceptance, the speculative code path adds 17-37% decode overhead.
+Full details: [eval-results/speculative-decode-benchmark.md](eval-results/speculative-decode-benchmark.md)
+
 ### Key Findings
 
 1. **Qwen3-VL: zero quality loss** — 91% accuracy with and without ToMe, plus 31% prefill speedup
@@ -218,6 +232,7 @@ Full details: [eval-results/mlxvlm-native-baselines.md](eval-results/mlxvlm-nati
 4. K-matrix similarity (even with RoPE fix) doesn't beat hidden states — hidden states remain the best metric
 5. Qwen3-VL has fewer tokens to start with (323 vs 419 at 480p), so absolute compression is smaller
 6. ToMe is more impactful at higher resolutions where token counts are larger
+7. **Speculative decode (prompt lookup) useless for VLM** — 0% acceptance, 17-37% overhead. VLM outputs are image-conditioned, not text-pattern-predictable
 
 ### min_keep_ratio Sweep
 
