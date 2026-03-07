@@ -42,7 +42,8 @@ def build_config_key(args) -> str:
     model_short = model.split("/")[-1].lower().replace("-instruct", "").replace("-4bit", "")
     parts.append(model_short)
     if args.fastv is not None:
-        parts.append(f"fastv_{args.fastv}")
+        layer_suffix = f"_L{args.fastv_layer}" if args.fastv_layer else ""
+        parts.append(f"fastv_{args.fastv}{layer_suffix}")
     elif args.tome:
         suffix = f"tome_r{args.tome}"
         if args.tome_adaptive:
