@@ -121,6 +121,7 @@ Gemma/SmolVLM have entirely different ViT — ToMe/FastV not yet supported.
 - [eval-baseline-plan.md](eval-baseline-plan.md) — Tier 1 baseline collection plan: 6 models × 5 benchmarks × baseline/ToMe configs.
 - [phase1-custom-generate.md](phase1-custom-generate.md) — Phase 1 detailed implementation: custom generate loop, persistent KV cache, early stopping. Code-level design with mlx-vlm source analysis.
 - [eval-results/mlxvlm-native-baselines.md](eval-results/mlxvlm-native-baselines.md) — mlx-vlm native baselines: ground-truth comparison (4 models × 5 benchmarks) showing trio-core adds no meaningful accuracy or latency overhead.
+- [eval-results/speculative-decode-benchmark.md](eval-results/speculative-decode-benchmark.md) — Speculative decode (prompt lookup) benchmark: 0% acceptance rate across 3 scenarios, confirms prompt lookup is not useful for VLM inference.
 - [eval-results/](eval-results/) — Baseline, compressed, and ToMe eval JSON files.
 
 ## Key Thesis
