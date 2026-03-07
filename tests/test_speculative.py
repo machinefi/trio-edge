@@ -141,6 +141,7 @@ class TestSpecStats:
         s = decoder.stats
         assert s.drafted == 0
         assert s.accepted == 0
+        assert s.fallbacks == 0
 
 
 # ---------------------------------------------------------------------------

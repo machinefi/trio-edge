@@ -439,6 +439,7 @@ def generate_step(
     prefill_step_size: Optional[int] = 2048,
     early_stop: Optional[EarlyStopConfig] = None,
     speculative_lookahead: int = 0,
+    speculative_stats: Optional[dict] = None,
     **kwargs,
 ) -> Generator[Tuple[mx.array, mx.array], None, None]:
     """Generate tokens with optional persistent cache and early stopping.
@@ -654,6 +655,13 @@ def generate_step(
             n += 1
             if early_stop is not None and early_stop.should_stop(lp, n):
                 break
+
+        if speculative_stats is not None:
+            s = spec_decoder.stats
+            speculative_stats.update(
+                drafted=s.drafted, accepted=s.accepted,
+                fallbacks=s.fallbacks, acceptance_rate=s.acceptance_rate,
+            )
         return
 
     # Standard decode loop
