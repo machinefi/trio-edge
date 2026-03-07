@@ -148,7 +148,14 @@ class MLXBackend(BaseBackend):
         self._config = load_config(self.model_name)
         self._prompt_cache = None  # Lazily created on first generate
         self._early_stop = None   # Set via set_early_stop() after load
+        # Detect if model natively supports video tokens (Qwen2.5-VL, Qwen3-VL, etc.)
+        # Models without video support (Gemma 3, SmolVLM2) use the image path instead.
+        self._is_video_model = (
+            hasattr(self._model.config, "video_token_id")
+            or hasattr(self._model.config, "video_token_index")
+        )
         self._loaded = True
+        logger.info("[MLX] Model loaded in %.1fs (video_model=%s)", time.monotonic() - t0, self._is_video_model)
         logger.info("[MLX] Model loaded in %.1fs", time.monotonic() - t0)
 
     def _get_prompt_cache(self):
@@ -308,11 +315,17 @@ class MLXBackend(BaseBackend):
             mx.clear_cache()
 
     def _prepare(self, frames: np.ndarray, prompt: str) -> tuple[str, dict]:
-        """Prepare prompt and pre-processed video tensors for mlx_vlm generate.
+        """Route to video or image preparation based on model capability."""
+        if self._is_video_model:
+            return self._prepare_video(frames, prompt)
+        return self._prepare_images(frames, prompt)
+
+    def _prepare_video(self, frames: np.ndarray, prompt: str) -> tuple[str, dict]:
+        """Prepare inputs via the video pipeline (Qwen2.5-VL, Qwen3-VL, etc.).
 
         Saves numpy frames as temp video, processes through mlx_vlm's
-        video pipeline (process_vision_info → fetch_video → processor),
-        then converts to MLX arrays.
+        video pipeline (process_vision_info → processor), then converts
+        to MLX arrays.
         """
         import mlx.core as mx
 
@@ -330,19 +343,14 @@ class MLXBackend(BaseBackend):
             messages, tokenize=False, add_generation_prompt=True,
         )
 
-        # Process video through mlx_vlm's video pipeline
-        from mlx_vlm.video_generate import process_vision_info, process_inputs_with_fallback
+        from mlx_vlm.video_generate import process_vision_info
         image_inputs, video_inputs, _ = process_vision_info(
             messages, return_video_kwargs=True,
         )
 
-        inputs = process_inputs_with_fallback(
-            self._processor,
-            prompts=formatted,
-            images=image_inputs,
-            audio=None,
-            videos=video_inputs,
-            return_tensors="np",
+        inputs = self._processor(
+            text=[formatted], images=image_inputs, videos=video_inputs,
+            padding=True, return_tensors="np",
         )
 
         # Convert to MLX arrays for generate_step
@@ -354,6 +362,54 @@ class MLXBackend(BaseBackend):
             "mask": mx.array(np.asarray(inputs["attention_mask"])),
         }
         for key in ("video_grid_thw", "image_grid_thw", "second_per_grid_ts"):
+            if key in inputs:
+                kwargs[key] = mx.array(np.asarray(inputs[key]))
+
+        return formatted, kwargs
+
+    def _prepare_images(self, frames: np.ndarray, prompt: str) -> tuple[str, dict]:
+        """Prepare inputs via the image pipeline (Gemma 3, SmolVLM2, etc.).
+
+        Converts numpy frames to PIL images and uses the processor's
+        image handling directly — no temp video file needed.
+        """
+        import mlx.core as mx
+        from PIL import Image
+
+        # Convert (T, C, H, W) float32 → list of PIL Images
+        images = []
+        for i in range(frames.shape[0]):
+            frame = (frames[i].transpose(1, 2, 0) * 255).clip(0, 255).astype(np.uint8)
+            images.append(Image.fromarray(frame))
+
+        messages = [{"role": "user", "content": []}]
+        for img in images:
+            messages[0]["content"].append({"type": "image", "image": img})
+        messages[0]["content"].append({"type": "text", "text": prompt})
+
+        formatted = self._processor.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True,
+        )
+
+        from mlx_vlm.video_generate import process_vision_info
+        image_inputs, video_inputs, _ = process_vision_info(
+            messages, return_video_kwargs=True,
+        )
+
+        inputs = self._processor(
+            text=[formatted], images=image_inputs,
+            padding=True, return_tensors="np",
+        )
+
+        # Convert to MLX arrays for generate_step
+        kwargs = {
+            "input_ids": mx.array(np.asarray(inputs["input_ids"])),
+            "pixel_values": mx.array(np.asarray(
+                inputs.get("pixel_values", np.array([]))
+            )),
+            "mask": mx.array(np.asarray(inputs["attention_mask"])),
+        }
+        for key in ("image_grid_thw",):
             if key in inputs:
                 kwargs[key] = mx.array(np.asarray(inputs[key]))
 
