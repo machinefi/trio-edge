@@ -138,7 +138,11 @@ class FastVMLXBackend(MLXBackend):
         hidden_states = vision_out.hidden_states
         deepstack_embeds = vision_out.deepstack_embeds
 
-        original_count = adapter.original_token_count(grid_thw)
+        if grid_thw is not None:
+            original_count = adapter.original_token_count(grid_thw)
+        else:
+            # Single-image models (InternVL, nanoLLaVA) don't produce grid_thw
+            original_count = hidden_states.shape[0]
         compressed_count = hidden_states.shape[0]
 
         # Step 2: Build input sequence (trim if ToMe compressed visual tokens)
@@ -555,6 +559,8 @@ class FastVMLXBackend(MLXBackend):
 
     def _original_token_count(self, grid_thw) -> int:
         """Compute expected token count without pruning (after PatchMerger)."""
+        if grid_thw is None:
+            return 0  # Single-image models; caller should use hidden_states.shape
         if self._adapter is not None:
             return self._adapter.original_token_count(grid_thw)
         return self._static_token_count(grid_thw)

@@ -474,12 +474,26 @@ class MLXBackend(BaseBackend):
             formatted = self._processor.apply_chat_template(
                 messages, tokenize=False, add_generation_prompt=True,
             )
-        except (TypeError, ValueError, KeyError):
-            # Fallback: simple <image> token format (LLaVA, nanoLLaVA, InternVL)
-            from mlx_vlm.prompt_utils import apply_chat_template
-            formatted = apply_chat_template(
-                self._processor, self._config, prompt, num_images=len(images),
-            )
+        except (TypeError, ValueError, KeyError, AttributeError):
+            formatted = None
+
+        # Verify prompt text is actually included in the formatted output.
+        # Some processors (InternVLChatProcessor) silently drop the prompt.
+        if formatted is None or prompt[:20] not in formatted:
+            tokenizer = getattr(self._processor, 'tokenizer', self._processor)
+            image_tokens = "<image>\n" * len(images)
+            text_messages = [
+                {"role": "user", "content": f"{image_tokens}{prompt}"},
+            ]
+            try:
+                formatted = tokenizer.apply_chat_template(
+                    text_messages, tokenize=False, add_generation_prompt=True,
+                )
+            except Exception:
+                from mlx_vlm.prompt_utils import apply_chat_template
+                formatted = apply_chat_template(
+                    self._processor, self._config, prompt, num_images=len(images),
+                )
 
         inputs = self._call_processor(
             text=[formatted], images=images,

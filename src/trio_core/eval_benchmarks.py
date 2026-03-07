@@ -252,13 +252,25 @@ class Benchmark(ABC):
         # Handle indirect negation: "There is no...", "I don't see..."
         neg_patterns = ["there is no", "there are no", "there isn't", "there aren't",
                         "i don't see", "i do not see", "no,", "not present",
-                        "no existence", "does not", "doesn't"]
+                        "no existence", "does not", "doesn't", "cannot see",
+                        "can't see", "not visible", "is not", "are not",
+                        "without any", "no sign of", "absent"]
         for pat in neg_patterns:
             if pat in text:
                 return "no"
         # If it contains "yes" anywhere, treat as yes
         if "yes" in text:
             return "yes"
+        # Handle affirmative descriptions: "The image shows...", "There is a..."
+        aff_patterns = ["there is a", "there are", "the image shows",
+                        "the image features", "the image depicts",
+                        "can be seen", "is visible", "are visible",
+                        "is present", "are present", "i can see",
+                        "shows a", "depicts a", "features a",
+                        "contains a", "includes a"]
+        for pat in aff_patterns:
+            if pat in text:
+                return "yes"
         return text
 
 
@@ -271,7 +283,7 @@ class POPEBenchmark(Benchmark):
     Splits: random, popular, adversarial (3000 each)
     """
 
-    PROMPT_TEMPLATE = "{question} Answer yes or no."
+    PROMPT_TEMPLATE = "{question} Answer with only one word: yes or no."
 
     def __init__(
         self,

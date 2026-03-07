@@ -1,0 +1,53 @@
+{
+  "model": "internvl3-2b",
+  "config": "compressed_50",
+  "n_runs": 3,
+  "avg_prefill_ms": 322.88579200030654,
+  "avg_decode_ms": 234.4239794947498,
+  "avg_latency_ms": 1229.1678130022774,
+  "avg_prompt_tps": 5178.301804997159,
+  "avg_gen_tps": 192.23700953151427,
+  "avg_peak_memory_gb": 4.48855314,
+  "prompt_tokens": 1672,
+  "runs": [
+    {
+      "run": 0,
+      "prefill_ms": 323.1619169964688,
+      "decode_ms": 227.84695900190854,
+      "inference_ms": 1221.063500001037,
+      "latency_ms": 1221.1534160014708,
+      "prompt_tps": 5173.876970219452,
+      "generation_tps": 197.50099012567054,
+      "prompt_tokens": 1672,
+      "completion_tokens": 45,
+      "peak_memory_gb": 4.48855314,
+      "text": "The image you provided appears to be a blank or empty space. It does not contain any visible objects"
+    },
+    {
+      "run": 1,
+      "prefill_ms": 322.8153750023921,
+      "decode_ms": 243.32462499296525,
+      "inference_ms": 1235.3329580000718,
+      "latency_ms": 1235.4210420016898,
+      "prompt_tps": 5179.431122162661,
+      "generation_tps": 184.9381253594904,
+      "prompt_tokens": 1672,
+      "completion_tokens": 45,
+      "peak_memory_gb": 4.48855314,
+      "text": "The image you provided appears to be a blank or empty space. It does not contain any visible objects"
+    },
+    {
+      "run": 2,
+      "prefill_ms": 322.956208998221,
+      "decode_ms": 225.52333399653435,
+      "inference_ms": 1222.8235000002314,
+      "latency_ms": 1222.914584002865,
+      "prompt_tps": 5177.172487831656,
+      "generation_tps": 199.5358937035381,
+      "prompt_tokens": 1672,
+      "completion_tokens": 45,
+      "peak_memory_gb": 4.48855314,
+      "text": "The image you provided appears to be a blank or empty space. It does not contain any visible objects"
+    }
+  ]
+}

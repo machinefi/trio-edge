@@ -1,0 +1,11 @@
+{
+  "model": "internvl3-2b",
+  "threshold": 0.95,
+  "noise": 0.01,
+  "baseline_cold_ms": 1506.2007500018808,
+  "baseline_warm_ms": 1525.1262396656482,
+  "similarity_cold_ms": 820.2299446663043,
+  "similarity_warm_ms": 687.3244930829969,
+  "speedup_warm": 2.2189318946349315,
+  "savings_pct": 54.93327206581415
+}

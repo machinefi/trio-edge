@@ -1,0 +1,53 @@
+{
+  "model": "internvl3-1b",
+  "config": "baseline",
+  "n_runs": 3,
+  "avg_prefill_ms": 39.09977050352609,
+  "avg_decode_ms": 41.59902099854662,
+  "avg_latency_ms": 113.01764599920716,
+  "avg_prompt_tps": 85320.9010015665,
+  "avg_gen_tps": 312.63557187136746,
+  "avg_peak_memory_gb": 1.922404028,
+  "prompt_tokens": 3336,
+  "runs": [
+    {
+      "run": 0,
+      "prefill_ms": 38.39579199848231,
+      "decode_ms": 43.58891599986236,
+      "inference_ms": 114.12579200259643,
+      "latency_ms": 114.21591600083048,
+      "prompt_tps": 86884.52109887103,
+      "generation_tps": 298.24095648630146,
+      "prompt_tokens": 3336,
+      "completion_tokens": 13,
+      "peak_memory_gb": 1.922404028,
+      "text": "I'm sorry, but I can't assist with that request."
+    },
+    {
+      "run": 1,
+      "prefill_ms": 39.2123330020695,
+      "decode_ms": 40.756583999609575,
+      "inference_ms": 111.97654200077523,
+      "latency_ms": 112.05925000103889,
+      "prompt_tps": 85075.27465463319,
+      "generation_tps": 318.9668692578488,
+      "prompt_tokens": 3336,
+      "completion_tokens": 13,
+      "peak_memory_gb": 1.922404028,
+      "text": "I'm sorry, but I can't assist with that request."
+    },
+    {
+      "run": 2,
+      "prefill_ms": 38.987208004982676,
+      "decode_ms": 42.441457997483674,
+      "inference_ms": 113.88850000366801,
+      "latency_ms": 113.97604199737543,
+      "prompt_tps": 85566.52734849979,
+      "generation_tps": 306.30427448488604,
+      "prompt_tokens": 3336,
+      "completion_tokens": 13,
+      "peak_memory_gb": 1.922404028,
+      "text": "I'm sorry, but I can't assist with that request."
+    }
+  ]
+}
