@@ -26,15 +26,132 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Generator, List, Optional, Tuple
 
+import math
+from functools import partial
+
 import mlx.core as mx
 import mlx.nn as nn
 from mlx.utils import tree_reduce
-from mlx_lm.generate import maybe_quantize_kv_cache
-from mlx_lm.sample_utils import make_logits_processors, make_sampler
-
-from mlx_vlm.models import cache
 
 logger = logging.getLogger(__name__)
+
+
+# ── Internalized utilities (from mlx-lm) ────────────────────────────────────
+# These were previously imported from mlx_lm.sample_utils and mlx_lm.generate.
+# Internalized to remove the mlx-lm runtime dependency.
+
+
+@partial(mx.compile, inputs=mx.random.state, outputs=mx.random.state)
+def _categorical_sampling(logits, temp):
+    return mx.random.categorical(logits * (1 / temp))
+
+
+@partial(mx.compile, inputs=mx.random.state, outputs=mx.random.state)
+def _apply_top_p(logprobs: mx.array, top_p: float) -> mx.array:
+    probs = mx.exp(logprobs)
+    sorted_indices = mx.argsort(logprobs, axis=-1)
+    sorted_probs = mx.take_along_axis(probs, sorted_indices, axis=-1)
+    cumulative_probs = mx.cumsum(sorted_probs, axis=-1)
+    inverse_indices = mx.put_along_axis(
+        mx.zeros_like(sorted_indices),
+        sorted_indices,
+        mx.arange(sorted_indices.shape[-1], dtype=sorted_indices.dtype),
+        axis=-1,
+    )
+    cumulative_probs = mx.take_along_axis(cumulative_probs, inverse_indices, axis=-1)
+    return mx.where(cumulative_probs > 1 - top_p, logprobs, -float("inf"))
+
+
+def _make_repetition_penalty(penalty: float, context_size: int = 20):
+    if penalty < 0 or not isinstance(penalty, (int, float)):
+        raise ValueError(f"penalty must be a non-negative float, got {penalty}")
+
+    def repetition_penalty_processor(tokens, logits):
+        if len(tokens) > 0:
+            tokens = tokens[-context_size:]
+            selected_logits = logits[:, tokens]
+            selected_logits = mx.where(
+                selected_logits < 0,
+                selected_logits * penalty,
+                selected_logits / penalty,
+            )
+            logits[:, tokens] = selected_logits
+        return logits
+
+    return repetition_penalty_processor
+
+
+def make_sampler(
+    temp: float = 0.0,
+    top_p: float = 0.0,
+) -> Callable[[mx.array], mx.array]:
+    """Create a sampler function for token generation."""
+    if temp == 0:
+        return lambda x: mx.argmax(x, axis=-1)
+
+    sampling_methods = []
+    if top_p > 0 and top_p < 1.0:
+        sampling_methods.append(lambda x: _apply_top_p(x, top_p))
+
+    def sampler(logprobs):
+        for method in sampling_methods:
+            logprobs = method(logprobs)
+        return _categorical_sampling(logprobs, temp)
+
+    return sampler
+
+
+def make_logits_processors(
+    logit_bias: Optional[Dict[int, float]] = None,
+    repetition_penalty: Optional[float] = None,
+    repetition_context_size: Optional[int] = 20,
+) -> List[Callable]:
+    """Create logits processors for bias and repetition penalty."""
+    processors = []
+    if logit_bias:
+        indices = mx.array(list(logit_bias.keys()))
+        values = mx.array(list(logit_bias.values()))
+
+        def logit_bias_processor(_, logits):
+            logits[:, indices] += values
+            return logits
+
+        processors.append(logit_bias_processor)
+
+    if repetition_penalty and repetition_penalty != 0.0:
+        processors.append(
+            _make_repetition_penalty(repetition_penalty, repetition_context_size)
+        )
+    return processors
+
+
+def maybe_quantize_kv_cache(prompt_cache, quantized_kv_start, kv_group_size, kv_bits):
+    """Quantize KV cache entries if kv_bits is set."""
+    if kv_bits is None:
+        return
+    for e, c in enumerate(prompt_cache):
+        if hasattr(c, "to_quantized") and c.offset >= quantized_kv_start:
+            prompt_cache[e] = c.to_quantized(group_size=kv_group_size, bits=kv_bits)
+
+
+def make_prompt_cache(
+    model: nn.Module,
+    max_kv_size: Optional[int] = None,
+) -> List[Any]:
+    """Construct KV cache for the model's language model.
+
+    Defers to model.make_cache() if available (e.g. DeltaNet's ArraysCache),
+    otherwise creates standard KVCache per layer.
+    """
+    if hasattr(model, "make_cache"):
+        return model.make_cache()
+
+    from mlx_lm.models.cache import KVCache, RotatingKVCache
+
+    num_layers = len(model.layers)
+    if max_kv_size is not None:
+        return [RotatingKVCache(max_size=max_kv_size, keep=4) for _ in range(num_layers)]
+    return [KVCache() for _ in range(num_layers)]
 
 
 @dataclass
@@ -122,7 +239,7 @@ class PromptCache:
                 # ArraysCache (DeltaNet): can't trim, must recreate
                 pass
 
-        self._kv_cache = cache.make_prompt_cache(
+        self._kv_cache = make_prompt_cache(
             self._model.language_model,
             max_kv_size=self._max_kv_size,
         )
@@ -279,7 +396,7 @@ def generate_step(
             prompt_cache = prompt_cache_manager.get_or_create_cache()
             logger.debug("Cache MISS — full prefill (%d tokens)", input_ids.size)
     elif prompt_cache is None:
-        prompt_cache = cache.make_prompt_cache(
+        prompt_cache = make_prompt_cache(
             model.language_model,
             max_kv_size=max_kv_size,
         )

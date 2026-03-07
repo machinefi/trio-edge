@@ -322,18 +322,23 @@ class MLXBackend(BaseBackend):
     def _prepare_video(self, frames: np.ndarray, prompt: str) -> tuple[str, dict]:
         """Prepare inputs via the video pipeline (Qwen2.5-VL, Qwen3-VL, etc.).
 
-        Saves numpy frames as temp video, processes through mlx_vlm's
-        video pipeline (process_vision_info → processor), then converts
-        to MLX arrays.
+        Passes numpy frames directly to the processor as video — no temp
+        file or mlx-vlm helpers needed.
         """
         import mlx.core as mx
+        from PIL import Image
 
-        video_path = self._frames_to_temp_video(frames)
+        # Convert (T, C, H, W) float32 → list of PIL Images for video
+        pil_frames = self._frames_to_pil(frames)
+
+        # Ensure at least 2 frames (Qwen VL video requirement)
+        if len(pil_frames) < 2:
+            pil_frames = pil_frames + pil_frames[-1:]
 
         messages = [{
             "role": "user",
             "content": [
-                {"type": "video", "video": video_path},
+                {"type": "video", "video": pil_frames},
                 {"type": "text", "text": prompt},
             ],
         }]
@@ -342,23 +347,9 @@ class MLXBackend(BaseBackend):
             messages, tokenize=False, add_generation_prompt=True,
         )
 
-        from mlx_vlm.video_generate import process_vision_info
-        image_inputs, video_inputs, _ = process_vision_info(
-            messages, return_video_kwargs=True,
+        inputs = self._call_processor(
+            text=[formatted], videos=[pil_frames],
         )
-
-        # Some processors only support PyTorch tensors, not numpy.
-        try:
-            inputs = self._processor(
-                text=[formatted], images=image_inputs, videos=video_inputs,
-                padding=True, return_tensors="np",
-            )
-        except ValueError:
-            inputs = self._processor(
-                text=[formatted], images=image_inputs, videos=video_inputs,
-                padding=True, return_tensors="pt",
-            )
-            inputs = {k: v.numpy() if hasattr(v, "numpy") else v for k, v in inputs.items()}
 
         # Convert to MLX arrays for generate_step
         kwargs = {
@@ -377,17 +368,11 @@ class MLXBackend(BaseBackend):
     def _prepare_images(self, frames: np.ndarray, prompt: str) -> tuple[str, dict]:
         """Prepare inputs via the image pipeline (Gemma 3, SmolVLM2, etc.).
 
-        Converts numpy frames to PIL images and uses the processor's
-        image handling directly — no temp video file needed.
+        Converts numpy frames to PIL images and passes directly to processor.
         """
         import mlx.core as mx
-        from PIL import Image
 
-        # Convert (T, C, H, W) float32 → list of PIL Images
-        images = []
-        for i in range(frames.shape[0]):
-            frame = (frames[i].transpose(1, 2, 0) * 255).clip(0, 255).astype(np.uint8)
-            images.append(Image.fromarray(frame))
+        images = self._frames_to_pil(frames)
 
         messages = [{"role": "user", "content": []}]
         for img in images:
@@ -398,23 +383,9 @@ class MLXBackend(BaseBackend):
             messages, tokenize=False, add_generation_prompt=True,
         )
 
-        from mlx_vlm.video_generate import process_vision_info
-        image_inputs, video_inputs, _ = process_vision_info(
-            messages, return_video_kwargs=True,
+        inputs = self._call_processor(
+            text=[formatted], images=images,
         )
-
-        # Some processors (Gemma 3) only support PyTorch tensors, not numpy.
-        try:
-            inputs = self._processor(
-                text=[formatted], images=image_inputs,
-                padding=True, return_tensors="np",
-            )
-        except ValueError:
-            inputs = self._processor(
-                text=[formatted], images=image_inputs,
-                padding=True, return_tensors="pt",
-            )
-            inputs = {k: v.numpy() if hasattr(v, "numpy") else v for k, v in inputs.items()}
 
         # Convert to MLX arrays for generate_step
         kwargs = {
@@ -431,30 +402,24 @@ class MLXBackend(BaseBackend):
         return formatted, kwargs
 
     @staticmethod
-    def _frames_to_temp_video(frames: np.ndarray) -> str:
-        """Save (T, C, H, W) float32 frames as a temp .mp4 for mlx_vlm pipeline."""
-        import tempfile
-        import cv2
+    def _frames_to_pil(frames: np.ndarray) -> list:
+        """Convert (T, C, H, W) float32 numpy to list of PIL Images."""
+        from PIL import Image
 
-        t, c, h, w = frames.shape
-        # mlx_vlm requires at least 2 frames in a video
-        if t < 2:
-            frames = np.concatenate([frames, frames[-1:]], axis=0)
-            t = frames.shape[0]
-        tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
-        writer = cv2.VideoWriter(
-            tmp.name, cv2.VideoWriter_fourcc(*"mp4v"), 2.0, (w, h),
-        )
-        for i in range(t):
-            # (C, H, W) float32 [0,1] → (H, W, C) uint8 BGR
+        images = []
+        for i in range(frames.shape[0]):
             frame = (frames[i].transpose(1, 2, 0) * 255).clip(0, 255).astype(np.uint8)
-            frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-            writer.write(frame)
-        writer.release()
+            images.append(Image.fromarray(frame))
+        return images
 
-        from trio_core.video import _TEMP_FILES
-        _TEMP_FILES.append(tmp.name)
-        return tmp.name
+    def _call_processor(self, **kwargs) -> dict:
+        """Call processor with numpy/PyTorch fallback."""
+        try:
+            inputs = self._processor(**kwargs, padding=True, return_tensors="np")
+        except (ValueError, TypeError):
+            inputs = self._processor(**kwargs, padding=True, return_tensors="pt")
+            inputs = {k: v.numpy() if hasattr(v, "numpy") else v for k, v in inputs.items()}
+        return inputs
 
 
 # ── Transformers Backend ─────────────────────────────────────────────────────

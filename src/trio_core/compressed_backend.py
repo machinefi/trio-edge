@@ -47,9 +47,7 @@ class CompressedMLXBackend(MLXBackend):
         max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
     ) -> GenerationResult:
         import mlx.core as mx
-        from mlx_vlm.models import cache as model_cache
-        from mlx_lm.sample_utils import make_sampler
-        from mlx_lm.generate import maybe_quantize_kv_cache
+        from trio_core.generate import make_prompt_cache, make_sampler, maybe_quantize_kv_cache
 
         formatted, kwargs = self._prepare(frames, prompt)
 
@@ -133,7 +131,7 @@ class CompressedMLXBackend(MLXBackend):
         model.language_model._rope_deltas = rope_deltas
 
         # ── Step 4: Own generate loop ──────────────────────────────────
-        prompt_cache = model_cache.make_prompt_cache(model.language_model)
+        prompt_cache = make_prompt_cache(model.language_model)
 
         sampler = make_sampler(temperature, top_p)
         quantize_cache_fn = functools.partial(
