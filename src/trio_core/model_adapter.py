@@ -111,7 +111,8 @@ class ModelAdapter(ABC):
 
     def get_vision_dtype(self):
         """Get the dtype of the vision encoder weights."""
-        vt = self._model.vision_tower
+        vt = getattr(self._model, 'vision_tower',
+                     getattr(self._model, 'vision_model', None))
         # Try common paths
         if hasattr(vt, 'patch_embed'):
             if hasattr(vt.patch_embed, 'proj'):
@@ -282,7 +283,7 @@ class InternVLAdapter(ModelAdapter):
         dtype = self.get_vision_dtype()
         pv = pixel_values.astype(dtype)
         # InternVL3 vision pipeline: vision_model → remove CLS → pixel_shuffle → MLP
-        hs = self._model.vision_tower(pv, output_hidden_states=False)
+        hs = self._model.vision_model(pv, output_hidden_states=False)
         return VisionOutput(hidden_states=hs)
 
     def merge_visual_features(self, hidden_states, text_embeds, input_ids) -> MergeResult:

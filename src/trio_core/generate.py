@@ -761,11 +761,13 @@ def generate_step(
                 lm = model.language_model
 
                 # Restore full position_ids so model can slice for suffix
-                lm._position_ids = prompt_cache_manager._prefix_position_ids
-                # Temporarily clear rope_deltas to force _position_ids slicing
-                # (delta-based path assumes sequential positions, wrong for visual)
-                saved_rope_deltas = prompt_cache_manager._prefix_rope_deltas
-                lm._rope_deltas = None
+                # (only Qwen models with MRoPE store _position_ids/_rope_deltas)
+                if hasattr(lm, '_position_ids'):
+                    lm._position_ids = prompt_cache_manager._prefix_position_ids
+                    saved_rope_deltas = prompt_cache_manager._prefix_rope_deltas
+                    lm._rope_deltas = None
+                else:
+                    saved_rope_deltas = None
 
                 suffix_embeds = inputs_embeds[:, prefix_len:]
                 suffix_ids = input_ids[:, prefix_len:]
@@ -774,7 +776,8 @@ def generate_step(
                 quantize_cache_fn(prompt_cache)
 
                 # Restore rope_deltas for sequential decode phase
-                lm._rope_deltas = saved_rope_deltas
+                if hasattr(lm, '_rope_deltas'):
+                    lm._rope_deltas = saved_rope_deltas
 
                 logger.debug(
                     "Prefix prefill skipped %d tokens, prefilled %d suffix tokens",
@@ -812,8 +815,8 @@ def generate_step(
                         lm = model.language_model
                         prompt_cache_manager.save_prefix(
                             original_input_ids, vis_boundary, prompt_cache,
-                            position_ids=lm._position_ids,
-                            rope_deltas=lm._rope_deltas,
+                            position_ids=getattr(lm, '_position_ids', None),
+                            rope_deltas=getattr(lm, '_rope_deltas', None),
                         )
 
         # Save state for future exact-match and visual-similarity detection

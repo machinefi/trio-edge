@@ -157,12 +157,12 @@ class MLXBackend(BaseBackend):
         self._early_stop = None   # Set via set_early_stop() after load
         self._speculative_lookahead = 0  # Set via set_speculative() after load
         self._visual_similarity_threshold = 0.0  # Set via set_visual_similarity() after load
-        # Detect if model natively supports video tokens (Qwen2.5-VL, Qwen3-VL, etc.)
-        # Models without video support (Gemma 3, SmolVLM2) use the image path instead.
-        self._is_video_model = (
-            hasattr(self._model.config, "video_token_id")
-            or hasattr(self._model.config, "video_token_index")
-        )
+        # Detect if model natively supports video input via processor.
+        # Check processor signature for 'videos' param — only Qwen2.5-VL, Qwen3-VL, etc.
+        # have this. InternVL3 has video_token_index in config but processor only takes images.
+        import inspect
+        proc_params = inspect.signature(self._processor.__call__).parameters
+        self._is_video_model = "videos" in proc_params
         self._loaded = True
         logger.info("[MLX] Model loaded in %.1fs (video_model=%s)", time.monotonic() - t0, self._is_video_model)
 
@@ -413,22 +413,32 @@ class MLXBackend(BaseBackend):
         return formatted, kwargs
 
     def _prepare_images(self, frames: np.ndarray, prompt: str) -> tuple[str, dict]:
-        """Prepare inputs via the image pipeline (Gemma 3, SmolVLM2, etc.).
+        """Prepare inputs via the image pipeline (Gemma 3, SmolVLM2, InternVL, nanoLLaVA, etc.).
 
         Converts numpy frames to PIL images and passes directly to processor.
+        Handles both multi-modal content blocks (Gemma, SmolVLM) and simple
+        <image> token format (LLaVA, InternVL, nanoLLaVA).
         """
         import mlx.core as mx
 
         images = self._frames_to_pil(frames)
 
+        # Try multi-modal content blocks first (Gemma 3, SmolVLM2, etc.)
         messages = [{"role": "user", "content": []}]
         for img in images:
             messages[0]["content"].append({"type": "image", "image": img})
         messages[0]["content"].append({"type": "text", "text": prompt})
 
-        formatted = self._processor.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True,
-        )
+        try:
+            formatted = self._processor.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True,
+            )
+        except (TypeError, ValueError, KeyError):
+            # Fallback: simple <image> token format (LLaVA, nanoLLaVA, InternVL)
+            from mlx_vlm.prompt_utils import apply_chat_template
+            formatted = apply_chat_template(
+                self._processor, self._config, prompt, num_images=len(images),
+            )
 
         inputs = self._call_processor(
             text=[formatted], images=images,
@@ -437,11 +447,19 @@ class MLXBackend(BaseBackend):
         # Convert to MLX arrays for generate_step
         kwargs = {
             "input_ids": mx.array(np.asarray(inputs["input_ids"])),
-            "pixel_values": mx.array(np.asarray(
-                inputs.get("pixel_values", np.array([]))
-            )),
             "mask": mx.array(np.asarray(inputs["attention_mask"])),
         }
+
+        # Get pixel_values: from processor output, or preprocess via image_processor
+        if "pixel_values" in inputs:
+            kwargs["pixel_values"] = mx.array(np.asarray(inputs["pixel_values"]))
+        elif hasattr(self._processor, 'image_processor'):
+            # LLaVA-style: image_processor returns list of (C, H, W) arrays
+            pv_list = self._processor.image_processor.preprocess(images)
+            kwargs["pixel_values"] = mx.array(np.stack(pv_list))
+        else:
+            kwargs["pixel_values"] = mx.array(np.array([]))
+
         for key in ("image_grid_thw",):
             if key in inputs:
                 kwargs[key] = mx.array(np.asarray(inputs[key]))

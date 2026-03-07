@@ -313,6 +313,15 @@ Finding: 0.25 is viable (~2% more loss for ~11% more compression). 0.2 is too ag
 - [x] **StreamMem bounded KV cache** — saliency-based eviction + prototype merging + attention sink. Hybrid model support (KVCache eviction + DeltaNet passthrough). Proxy query scoring (chat template end-tokens as stand-in query)
 - [x] **Attention sink (StreamingLLM)** — protect first N visual tokens from eviction, prevents model collapse after repeated eviction rounds
 - [x] **Cross-frame streaming analysis** — VLMs not trained for appended visual KV across requests; StreamMem works for single-video prefill only
+- [x] **ModelAdapter abstraction** — decouple model-family ops from optimization backends (5 adapters: Qwen2.5-VL, Qwen3-VL, InternVL, LLaVA, FastVLM). Promotes InternVL3 + nanoLLaVA to Tier 1.
+- [x] **NativeToMeStandardVision** — ToMe wrapper for standard ViTs (SigLIP, for nanoLLaVA)
+- [x] **trust_remote_code fix** — InternVL3 + nanoLLaVA loading via mlx-vlm
+- [x] **FastVLM blocked** — CoreML `.mlpackage` vision encoder incompatible with mlx-vlm pure-MLX loader. Stays Tier 2.
+- [x] **Tier 1 baseline benchmark (9 Qwen models)** — POPE + synthetic eval on M3 Ultra
 - [x] **Native model loading (T1)** — vendored qwen2_5_vl (1080 lines), qwen3_vl (1240 lines), qwen3_5 (640 lines, reuses qwen3_vl vision). All bit-identical with mlx-vlm. Fixed upstream mx.eval() deepstack bug.
 - [x] **Wire native loading into MLXBackend** — load_native() as primary path, mlx-vlm fallback for T2 models
+- [ ] **Benchmark: Baseline vs ToMe (r=4)** — measure quality/speed tradeoff per model
+- [ ] **Benchmark: Baseline vs FastV (ratio=0.5)** — visual token pruning impact
+- [ ] **Benchmark: Baseline vs KV Reuse (threshold=0.95)** — frame-to-frame speedup per model
+- [ ] **Benchmark: InternVL3 / nanoLLaVA** — POPE + eval for newly promoted Tier 1 models
 - [ ] Phase 3: Full native engine — zero mlx-vlm dependency for T1 models
