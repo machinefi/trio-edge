@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import atexit as _atexit
 import logging
 import tempfile
 import threading
 import time as _time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator, Sequence
+from typing import Iterator
 from urllib.parse import urlparse
 
 import cv2
@@ -120,14 +121,16 @@ def _download_video(url: str) -> str:
 
     Temp files are tracked and cleaned up via cleanup_temp_files().
     """
-    import atexit
     import urllib.request
 
-    suffix = Path(urlparse(url).path).suffix or ".mp4"
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"Unsupported URL scheme: {parsed.scheme!r} (only http/https allowed)")
+    suffix = Path(parsed.path).suffix or ".mp4"
     tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
     _TEMP_FILES.append(tmp.name)
     logger.info("Downloading video: %s → %s", url, tmp.name)
-    urllib.request.urlretrieve(url, tmp.name)
+    urllib.request.urlretrieve(url, tmp.name)  # noqa: S310
     return tmp.name
 
 
@@ -145,7 +148,6 @@ def cleanup_temp_files() -> int:
     return removed
 
 
-import atexit as _atexit
 _atexit.register(cleanup_temp_files)
 
 

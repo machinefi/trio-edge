@@ -340,7 +340,6 @@ class MLXBackend(BaseBackend):
         token_ids = []
 
         with _wired_limit(self._model):
-            tic = time.perf_counter()
             for n, (token, logprobs) in enumerate(
                 generate_step(
                     input_ids, self._model, pixel_values, mask,
@@ -351,10 +350,6 @@ class MLXBackend(BaseBackend):
                     **kwargs,
                 )
             ):
-                if n == 0:
-                    prompt_time = time.perf_counter() - tic
-                    tic = time.perf_counter()
-
                 if hasattr(tokenizer, "stopping_criteria") and tokenizer.stopping_criteria(token):
                     break
 
@@ -603,7 +598,6 @@ class TransformersBackend(BaseBackend):
         max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
     ) -> Generator[StreamChunk, None, None]:
         from transformers import TextIteratorStreamer
-        import torch
         import threading
 
         inputs = self._prepare(frames, prompt)
@@ -634,8 +628,6 @@ class TransformersBackend(BaseBackend):
         All other models get frames converted to PIL images.
         Returns a dict of tensors ready to pass to model.generate(**inputs).
         """
-        import torch
-        from PIL import Image
 
         if self._is_video_model:
             return self._prepare_video(frames, prompt)
@@ -661,7 +653,6 @@ class TransformersBackend(BaseBackend):
 
     def _prepare_video(self, frames: np.ndarray, prompt: str) -> dict:
         """Video-capable model preparation using qwen_vl_utils."""
-        import torch
 
         messages = [{
             "role": "user",

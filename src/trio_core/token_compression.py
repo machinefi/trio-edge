@@ -117,13 +117,6 @@ class TokenCompressor:
         if n <= target_count:
             return hidden_states
 
-        # Normalize for cosine similarity
-        norms = mx.linalg.norm(hidden_states, axis=1, keepdims=True)
-        normalized = hidden_states / mx.maximum(norms, 1e-8)
-
-        # Compute pairwise cosine similarity between adjacent tokens
-        sim = mx.sum(normalized[:-1] * normalized[1:], axis=1)  # (N-1,)
-
         # Iteratively merge most similar pairs until we reach target
         # For efficiency, do it in rounds: find merge candidates, merge, repeat
         current = hidden_states

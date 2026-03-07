@@ -145,7 +145,6 @@ def load_native(
     model.eval()
 
     # Load processor (from transformers, not mlx-vlm)
-    eos_token_id = getattr(model.config, "eos_token_id", None)
     processor = AutoProcessor.from_pretrained(str(model_path), use_fast=True)
 
     logger.info(

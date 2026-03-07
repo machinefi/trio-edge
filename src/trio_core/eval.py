@@ -27,7 +27,7 @@ from __future__ import annotations
 import json
 import statistics
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -265,7 +265,7 @@ class EvalReport:
         b = json.loads(Path(path_b).read_text())
 
         print(f"\n{'='*70}")
-        print(f"  COMPARISON")
+        print("  COMPARISON")
         print(f"  A: {a['model']} ({a['timestamp']})")
         print(f"  B: {b['model']} ({b['timestamp']})")
         print(f"{'='*70}")
