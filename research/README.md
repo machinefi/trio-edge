@@ -16,7 +16,7 @@ Every VLM inference decomposes into 5 stages. This is the map we optimize agains
 
 ```
 Stage 0: 输入 (Video Pipeline)      ██████████ 100%   done
-Stage 1: Vision Encoder + ToMe      ████████░░  80%   ToMe + adaptive r done; native化 remaining
+Stage 1: Vision Encoder + ToMe      ██████████ 100%   ToMe + adaptive r + native ViT done
 Stage 2: Visual Token Count          ████████░░  80%   mid-stream FastV done; adaptive ratio TODO
 Stage 3: LLM Prefill                 ██████░░░░  60%   generate loop + prefix cache done; mlx-vlm dep remaining
 Stage 4: KV Cache                    ████░░░░░░  40%   persistent cache + prefix reuse done; frame-to-frame TODO
@@ -30,9 +30,9 @@ Stage 5: Decode                      ████░░░░░░  40%   strea
 | 1 | Frame-to-frame KV reuse | -60~80% video latency | High | 4 | TODO |
 | 2 | ~~Mid-stream FastV (true KV prune)~~ | ~~-30~50% visual tokens~~ | ~~Medium~~ | ~~2~~ | DONE |
 | 3 | ~~Shared text prefix KV~~ | ~~-20~40% prefill~~ | ~~Medium~~ | ~~3~~ | DONE |
-| 4 | ~~Speculative decoding~~ | ~~+30~50% decode TPS~~ | ~~Medium~~ | ~~5~~ | DONE |
+| 4 | ~~Speculative decoding~~ | ~~+30~50% decode TPS~~ | ~~Medium~~ | ~~5~~ | DONE (0% accept for VLM) |
 | 5 | Content-aware adaptive r | +quality, same speed | Low | 2 | TODO |
-| 6 | Native ToMe (no monkey-patch) | cleaner arch | Medium | 1 | TODO |
+| 6 | ~~Native ToMe (no monkey-patch)~~ | ~~cleaner arch~~ | ~~Medium~~ | ~~1~~ | DONE |
 | 7 | Remove mlx-vlm load dep | zero dependency | High | 3 | TODO |
 
 ### Stage Details
@@ -41,10 +41,10 @@ Stage 5: Decode                      ████░░░░░░  40%   strea
 - StreamCapture (webcam/RTSP/YouTube), temporal dedup (-30~70% frames),
   motion gate (-80%+ VLM calls), smart resize, model profiles
 
-**Stage 1 — Vision Encoder + ToMe** -- 80%
+**Stage 1 — Vision Encoder + ToMe** -- DONE
 - Done: ToMe bipartite soft matching, windowed-attn aware, adaptive r ramp,
-  hidden-state metric, Qwen2.5/3/3.5 support
-- TODO: native ToMe (replace monkey-patch with built-in ViT)
+  hidden-state metric, Qwen2.5/3/3.5 support,
+  native ViT (NativeToMeQwen25Vision / NativeToMeQwen3Vision — proper OO, no monkey-patch)
 
 **Stage 2 — Visual Token Count** -- 80%
 - Done: ToMe compression (Qwen2.5 1080p: 748->242 tokens, -68%),
@@ -68,8 +68,8 @@ Stage 5: Decode                      ████░░░░░░  40%   strea
 - Done: auto-regressive, streaming output, early stopping config,
   speculative decoding (draft model + prompt lookup, rejection sampling,
   KV cache rollback), integrated into generate loop via `speculative_lookahead` config
-- Note: prompt lookup unlikely to help VLM (input is visual tokens, output is text — low
-  n-gram overlap). Draft model mode ready but needs separate model loading. Benchmark pending.
+- Note: prompt lookup confirmed 0% acceptance for VLM (visual tokens ≠ text output).
+  Draft model mode ready but needs separate model loading.
 - TODO: continuous batching
 
 ### Per-Stage Model Differences (updated 2026-03-06)
@@ -238,8 +238,8 @@ Finding: 0.25 is viable (~2% more loss for ~11% more compression). 0.2 is too ag
 
 1. **Frame-to-frame KV reuse** — consecutive video frames share 80%+ context (highest ROI, hardest)
 2. **ToMe + FastV compound benchmark** — measure combined visual compression (both done, not measured together)
-3. **Content-aware adaptive r** — quality-preserving compression per image
-4. **Native ToMe** — replace monkey-patch with built-in ViT (cleaner arch, prerequisite for Phase 2)
+3. **Unify ToMe generate path** — ToMeMLXBackend should use generate_step (get prefix cache, speculative, early stop for free)
+4. **Content-aware adaptive r** — quality-preserving compression per image
 5. **Remove mlx-vlm model loading dep** — zero external dependency (Phase 3)
 
 ## Status
@@ -261,8 +261,9 @@ Finding: 0.25 is viable (~2% more loss for ~11% more compression). 0.2 is too ag
 - [x] **Shared text prefix KV cache** — three-tier cache (exact hit > prefix hit > full miss), MRoPE-aware
 - [x] **FastV visual token pruning** — attention-based importance scoring, Qwen2.5/3/3.5 support
 - [x] **Mid-stream FastV** — single-pass KV cache pruning (zero double computation), MRoPE position_ids fix
-- [x] **Speculative decoding** — prompt lookup + draft model modes, rejection sampling, KV cache rollback, integrated into generate loop
+- [x] **Speculative decoding** — prompt lookup + draft model modes, rejection sampling, KV cache rollback, integrated into generate loop (0% accept for VLM — visual tokens don't match text output)
 - [x] **mlx-vlm native baselines** — 4 models × 5 benchmarks, trio-core matches or beats native on 3B+
+- [x] **Native ToMe ViT** — NativeToMeQwen25Vision / NativeToMeQwen3Vision, proper OO subclass, no monkey-patch
 - [ ] ToMe + FastV compound benchmark — measure combined compression
 - [ ] Phase 2: Native Vision Encoder — built-in ToMe, adaptive r
 - [ ] Phase 3: Full native engine — zero mlx-vlm dependency
