@@ -20,7 +20,6 @@ from typing import Generator
 import numpy as np
 
 from trio_core.backends import MLXBackend, GenerationResult, StreamChunk
-from trio_core.compressed_backend import CompressedMLXBackend
 
 logger = logging.getLogger(__name__)
 
@@ -169,11 +168,9 @@ class FastVMLXBackend(MLXBackend):
         keep_visual_indices = mx.sort(keep_visual_indices)  # preserve order
 
         # Step 6: Build pruned sequence
-        pruned_embeds, pruned_ids = self._prune_visual_tokens(
+        pruned_embeds, pruned_ids, all_keep = self._prune_visual_tokens(
             final_embeds, input_ids, visual_mask, keep_visual_indices,
         )
-
-        compressed_count = n_keep
 
         self._last_prune_log = {
             "original_visual": n_visual,
@@ -186,29 +183,12 @@ class FastVMLXBackend(MLXBackend):
             n_visual, n_keep, self._last_prune_log["reduction_pct"],
         )
 
-        # Step 7: Compute position IDs for pruned sequence
-        compressed_grid = CompressedMLXBackend._compute_compressed_grid(
-            grid_thw, original_count, compressed_count,
-        )
-
-        # Handle grid alignment (same as ToMe backend)
-        grid_count = self._original_token_count(compressed_grid)
-        if grid_count != compressed_count:
-            logger.debug(
-                "FastV grid alignment: compressed=%d, grid=%d",
-                compressed_count, grid_count,
-            )
-
-        pruned_mask = mx.ones(pruned_ids.shape, dtype=mx.int32)
-        kw_grid_pruned = {}
-        if n_video > 0:
-            kw_grid_pruned["video_grid_thw"] = compressed_grid
-        else:
-            kw_grid_pruned["image_grid_thw"] = compressed_grid
-
-        position_ids, rope_deltas = model.language_model.get_rope_index(
-            pruned_ids, attention_mask=pruned_mask, **kw_grid_pruned,
-        )
+        # Step 7: Slice position IDs for pruned sequence
+        # Keep original spatial positions — pruning doesn't change WHERE tokens are
+        position_ids = position_ids[:, :, all_keep]
+        # rope_deltas = max_position + 1 - seq_length (used for AR decoding offsets)
+        max_pos = position_ids.max()
+        rope_deltas = max_pos + 1 - pruned_ids.shape[1]
         model.language_model._position_ids = position_ids
         model.language_model._rope_deltas = rope_deltas
 
@@ -403,7 +383,11 @@ class FastVMLXBackend(MLXBackend):
 
     @staticmethod
     def _prune_visual_tokens(embeds, input_ids, visual_mask, keep_indices):
-        """Remove pruned visual tokens from sequence."""
+        """Remove pruned visual tokens from sequence.
+
+        Returns:
+            (pruned_embeds, pruned_ids, all_keep_indices)
+        """
         import mlx.core as mx
 
         vis_positions = _bool_indices(visual_mask)
@@ -414,7 +398,7 @@ class FastVMLXBackend(MLXBackend):
 
         pruned_embeds = embeds[:, all_keep, :]
         pruned_ids = input_ids[:, all_keep]
-        return pruned_embeds, pruned_ids
+        return pruned_embeds, pruned_ids, all_keep
 
     @staticmethod
     def _original_token_count(grid_thw) -> int:

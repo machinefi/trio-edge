@@ -82,7 +82,7 @@ class TestPruneVisualTokens:
         # Keep visual tokens at indices 0 and 2 (positions 1 and 3 in sequence)
         keep_indices = mx.array([0, 2], dtype=mx.int32)
 
-        pruned_embeds, pruned_ids = FastVMLXBackend._prune_visual_tokens(
+        pruned_embeds, pruned_ids, all_keep = FastVMLXBackend._prune_visual_tokens(
             embeds, input_ids, visual_mask, keep_indices,
         )
 
@@ -90,6 +90,7 @@ class TestPruneVisualTokens:
         assert pruned_ids.shape == (1, 4)
         assert pruned_ids[0].tolist() == [1, 2, 2, 3]
         assert pruned_embeds.shape == (1, 4, D)
+        assert all_keep.shape == (4,)
 
     def test_prune_all_visual_tokens_kept(self):
         from trio_core.fastv_backend import FastVMLXBackend
@@ -102,12 +103,13 @@ class TestPruneVisualTokens:
         # Keep all 3 visual tokens
         keep_indices = mx.array([0, 1, 2], dtype=mx.int32)
 
-        pruned_embeds, pruned_ids = FastVMLXBackend._prune_visual_tokens(
+        pruned_embeds, pruned_ids, all_keep = FastVMLXBackend._prune_visual_tokens(
             embeds, input_ids, visual_mask, keep_indices,
         )
 
         assert pruned_ids.shape == (1, 5)
         assert pruned_embeds.shape == (1, 5, D)
+        assert all_keep.shape == (5,)
 
 
 # ---------------------------------------------------------------------------
