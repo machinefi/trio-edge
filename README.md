@@ -1,47 +1,206 @@
 <p align="center">
   <h1 align="center">TrioCore</h1>
   <p align="center">
-    <strong>Portable video inference engine for Vision Language Models</strong>
+    <strong>Video-first inference engine for Vision Language Models on Apple Silicon</strong>
   </p>
   <p align="center">
-    Runs on Apple Silicon, NVIDIA GPU, and CPU — 4,800 lines, zero Docker.
+    4 optimization stages. 12 Tier-1 models. 13K lines. Zero Docker.
   </p>
 </p>
 
 <p align="center">
-  <a href="#quick-start">Quick Start</a> |
-  <a href="#examples">Examples</a> |
-  <a href="#architecture">Architecture</a> |
+  <a href="#optimization-pipeline">Optimization Pipeline</a> |
   <a href="#benchmarks">Benchmarks</a> |
-  <a href="#api">API</a> |
-  <a href="#model-profiles">Model Profiles</a>
+  <a href="#supported-models">Supported Models</a> |
+  <a href="#quick-start">Quick Start</a> |
+  <a href="#api">API</a>
 </p>
 
 ---
 
 ## Why TrioCore?
 
-Every VLM engine treats vision as "one image per request." TrioCore treats **video as a first-class input** — with temporal deduplication, motion gating, streaming capture, and visual token compression.
+Every VLM engine treats vision as "one image per request." TrioCore treats **video as a first-class input** — and optimizes every stage of the inference pipeline.
 
-**The thesis:** The biggest win in video VLM isn't faster inference — it's **fewer visual tokens and fewer VLM calls**. TrioCore's optimization stack compounds at every layer:
+**The thesis:** The biggest win in video VLM isn't faster decoding — it's **fewer visual tokens and fewer VLM calls**. Prefill cost is O(n^2) in token count. KV cache is O(n). Reducing tokens attacks both simultaneously.
+
+## Optimization Pipeline
 
 ```
-Optimization Stack (all layers compound):
-  Frame-level:  Motion Gate + Temporal Dedup ──→ 50-90% fewer VLM calls
-  Token-level:  ToMe (inside ViT) ─────────────→ up to 68% fewer visual tokens
-  Compute:      Quantization (INT4) ───────────→ cheaper per-token math
+Input --> [Vision Encoder] --> visual tokens --> [LLM Prefill] --> [KV Cache] --> [Decode]
+             ToMe                FastV              KV Reuse        StreamMem
+          merge tokens        prune tokens      reuse across       bounded KV
+          inside ViT          inside LLM          frames           for streams
 ```
 
-| | mlx-vlm | vllm-mlx | Roboflow Inference | **TrioCore** |
-|---|---|---|---|---|
-| Lines of code | 66K | 37K | 370K | **4,800** |
-| Video-first | Partial | No | No | **Yes** |
-| Stream capture | No | No | No | **Yes** |
-| Temporal dedup | No | No | Coarse | **Yes** |
-| Motion gating | No | No | No | **Yes** |
-| Visual token compression | No | No | No | **Yes (ToMe)** |
-| Apple Silicon | Yes | Yes | No | **Yes** |
-| Docker required | No | No | Yes | **No** |
+TrioCore embeds **4 optimization techniques** at different stages of VLM inference. Each is independent and compounds with the others:
+
+### Stage 1: ToMe -- Vision Encoder Token Merging
+
+Training-free token merging inside the vision encoder, based on [Token Merging (ICLR 2023)](https://arxiv.org/abs/2210.09461). Bipartite soft matching merges similar visual tokens between ViT blocks, gradually reducing sequence length before it reaches the LLM.
+
+| Technique | Where | What |
+|---|---|---|
+| Bipartite matching | Per ViT block | Merge r most-similar token pairs per block |
+| Hidden-state metric | Similarity | Cosine similarity on intermediate features (not K-matrix) |
+| Windowed-aware | Qwen2.5-VL | Merge only within attention windows |
+| Adaptive r | Per image | Content-aware: complex images keep more tokens |
+| Layer-adaptive ramp | Per block | Early blocks merge less, later blocks merge more |
+
+**Results (M3 Pro, 4-bit):**
+
+| Model | Resolution | Baseline Tokens | ToMe Tokens | Prefill Speedup | Accuracy |
+|---|---|---|---|---|---|
+| Qwen2.5-VL-3B | 1080p | 748 | 242 (-68%) | **-73%** (1808->490ms) | 81% POPE |
+| Qwen3-VL-4B | 480p | 278 | 258 (-7%) | **-31%** (835->573ms) | **91% POPE (zero loss)** |
+
+### Stage 2: FastV -- Mid-Stream Visual Token Pruning
+
+Attention-based importance scoring inside the LLM layers. After a designated "observation" layer, tokens with low attention from the `[CLS]`/text query are pruned from KV cache mid-forward-pass.
+
+| Technique | Where | What |
+|---|---|---|
+| Attention scoring | LLM layer N | Score visual tokens by attention received from text tokens |
+| Single-pass KV prune | Mid-prefill | Remove low-importance KV entries in-place (no recomputation) |
+| MRoPE-aware | Position IDs | Recompute 3D position IDs after pruning to maintain spatial coherence |
+
+### Stage 3: Frame-to-Frame KV Reuse
+
+For video inference, consecutive frames share 80%+ visual content. Instead of full prefill per frame, TrioCore detects visual similarity and reuses the previous frame's KV cache.
+
+| Technique | Where | What |
+|---|---|---|
+| Embedding similarity | Pre-prefill | Cosine similarity between current and cached visual embeddings |
+| Four-tier cache | Hit logic | Exact match > visual similarity > text prefix > full miss |
+| DeltaNet state | Qwen3.5 | Snapshot/restore recurrent state (not KV cache) for hybrid models |
+| Input-ids guard | Safety | Reject reuse if prompt changed (prevents wrong-answer contamination) |
+
+**Results (480p, 5-frame video sequences, threshold=0.95):**
+
+| Model | Warm Speedup | Architecture |
+|---|---|---|
+| Qwen2.5-VL-3B | **1.57x** | KV cache trim + reuse |
+| Qwen3-VL-4B | **1.71x** | KV cache trim + reuse |
+| Qwen3.5-0.8B | **1.35x** | DeltaNet state snapshot/restore |
+
+### Stage 4: StreamMem -- Bounded KV Cache for Streams
+
+For long or continuous video, KV cache grows without bound. StreamMem caps memory via saliency-based eviction + prototype merging + attention sink.
+
+| Technique | Where | What |
+|---|---|---|
+| Saliency scoring | Per eviction | Score KV entries by accumulated attention (proxy query from chat template) |
+| Prototype merging | Eviction | Merge similar evicted entries rather than discarding |
+| Attention sink | Protection | First N visual tokens immune to eviction (StreamingLLM-inspired) |
+| Budget guard | Memory | Hard cap on total KV entries, triggers eviction when exceeded |
+
+### Pre-Inference: Video Pipeline
+
+Before any model runs, TrioCore reduces work at the frame level:
+
+| Technique | Effect |
+|---|---|
+| Temporal dedup | **30-70% fewer frames** — skip near-identical consecutive frames (L2 on 64x64 grayscale) |
+| Motion gate | **80%+ fewer VLM calls** — skip inference entirely when scene is static |
+| StreamCapture | Daemon thread, webcam/RTSP/YouTube, grab/retrieve frame skipping |
+
+### Compound Effect
+
+All 4 optimization stages are independent and stack:
+
+```
+                        Baseline         With TrioCore
+                        (raw VLM)        (all optimizations)
+                        ---------        ------------------
+VLM calls per video     every frame      motion gate: -80%+ calls
+Visual tokens           748 (1080p)      ToMe: 242 (-68%)
+Prefill latency         1,808ms          490ms (-73%)
+Frame-to-frame          full prefill     KV reuse: 1.57-1.71x speedup
+KV memory               unbounded        StreamMem: budget-capped
+```
+
+## Benchmarks
+
+All benchmarks on Apple M3 Pro, 4-bit quantized models.
+
+### POPE -- Object Hallucination (100 COCO images)
+
+| Model | Config | Accuracy | F1 | Avg Latency | Visual Tokens |
+|---|---|---|---|---|---|
+| Qwen2.5-VL-3B | Baseline | 92.0% | 0.913 | 952ms | 363 |
+| Qwen2.5-VL-3B | ToMe r=4 | 81.0% | 0.800 | 752ms (-21%) | 131 (-64%) |
+| **Qwen3-VL-4B** | **Baseline** | **91.0%** | **0.901** | **795ms** | **278** |
+| **Qwen3-VL-4B** | **ToMe r=4** | **91.0%** | **0.901** | **777ms (-2%)** | **258 (-7%)** |
+
+Qwen3-VL shows **zero quality loss** with ToMe.
+
+### Frame-to-Frame KV Reuse (480p, 5-frame sequences)
+
+| Model | Warm Speedup | Warm Savings | Output Quality |
+|---|---|---|---|
+| Qwen2.5-VL-3B | **1.57x** | 36.4% | Identical |
+| Qwen3-VL-4B | **1.71x** | 41.5% | Near-identical |
+| Qwen3.5-0.8B | **1.35x** | 25.8% | Correct (DeltaNet) |
+
+### Generate Loop Overhead (trio-core vs mlx-vlm, 480p, 32 tokens)
+
+| Metric | mlx-vlm | trio-core | Diff |
+|---|---|---|---|
+| Prefill | 1018ms | 1016ms | -0.2% |
+| Decode | 524ms | 513ms | -2.1% |
+| Output | - | - | **5/5 bit-identical** |
+
+Zero overhead from custom generate loop. Output bit-identical at temperature=0.
+
+See [`research/`](research/) for detailed analysis, eval results, and implementation notes.
+
+## Supported Models
+
+### Tier 1 -- Full Optimization (12 models, 4 families)
+
+All Tier 1 models have native model loading, ModelAdapter integration, and full access to all 4 optimization stages.
+
+| Model | Params | 4-bit Size | ToMe | FastV | KV Reuse | StreamMem |
+|---|---|---|---|---|---|---|
+| **Qwen2.5-VL-3B** | 3B | 1.8 GB | Yes | Yes | Yes | Yes |
+| **Qwen2.5-VL-7B** | 7B | 4.5 GB | Yes | Yes | Yes | Yes |
+| **Qwen3-VL-2B** | 2B | 1.5 GB | Yes | Yes | Yes | Yes |
+| **Qwen3-VL-4B** | 4B | 2.5 GB | Yes | Yes | Yes | Yes |
+| **Qwen3-VL-8B** | 8B | 5.0 GB | Yes | Yes | Yes | Yes |
+| **Qwen3.5-0.8B** | 0.8B | 0.5 GB | Yes | Yes | Yes (DeltaNet) | Yes |
+| **Qwen3.5-2B** | 2B | 1.5 GB | Yes | Yes | Yes (DeltaNet) | Yes |
+| **Qwen3.5-4B** | 4B | 2.5 GB | Yes | Yes | Yes (DeltaNet) | Yes |
+| **Qwen3.5-9B** | 9B | 5.0 GB | Yes | Yes | Yes (DeltaNet) | Yes |
+| **InternVL3-1B** | 1B | 1.0 GB | No\* | Yes | Yes | Yes |
+| **InternVL3-2B** | 2B | 1.6 GB | No\* | Yes | Yes | Yes |
+| **nanoLLaVA-1.5** | 1B | 1.0 GB | Yes | Yes | Yes | Yes |
+
+> LLM-side optimizations (FastV, KV Reuse, StreamMem) are model-agnostic.
+> ViT-side optimization (ToMe) requires per-architecture wrapper.
+
+\* InternVL3: pixel_shuffle after ViT disrupts spatial structure -- ToMe not applicable.
+
+### Architecture Notes
+
+| | Qwen2.5-VL | Qwen3-VL | Qwen3.5 |
+|---|---|---|---|
+| **ViT** | Qwen ViT (windowed attn) | Qwen ViT (full attn) | Qwen ViT (full attn) |
+| **LLM** | Qwen2 (GQA) | Qwen2 (GQA) | DeltaNet + Attention (hybrid) |
+| **RoPE** | 3D MRoPE (chunked) | 3D MRoPE (interleaved) | 3D MRoPE (interleaved) |
+| **Deepstack** | No | Yes | Yes (empty) |
+| **Patch size** | 14 | 14 | 16 |
+| **Native loading** | Yes | Yes | Yes |
+
+### Tier 2 -- Inference Only (mlx-vlm fallback, no optimization backends)
+
+| Model | Family | Params | Notes |
+|---|---|---|---|
+| **Gemma 3n E2B/E4B** | gemma3n | 5B/8B | Edge-first, MatFormer |
+| **SmolVLM2 2.2B** | smolvlm | 2.2B | Smallest practical VLM |
+| **Phi-4 Multimodal** | phi4 | 3.8B | Strong STEM reasoning |
+| **Gemma 3 4B/12B** | gemma3 | 4-12B | 140+ languages |
+| **SmolVLM 256M** | smolvlm | 256M | Ultra-lightweight |
+| **FastVLM 0.5B/1.5B** | fastvlm | 0.5-1.5B | CoreML vision encoder |
 
 ## Quick Start
 
@@ -76,9 +235,21 @@ print(f"Latency: {result.metrics.latency_ms:.0f}ms")
 
 # Analyze a single frame
 result = engine.analyze_frame(frame, "Is the door open?")
+```
 
-# Force a specific backend
-engine = TrioCore(backend="transformers")
+### Enable Optimizations
+
+```python
+from trio_core import TrioCore, EngineConfig
+
+config = EngineConfig(
+    tome_enabled=True,      # Stage 1: ToMe visual token merging
+    tome_r=4,               # Merge 4 token pairs per ViT block
+    tome_metric="hidden",   # Similarity metric (hidden > keys)
+)
+engine = TrioCore(config)
+engine.load()
+result = engine.analyze_video(frames, "What do you see?")
 ```
 
 ## Examples
@@ -93,7 +264,6 @@ See [`examples/`](examples/) for complete scripts:
 | [`webcam_gui.py`](examples/webcam_gui.py) | Live camera + VLM overlay in GUI window |
 | [`run_benchmark.py`](examples/run_benchmark.py) | POPE/TextVQA benchmarks with A/B comparison |
 | [`run_eval.py`](examples/run_eval.py) | Synthetic perf eval (prefill, decode, memory) |
-| [`run_regression.py`](examples/run_regression.py) | Accuracy regression gate (POPE + TextVQA) |
 
 ```python
 # Webcam -> Text (3 lines of code)
@@ -121,307 +291,28 @@ Live Stream / File / URL
         |
    Motion Gate            frame differencing + EMA background
         |
-   Model Profile          auto-select params for Qwen2.5/3/3.5-VL
+   Model Profile          auto-select params per model family
         |
    Backend Auto-Select    detect_device() -> MLXBackend / TransformersBackend
         |
-   ToMe (optional)        bipartite soft matching inside ViT blocks
+   [Stage 1] ToMe         bipartite soft matching inside ViT blocks
         |
-   VLM Inference          backend.generate(), thread-locked
+   [Stage 2] FastV        attention-based visual token pruning mid-LLM
         |
-   Callbacks              on_frame_captured -> on_dedup_done -> on_vlm_end
+   [Stage 3] KV Reuse     frame-to-frame visual similarity gating
+        |
+   [Stage 4] StreamMem    saliency eviction + prototype merging
         |
    VideoResult            text + InferenceMetrics (3-phase timing)
 ```
 
 ### Hardware Auto-Detection
 
-| Hardware | Detection | Backend | Model Registry |
-|---|---|---|---|
-| Apple Silicon (M1-M4) | `arm64` + `sysctl` | MLX (mlx-vlm) | `mlx-community/` |
-| NVIDIA GPU | `nvidia-smi` / `torch.cuda` | Transformers (PyTorch) | `Qwen/` |
-| CPU-only | Fallback | Transformers (PyTorch) | `Qwen/` |
-
-Memory-based model recommendation: 32GB+ -> 7B, <32GB -> 3B.
-
-## Inference Pipeline
-
-```
-Input → [Vision Encoder + ToMe] → visual tokens → [LLM Prefill] → [KV Cache] → [Decode]
-         ^^^^^^^^^^^^^^^^^^^^      ^^^^^^^^^^      ^^^^^^^^^^^^     ^^^^^^^^^    ^^^^^^^^
-         merge here                fewer tokens    quantization     caching      batching
-```
-
-Every VLM inference decomposes into these 5 stages. Here's what TrioCore controls at each stage — and what it unlocks:
-
-| Stage | What Happens | TrioCore | mlx-vlm | Potential Gain |
-|---|---|---|---|---|
-| **Vision Encoder** | ViT forward pass on image/video patches | **ToMe merging** (monkey-patched) | Model definition + forward | Native ToMe = no patch overhead; progressive per-layer compression |
-| **Visual Tokens** | Encoded patches → token embeddings | Compressed count via ToMe | Raw output, no compression | Adaptive budget per frame (static scene → fewer, complex → more) |
-| **LLM Prefill** | Process all tokens (visual + text) in parallel | Profile-aware token budget | Full-sequence prefill | Cross-frame prompt caching; shared text prefix across video frames |
-| **KV Cache** | Store K/V for each decoded token | _(not yet)_ | Basic single-request cache | **Frame-to-frame KV reuse** — video frames share 80%+ scene context |
-| **Decode** | Auto-regressive token generation | Streaming via backend | Token-by-token sampling | Speculative decoding; early stop on confidence; continuous batching |
-
-### Core Metrics Impact
-
-Building our own inference stack (replacing mlx-vlm) would improve these metrics:
-
-```
-                        Current          With Custom Engine
-                        (mlx-vlm)        (TrioCore native)
-                        ─────────        ─────────────────
-Prefill Latency         ██████████       ████░░░░░░          -40~60%
-                        ToMe helps       + KV reuse across frames
-
-Decode Throughput       ██████████       ████████████████     +30~50%
-                        baseline         + speculative decode + continuous batch
-
-Visual Tokens           ██████░░░░       ████░░░░░░░░        -30~50% more
-                        ToMe r=4         + adaptive r + LLM-layer pruning (AIM)
-
-Peak Memory             ██████████       ████████░░░░        -20~30%
-                        full KV cache    + KV sharing + streaming eviction
-
-Quality (Accuracy)      ██████████       ██████████░░        +1~3%
-                        fixed r          + content-aware adaptive compression
-```
-
-### Independence Roadmap
-
-```
-Phase 1 — Custom generate loop (KV cache + sampling)
-  └─ Unlocks: speculative decoding, frame-to-frame KV reuse, early stopping
-  └─ Still uses: mlx-vlm model loading + ViT forward
-
-Phase 2 — Custom Vision Encoder
-  └─ Unlocks: native ToMe (no monkey-patch), per-layer adaptive r, LLM-layer pruning
-  └─ Still uses: mlx-vlm weight loading
-
-Phase 3 — Custom weight loading + full native engine
-  └─ Unlocks: custom quantization, streaming KV eviction, zero mlx-vlm dependency
-  └─ Uses only: MLX framework (mx.array, nn.Module)
-```
-
-## Key Technologies
-
-### Visual Token Compression (ToMe)
-
-Training-free token merging inside the vision encoder, based on [Token Merging (ICLR 2023)](https://arxiv.org/abs/2210.09461). Bipartite soft matching merges similar visual tokens between ViT blocks, gradually reducing the sequence length. No training required — works with any Qwen2.5-VL or Qwen3-VL checkpoint.
-
-**Key technical contributions:**
-
-1. **In-encoder merging for VLMs** — ToMe was designed for ViT classifiers. We adapted it for VLM vision encoders (Qwen2.5-VL, Qwen3-VL), handling PatchMerger, windowed attention, RoPE, and the vision-language token handoff.
-
-2. **Windowed-attention-aware merging** — Qwen2.5-VL uses windowed attention in early ViT layers. We merge only within each attention window, respecting the model's locality structure.
-
-3. **Compressed position encoding** — After merging reduces token count, we recompute `grid_thw` and RoPE position IDs so the language model sees geometrically consistent positions.
-
-4. **Dual-model support** — Auto-detects Qwen2.5-VL vs Qwen3-VL (which has deepstack features, different config attributes, and a different `merge_input_ids_with_image_features` signature) and adapts the entire pipeline accordingly.
-
-```python
-from trio_core import TrioCore, EngineConfig
-
-config = EngineConfig(tome_enabled=True, tome_r=4)
-engine = TrioCore(config)
-engine.load()
-result = engine.analyze_video(frames, "What do you see?")
-```
-
-### StreamCapture — Continuous Frame Capture
-
-Daemon thread with dual-mode buffer, inspired by [ultralytics LoadStreams](https://github.com/ultralytics/ultralytics).
-
-- **Latest-frame mode** (default): Overwrites buffer. For real-time monitoring.
-- **Queue mode**: Buffers up to 30 frames. For digest/summary jobs.
-- **grab/retrieve split**: Zero-cost frame skipping via `vid_stride`.
-- **Auto-reconnect**: 5 retries with 1s delay. YouTube via yt-dlp.
-
-```python
-with StreamCapture("rtsp://camera/stream", vid_stride=5) as cap:
-    for frame in cap:  # yields (C, H, W) float32
-        result = engine.analyze_frame(frame, "Is the door open?")
-```
-
-### Temporal Deduplication
-
-Consecutive frames are often near-identical. Sending all to VLM wastes compute.
-
-Compare via normalized L2 on 64x64 downscaled grayscale. Skip frames with similarity > 0.95. Typical result: **30-70% frame reduction** with no information loss.
-
-### Motion Gate
-
-For monitoring: skip VLM entirely when the scene is static.
-
-Frame differencing against EMA background model. When a camera watches a mostly-static scene, eliminates **80%+ of VLM calls**.
-
-## Benchmarks
-
-All benchmarks on Apple M3 Pro, 4-bit quantized models.
-
-### POPE — Object Hallucination (100 COCO images)
-
-| Model | Config | Accuracy | F1 | Avg Latency | Visual Tokens |
-|---|---|---|---|---|---|
-| Qwen2.5-VL-3B | Baseline | 92.0% | 0.913 | 952ms | 363 |
-| Qwen2.5-VL-3B | ToMe r=4 | 81.0% | 0.800 | 752ms (-21%) | 131 (-64%) |
-| **Qwen3-VL-4B** | **Baseline** | **91.0%** | **0.901** | **795ms** | **278** |
-| **Qwen3-VL-4B** | **ToMe r=4** | **91.0%** | **0.901** | **777ms (-2%)** | **258 (-7%)** |
-
-Qwen3-VL shows **zero quality loss** with ToMe — its architecture (no windowed attention, deepstack features) is naturally more robust to token merging.
-
-### Synthetic Eval — Prefill Performance at 1080p
-
-High-resolution video is where ToMe shines most. More visual tokens = more to merge.
-
-| Model | Config | Prefill | Visual Tokens | Peak Memory |
-|---|---|---|---|---|
-| Qwen2.5-VL-3B | Baseline | 1,808ms | 748 | 4.02 GB |
-| Qwen2.5-VL-3B | ToMe r=4 | 490ms (**-73%**) | 242 (**-68%**) | 3.85 GB (-4%) |
-| Qwen3-VL-4B | Baseline | 835ms | 323 | 4.07 GB |
-| Qwen3-VL-4B | ToMe r=4 | 573ms (**-31%**) | 303 (**-6%**) | 3.71 GB (-9%) |
-
-### Eval Framework
-
-Standard VLM benchmarks for measuring quality vs speed tradeoffs:
-
-```bash
-# POPE benchmark (object hallucination, yes/no questions)
-python examples/run_benchmark.py --bench pope --samples 100
-
-# Compare baseline vs ToMe
-python examples/run_benchmark.py --bench pope --samples 100 --tome 4
-python examples/run_benchmark.py --compare baseline.json tome.json
-
-# Synthetic performance eval at different resolutions
-python examples/run_eval.py --resolution 1080p --tome 4 --runs 3
-```
-
-Supported benchmarks:
-- **POPE** — Object hallucination (yes/no), accuracy + F1
-- **TextVQA** — OCR-based visual QA
-- **Custom** — Your own image + question + answer JSON files
-
-See [`research/`](research/) for detailed analysis, implementation notes, and raw eval results.
-
-## Supported Models
-
-TrioCore supports edge-class VLMs across multiple model families. Each model has a profile with architecture-specific parameters for optimal inference.
-
-### Tier 1 — Full Optimization Support
-
-All Tier 1 models have **ModelAdapter** integration — abstract layer that decouples model-specific assumptions (token IDs, merge signatures, RoPE, spatial merge) from optimization backends.
-
-| Model | Params | 4-bit Size | ToMe | FastV | KV Reuse | StreamMem |
-|---|---|---|---|---|---|---|
-| **Qwen2.5-VL-3B** | 3B | 1.8 GB | Yes | Yes | Yes | Yes |
-| **Qwen2.5-VL-7B** | 7B | 4.5 GB | Yes | Yes | Yes | Yes |
-| **Qwen3-VL-2B** | 2B | 1.5 GB | Yes | Yes | Yes | Yes |
-| **Qwen3-VL-4B** | 4B | 2.5 GB | Yes | Yes | Yes | Yes |
-| **Qwen3-VL-8B** | 8B | 5.0 GB | Yes | Yes | Yes | Yes |
-| **Qwen3.5-0.8B** | 0.8B | 0.5 GB | Yes | Yes | Yes (DeltaNet) | Yes |
-| **Qwen3.5-2B** | 2B | 1.5 GB | Yes | Yes | Yes (DeltaNet) | Yes |
-| **Qwen3.5-4B** | 4B | 2.5 GB | Yes | Yes | Yes (DeltaNet) | Yes |
-| **Qwen3.5-9B** | 9B | 5.0 GB | Yes | Yes | Yes (DeltaNet) | Yes |
-| **InternVL3-1B** | 1B | 1.0 GB | No\* | Yes | Yes | Yes |
-| **InternVL3-2B** | 2B | 1.6 GB | No\* | Yes | Yes | Yes |
-| **nanoLLaVA-1.5** | 1B | 1.0 GB | Yes | Yes | Yes | Yes |
-
-> 12 models, 4 families. LLM-side optimizations (FastV, KV Reuse, StreamMem) are model-agnostic.
-> ViT-side optimization (ToMe) requires per-architecture wrapper.
-
-\* InternVL3: pixel_shuffle after ViT disrupts spatial structure — ToMe not applicable.
-
-### Tier 2 — Inference Support (video pipeline + profiles, no optimization backends)
-
-| Model | Family | Params | Memory | Context | mlx-vlm ID | Notes |
-|---|---|---|---|---|---|---|
-| **FastVLM-0.5B** | fastvlm | 0.5B | 0.5 GB | 8K | `InsightKeeper/FastVLM-0.5B-MLX-4bit` | CoreML vision encoder\*\* |
-| **FastVLM-1.5B** | fastvlm | 1.5B | 1.0 GB | 8K | `InsightKeeper/FastVLM-1.5B-MLX-4bit` | CoreML vision encoder\*\* |
-| **Gemma 3n E2B** | gemma3n | 5B (2GB mem) | 2.0 GB | 32K | `mlx-community/gemma-3n-E2B-it-4bit` | Edge-first, MatFormer |
-| **Gemma 3n E4B** | gemma3n | 8B (4GB mem) | 3.0 GB | 32K | `mlx-community/gemma-3n-E4B-it-4bit` | LMArena 1300+ |
-| **SmolVLM2 2.2B** | smolvlm | 2.2B | 2.0 GB | 16K | `mlx-community/SmolVLM2-2.2B-Instruct-4bit` | Smallest practical VLM |
-| **Phi-4 Multimodal** | phi4 | 3.8B | 3.0 GB | 131K | `mlx-community/Phi-4-multimodal-instruct-4bit` | Strong STEM reasoning |
-| **Gemma 3 4B** | gemma3 | 4B | 3.5 GB | 128K | `mlx-community/gemma-3-4b-it-4bit` | 140+ languages |
-| **Gemma 3 12B** | gemma3 | 12B | 10 GB | 128K | `mlx-community/gemma-3-12b-it-4bit` | Larger Gemma |
-| **SmolVLM 256M** | smolvlm | 256M | 0.5 GB | 8K | `mlx-community/SmolVLM-256M-Instruct-4bit` | Ultra-lightweight |
-
-\*\* FastVLM: Uses CoreML `.mlpackage` for the CNN vision encoder (FastViTHD). Incompatible with mlx-vlm's pure-MLX model loader. Awaiting pure MLX conversion.
-
-```python
-from trio_core import get_profile
-
-profile = get_profile("mlx-community/gemma-3n-E2B-it-4bit")
-print(profile.family)             # "gemma3n"
-print(profile.merge_factor)       # 14
-print(profile.max_visual_tokens)  # 256
-```
-
-### Watchlist — Evaluating for Future Support
-
-| Model | Architecture | Params | Vision Encoder | LLM Backbone | Status |
-|---|---|---|---|---|---|
-| **Penguin-VL-2B** | LLaVA-style | 2B | LLM-based (Qwen3-0.6B, 2D-RoPE) | Qwen3-1.7B | No mlx-vlm support yet |
-| **Penguin-VL-8B** | LLaVA-style | 8B | LLM-based (Qwen3-0.6B, 2D-RoPE) | Qwen3-8B | No mlx-vlm support yet |
-
-Penguin-VL uses an LLM-initialized vision encoder (not standard Qwen ViT), 2D-RoPE instead of 3D MRoPE — requires new architecture family when mlx-vlm adds support.
-
-### Architecture Comparison
-
-| | Qwen2.5-VL | Qwen3-VL | Qwen3.5 | Gemma 3n | SmolVLM2 | Phi-4 | Gemma 3 | InternVL3 | FastVLM | nanoLLaVA |
-|---|---|---|---|---|---|---|---|---|---|---|
-| **ViT type** | Qwen ViT | Qwen ViT | Qwen ViT | MobileNet-v5 | SigLIP | SigLIP | SigLIP | InternViT | FastViTHD | SigLIP |
-| **Patch** | 14 | 14 | 16 | 14 | 14/16 | 14 | 14 | 14 | 16 | 14 |
-| **merge_factor** | 28 | 28 | 32 | 14 | 14/16 | 14 | 14 | 14 | 16 | 14 |
-| **Windowed attn** | Yes | No | No | No | No | No | No | No | No | No |
-| **Deepstack** | No | Yes | Yes | No | No | No | No | No | No | No |
-| **DeltaNet** | No | No | Yes | No | No | No | No | No | No | No |
-| **StreamMem** | Full | Full | Full (DeltaNet skip) | TODO | TODO | TODO | TODO | Full | N/A\*\* | Full |
-| **ToMe support** | Full | Full | Full | TODO | TODO | TODO | TODO | No\* | N/A\*\* | Full |
-| **Video native** | Yes | Yes | Yes | Image | Video | Image | Image | Image | Image | Image |
-
-The engine auto-selects the correct profile and computes optimal `(frames, height, width)` for each model's token budget:
-
-```python
-profile.compute_visual_tokens(8, 224, 224)  # 256 tokens
-frames, h, w = profile.compute_optimal_params(
-    duration_sec=30.0, native_height=1080, native_width=1920
-)
-```
-
-### Callback System
-
-10 lifecycle events. Errors caught and logged — never crash the pipeline.
-
-```python
-engine.add_callback("on_vlm_end", lambda e: send_webhook(e.last_result))
-engine.add_callback("on_trigger", lambda e: notify_slack(e.last_result.text))
-```
-
-| Event | When |
-|---|---|
-| `on_engine_load` | Model loaded |
-| `on_frame_captured` | Raw frames extracted |
-| `on_dedup_done` | Temporal dedup complete |
-| `on_motion_check` | Motion gate evaluated |
-| `on_vlm_start` / `on_vlm_end` | VLM inference lifecycle |
-| `on_trigger` | Watch condition met |
-| `on_stream_start` / `on_stream_frame` / `on_stream_stop` | Stream lifecycle |
-
-### Three-Phase Pipeline Timing
-
-Every inference call profiled in three phases:
-
-| Phase | What |
-|---|---|
-| `preprocess_ms` | Frame extraction, dedup, motion gate |
-| `inference_ms` | VLM forward pass (thread-locked) |
-| `postprocess_ms` | Metrics assembly |
-
-```python
-result = engine.analyze_video("clip.mp4", "Describe this.")
-m = result.metrics
-print(f"Pre: {m.preprocess_ms:.0f}ms  Inf: {m.inference_ms:.0f}ms  Post: {m.postprocess_ms:.0f}ms")
-```
+| Hardware | Detection | Backend |
+|---|---|---|
+| Apple Silicon (M1-M4) | `arm64` + `sysctl` | MLX (native model loading, mlx-vlm fallback) |
+| NVIDIA GPU | `nvidia-smi` / `torch.cuda` | Transformers (PyTorch) |
+| CPU-only | Fallback | Transformers (PyTorch) |
 
 ## API
 
@@ -483,86 +374,16 @@ TRIO_HOST=0.0.0.0
 TRIO_PORT=8000
 ```
 
-Or via Python:
-
-```python
-from trio_core import TrioCore, EngineConfig
-
-config = EngineConfig(
-    model="mlx-community/Qwen2.5-VL-7B-Instruct-4bit",
-    video_fps=1.0,
-    dedup_threshold=0.98,
-    motion_enabled=True,
-    tome_enabled=True,
-    tome_r=4,
-    max_tokens=1024,
-)
-engine = TrioCore(config)
-```
-
-## Project Structure
-
-```
-trio-core/                        ~4,800 lines production code
-├── pyproject.toml
-├── examples/
-│   ├── webcam_to_text.py           Laptop camera -> continuous VLM
-│   ├── video_analyze.py            File analysis with metrics
-│   ├── stream_monitor.py           Live stream monitoring
-│   ├── run_benchmark.py            POPE/TextVQA benchmark runner
-│   └── run_eval.py                 Synthetic perf eval suite
-├── src/trio_core/
-│   ├── __init__.py            33   Public API exports
-│   ├── backends.py           453   BaseBackend + MLXBackend + TransformersBackend
-│   ├── callbacks.py           80   Hook system (10 events)
-│   ├── cli.py                172   serve / analyze / bench / device
-│   ├── config.py              58   Pydantic settings (TRIO_ env prefix)
-│   ├── device.py             188   Hardware detection + model recommendation
-│   ├── engine.py             357   Core engine (3-phase pipeline + callbacks)
-│   ├── profiles.py           254   Model-specific architecture parameters
-│   ├── utils.py               94   Hashing, similarity, content extraction
-│   ├── video.py              553   StreamCapture + load + dedup + motion gate
-│   ├── tome.py               161   ToMe bipartite soft matching algorithm
-│   ├── tome_vision.py        371   ViT wrappers (Qwen2.5-VL + Qwen3-VL)
-│   ├── tome_backend.py       308   MLX backend with ToMe integration
-│   ├── streaming_memory.py   312   StreamMem — bounded KV cache for streams
-│   ├── eval.py               406   Synthetic eval framework
-│   ├── eval_benchmarks.py    491   POPE/TextVQA/Custom benchmarks
-│   ├── token_compression.py  206   Post-encoder compression (baseline)
-│   ├── compressed_backend.py 264   Compressed backend with custom generate
-│   └── api/
-│       ├── models.py         152   Pydantic request/response
-│       └── server.py         245   FastAPI server
-├── research/                       Research docs + eval results
-│   ├── README.md
-│   ├── visual-token-compression.md
-│   ├── tome-implementation-plan.md
-│   └── eval-results/
-└── tests/                          257 tests
-    ├── test_api.py           114
-    ├── test_backends.py       61
-    ├── test_callbacks.py      59
-    ├── test_device.py         50
-    ├── test_engine.py        139
-    ├── test_profiles.py       70
-    ├── test_stream_capture.py 99
-    ├── test_tome.py          275   ToMe algorithm unit tests
-    ├── test_tome_integration.py 296   Backend + wrapper integration tests
-    └── test_video.py          93
-```
-
 ## Roadmap
 
-- [x] **v0.1:** Core engine — video pipeline, temporal dedup, motion gating
+- [x] **v0.1:** Core engine -- video pipeline, temporal dedup, motion gating
 - [x] **v0.2:** Visual token compression (ToMe) + eval framework (POPE, TextVQA)
-- [x] **v0.2.1:** Qwen3-VL + Qwen3.5 support, multi-model profiles
-- [x] **v0.3:** Custom generate loop — own KV cache, speculative decoding, early stopping
-- [x] **v0.3.1:** Native ToMe ViT, FastV pruning, frame-to-frame KV reuse (1.6x speedup)
-- [x] **v0.3.2:** Content-aware adaptive r, visual similarity gating, 4-tier cache hierarchy
-- [x] **v0.3.3:** StreamMem — bounded KV cache for continuous video streams (saliency eviction + prototypes)
-- [ ] **v0.4:** Tier 1 expansion (Qwen3-VL-2B/8B, Qwen3.5-2B) + comprehensive benchmarks
-- [ ] **v0.5:** Multi-model support — Gemma 3n, SmolVLM2, Phi-4, Gemma 3 full pipeline (SigLIP ToMe)
-- [ ] **v0.6:** Full native engine — zero mlx-vlm dependency
+- [x] **v0.3:** Custom generate loop -- own KV cache, speculative decoding, early stopping
+- [x] **v0.3.1:** Native ToMe ViT, FastV pruning, frame-to-frame KV reuse (1.7x speedup)
+- [x] **v0.3.2:** Content-aware adaptive r, 4-tier cache hierarchy, StreamMem
+- [x] **v0.3.3:** Native model loading -- vendored Qwen2.5-VL, Qwen3-VL, Qwen3.5 (zero mlx-vlm for T1)
+- [ ] **v0.4:** Comprehensive benchmarks + Tier 2 model optimization
+- [ ] **v0.5:** Full native engine -- zero mlx-vlm dependency
 - [ ] **Ongoing:** Continuous batching, PyPI packaging
 
 ## License
