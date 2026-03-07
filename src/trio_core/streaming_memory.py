@@ -49,10 +49,12 @@ class StreamingMemory:
         budget: int = 6000,
         prototype_ratio: float = 0.1,
         saliency_layer: int = 2,
+        n_sink_tokens: int = 4,
     ):
         self.budget = budget
         self.prototype_ratio = prototype_ratio
         self.saliency_layer = saliency_layer
+        self.n_sink_tokens = n_sink_tokens
         self._total_visual_tokens = 0
         self._text_prefix_len = 0
         self._frame_boundaries: List[int] = []  # cumulative visual token counts
@@ -188,6 +190,12 @@ class StreamingMemory:
         n_evict = n_vis - n_keep
         if n_evict <= 0:
             return EvictionStats(tokens_before, n_vis, 0, 0)
+
+        # Protect attention sink tokens — force-keep the first N visual tokens
+        if self.n_sink_tokens > 0 and n_vis > self.n_sink_tokens:
+            sink_boost = mx.zeros_like(saliency)
+            sink_boost[:self.n_sink_tokens] = 1e9
+            saliency = saliency + sink_boost
 
         # Sort by saliency — keep top-scoring
         sorted_indices = mx.argsort(saliency)  # ascending: low saliency first

@@ -1,0 +1,35 @@
+[
+  {
+    "label": "baseline",
+    "n_samples": 20,
+    "correct": 18,
+    "accuracy": 0.9,
+    "time_s": 18.8,
+    "n_warmup": 0,
+    "n_evictions": 0
+  },
+  {
+    "label": "sink=0",
+    "budget": 100,
+    "n_sink": 0,
+    "n_samples": 20,
+    "correct": 18,
+    "accuracy": 0.9,
+    "time_s": 25.6,
+    "n_warmup": 30,
+    "n_evictions": 29,
+    "final_vis_tokens": 107
+  },
+  {
+    "label": "sink=4",
+    "budget": 100,
+    "n_sink": 4,
+    "n_samples": 20,
+    "correct": 18,
+    "accuracy": 0.9,
+    "time_s": 25.1,
+    "n_warmup": 30,
+    "n_evictions": 29,
+    "final_vis_tokens": 107
+  }
+]

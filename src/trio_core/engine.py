@@ -194,6 +194,7 @@ class TrioCore(CallbackMixin):
                 True,
                 self.config.streaming_memory_budget,
                 self.config.streaming_memory_prototype_ratio,
+                self.config.streaming_memory_sink_tokens,
             )
 
         self._loaded = True

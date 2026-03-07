@@ -98,6 +98,9 @@ class EngineConfig(BaseSettings):
     streaming_memory_prototype_ratio: float = Field(
         default=0.1, description="Fraction of evicted tokens merged into prototypes (0.0-1.0)"
     )
+    streaming_memory_sink_tokens: int = Field(
+        default=4, description="Number of attention sink tokens to always preserve (StreamingLLM)"
+    )
 
     # Cache (Phase 2)
     cache_enabled: bool = Field(default=False, description="Enable video cache")

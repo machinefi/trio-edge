@@ -209,6 +209,57 @@ class TestEvictAndMerge:
         assert stats.n_prototypes > 0
 
 
+class TestAttentionSink:
+    def test_sink_tokens_never_evicted(self):
+        """First N visual tokens should survive eviction regardless of saliency."""
+        sm = StreamingMemory(budget=10, prototype_ratio=0.0, n_sink_tokens=4)
+        sm._total_visual_tokens = 20
+        sm._text_prefix_len = 5
+        cache = make_kv_cache(n_layers=1, n_heads=2, head_dim=8, seq_len=25)
+
+        # Give sink positions (0-3) the LOWEST saliency — they should still survive
+        saliency = mx.ones(20) * 10.0
+        saliency = saliency.at[:4].add(-100.0)  # sink tokens have lowest saliency
+        mx.eval(saliency)
+
+        # Save sink K values before eviction
+        sink_k_before = cache[0].keys[:, :, 5:9, :] * 1  # positions 5-8 = first 4 visual
+        mx.eval(sink_k_before)
+
+        sm.evict_and_merge(cache, saliency)
+
+        # Sink tokens should be in the kept portion (after text prefix)
+        sink_k_after = cache[0].keys[:, :, 5:9, :]
+        mx.eval(sink_k_after)
+        assert mx.allclose(sink_k_before, sink_k_after).item()
+
+    def test_no_sink_tokens_can_be_evicted(self):
+        """With n_sink_tokens=0, first tokens have no protection."""
+        sm = StreamingMemory(budget=10, prototype_ratio=0.0, n_sink_tokens=0)
+        sm._total_visual_tokens = 20
+        sm._text_prefix_len = 0
+        cache = make_kv_cache(n_layers=1, n_heads=2, head_dim=8, seq_len=20)
+
+        # First 4 tokens have lowest saliency — should be evicted
+        saliency = mx.ones(20) * 10.0
+        saliency = saliency.at[:4].add(-100.0)
+        mx.eval(saliency)
+
+        sink_k_before = cache[0].keys[:, :, :4, :] * 1
+        mx.eval(sink_k_before)
+
+        sm.evict_and_merge(cache, saliency)
+
+        # Without sink protection, these tokens should NOT appear at positions 0-3
+        new_k = cache[0].keys[:, :, :4, :]
+        mx.eval(new_k)
+        assert not mx.allclose(sink_k_before, new_k).item()
+
+    def test_default_sink_is_4(self):
+        sm = StreamingMemory()
+        assert sm.n_sink_tokens == 4
+
+
 class TestMaybeEvict:
     def test_no_eviction_when_under_budget(self):
         sm = StreamingMemory(budget=200)

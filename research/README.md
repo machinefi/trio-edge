@@ -19,7 +19,7 @@ Stage 0: 输入 (Video Pipeline)      ██████████ 100%   done
 Stage 1: Vision Encoder + ToMe      ██████████ 100%   ToMe + adaptive r + native ViT + content-aware done
 Stage 2: Visual Token Count          ██████████ 100%   mid-stream FastV + content-aware adaptive ratio done
 Stage 3: LLM Prefill                 ██████░░░░  60%   generate loop + prefix cache done; mlx-vlm dep remaining
-Stage 4: KV Cache                    ████████░░  80%   persistent cache + prefix reuse + frame-to-frame KV reuse done
+Stage 4: KV Cache                    █████████░  90%   4-tier cache + KV reuse + StreamMem + attention sink done
 Stage 5: Decode                      ████░░░░░░  40%   streaming + speculative decode done; benchmark pending
 ```
 
@@ -59,13 +59,18 @@ Stage 5: Decode                      ████░░░░░░  40%   strea
   (three-tier: exact hit > prefix hit > full miss), early stopping
 - TODO: remove mlx-vlm model loading dep
 
-**Stage 4 — KV Cache** -- 80%
+**Stage 4 — KV Cache** -- 90%
 - Done: persistent KVCache with buffer reuse, quantized KV cache,
   text prefix KV reuse across frames (15 tokens saved per inference),
   frame-to-frame KV reuse via visual embedding similarity gating
   (four-tier cache: exact hit > visual similarity hit > prefix hit > full miss,
-  1.6x speedup Qwen2.5, 1.7x speedup Qwen3)
-- TODO: streaming KV eviction for long video
+  1.6x speedup Qwen2.5, 1.7x speedup Qwen3),
+  StreamMem bounded KV cache (saliency-based eviction + prototype merging,
+  budget guard for long video single-pass prefill),
+  attention sink (StreamingLLM-style, protect first N tokens from eviction)
+- Note: cross-frame incremental streaming NOT viable — VLMs not trained for
+  appended visual KV across requests; generate_step does full prefill per call.
+  StreamMem works for long single-video prefill, not cross-request accumulation.
 
 **Stage 5 — Decode** -- 40%
 - Done: auto-regressive, streaming output, early stopping config,
@@ -140,7 +145,7 @@ Gemma/SmolVLM have entirely different ViT — ToMe/FastV not yet supported.
 Frame-level:  Motion Gate → Temporal Dedup → fewer frames       [v0.1 ✓]
 Token-level:  ToMe (inside ViT) ──────────→ fewer visual tokens [v0.2 ✓]
 Compute:      Quantization (INT4) ────────→ cheaper per-token   [mlx-vlm handles]
-Memory:       KV Cache / StreamingLLM ───→ bounded decode mem   [Phase 3]
+Memory:       KV Cache + StreamMem ──────→ bounded decode mem   [done]
 Throughput:   Batch Scheduling ───────────→ concurrent requests  [Phase 4]
 ```
 
@@ -268,8 +273,7 @@ Finding: 0.25 is viable (~2% more loss for ~11% more compression). 0.2 is too ag
 ### Next Optimization Directions
 
 1. **Remove mlx-vlm model loading dep** — zero external dependency (Phase 3)
-2. **Streaming KV eviction** — bounded memory for long video sessions
-3. **Continuous batching** — concurrent request handling for server mode
+2. **Continuous batching** — concurrent request handling for server mode
 
 ## Status
 
@@ -297,5 +301,8 @@ Finding: 0.25 is viable (~2% more loss for ~11% more compression). 0.2 is too ag
 - [x] **ToMe + FastV compound benchmark** — 85% token reduction too aggressive, recommend using one or the other
 - [x] **Frame-to-frame KV reuse** — visual embedding similarity gating, four-tier cache hierarchy (1.6x Qwen2.5, 1.7x Qwen3). Input_ids check prevents wrong-answer reuse; p10 cosine for robust visual discrimination.
 - [x] **Content-aware adaptive r** — per-image diversity scoring, dynamic r scaling [0.2, 1.0], stacks with layer-adaptive
+- [x] **StreamMem bounded KV cache** — saliency-based eviction + prototype merging for long video single-pass prefill
+- [x] **Attention sink (StreamingLLM)** — protect first N visual tokens from eviction, prevents model collapse after repeated eviction rounds
+- [x] **Cross-frame streaming analysis** — VLMs not trained for appended visual KV across requests; StreamMem works for single-video prefill only
 - [ ] Phase 2: Native Vision Encoder — built-in ToMe, adaptive r
 - [ ] Phase 3: Full native engine — zero mlx-vlm dependency

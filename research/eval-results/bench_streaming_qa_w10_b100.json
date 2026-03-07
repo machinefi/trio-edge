@@ -1,0 +1,110 @@
+[
+  {
+    "label": "baseline",
+    "budget": 0,
+    "n_sink": 0,
+    "n_warmup": 0,
+    "n_evictions": 0,
+    "warmup_time_s": 0.0,
+    "n_samples": 5,
+    "correct": 4,
+    "accuracy": 0.8,
+    "qa_time_s": 5.4,
+    "predictions": [
+      {
+        "id": "1",
+        "question": "Is there a snowboard in the image?",
+        "gt": "yes",
+        "pred": "yes",
+        "raw": "yes",
+        "correct": true
+      },
+      {
+        "id": "2",
+        "question": "Is there a car in the image?",
+        "gt": "no",
+        "pred": "no",
+        "raw": "no",
+        "correct": true
+      },
+      {
+        "id": "3",
+        "question": "Is there a person in the image?",
+        "gt": "yes",
+        "pred": "yes",
+        "raw": "yes",
+        "correct": true
+      },
+      {
+        "id": "4",
+        "question": "Is there a sandwich in the image?",
+        "gt": "no",
+        "pred": "no",
+        "raw": "no",
+        "correct": true
+      },
+      {
+        "id": "5",
+        "question": "Is there a skis in the image?",
+        "gt": "yes",
+        "pred": "no",
+        "raw": "no",
+        "correct": false
+      }
+    ]
+  },
+  {
+    "label": "sink=0",
+    "budget": 100,
+    "n_sink": 0,
+    "n_warmup": 10,
+    "n_evictions": 0,
+    "warmup_time_s": 1.6,
+    "n_samples": 5,
+    "correct": 4,
+    "accuracy": 0.8,
+    "qa_time_s": 5.2,
+    "predictions": [
+      {
+        "id": "1",
+        "question": "Is there a snowboard in the image?",
+        "gt": "yes",
+        "pred": "yes",
+        "raw": "Yes",
+        "correct": true
+      },
+      {
+        "id": "2",
+        "question": "Is there a car in the image?",
+        "gt": "no",
+        "pred": "no",
+        "raw": "no",
+        "correct": true
+      },
+      {
+        "id": "3",
+        "question": "Is there a person in the image?",
+        "gt": "yes",
+        "pred": "yes",
+        "raw": "yes",
+        "correct": true
+      },
+      {
+        "id": "4",
+        "question": "Is there a sandwich in the image?",
+        "gt": "no",
+        "pred": "no",
+        "raw": "no",
+        "correct": true
+      },
+      {
+        "id": "5",
+        "question": "Is there a skis in the image?",
+        "gt": "yes",
+        "pred": "no",
+        "raw": "no",
+        "correct": false
+      }
+    ]
+  }
+]

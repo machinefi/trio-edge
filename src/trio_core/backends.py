@@ -205,7 +205,7 @@ class MLXBackend(BaseBackend):
                 self._visual_similarity_threshold,
             )
 
-    def set_streaming_memory(self, enabled: bool, budget: int = 6000, prototype_ratio: float = 0.1) -> None:
+    def set_streaming_memory(self, enabled: bool, budget: int = 6000, prototype_ratio: float = 0.1, n_sink_tokens: int = 4) -> None:
         """Configure StreamMem bounded KV cache. Called by engine after load()."""
         if not enabled:
             self._streaming_memory_config = None
@@ -213,10 +213,11 @@ class MLXBackend(BaseBackend):
         self._streaming_memory_config = {
             "budget": budget,
             "prototype_ratio": prototype_ratio,
+            "n_sink_tokens": n_sink_tokens,
         }
         logger.info(
-            "[MLX] StreamMem enabled: budget=%d, prototype_ratio=%.2f",
-            budget, prototype_ratio,
+            "[MLX] StreamMem enabled: budget=%d, prototype_ratio=%.2f, sink=%d",
+            budget, prototype_ratio, n_sink_tokens,
         )
 
     def generate(
