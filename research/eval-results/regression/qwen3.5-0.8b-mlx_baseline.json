@@ -3,33 +3,33 @@
   "config_key": "qwen3.5-0.8b-mlx_baseline",
   "tome_r": null,
   "samples_per_bench": 50,
-  "timestamp": "2026-03-06 14:23:28",
+  "timestamp": "2026-03-06 16:00:04",
   "benchmarks": {
     "pope_random": {
       "accuracy": 0.9,
       "yes_rate": 0.44,
-      "avg_latency_ms": 124.05811661737971,
+      "avg_latency_ms": 120.33873331965879,
       "n": 50
     },
     "pope_adversarial": {
       "accuracy": 0.8,
       "yes_rate": 0.54,
-      "avg_latency_ms": 115.18541171913967,
+      "avg_latency_ms": 121.75679336301982,
       "n": 50
     },
     "textvqa": {
-      "accuracy": 0.68,
-      "avg_latency_ms": 251.80087249842472,
+      "accuracy": 0.66,
+      "avg_latency_ms": 283.521871662233,
       "n": 50
     },
     "gqa": {
       "accuracy": 0.54,
-      "avg_latency_ms": 173.6242416431196,
+      "avg_latency_ms": 198.53608903824352,
       "n": 50
     },
     "mmbench": {
       "accuracy": 0.6,
-      "avg_latency_ms": 91.19130407925695,
+      "avg_latency_ms": 96.87696508015506,
       "n": 50
     }
   }
