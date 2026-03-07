@@ -178,6 +178,8 @@ class KVCache:
 
     @property
     def state(self):
+        if self.keys is None:
+            return None, None
         if self.offset == self.keys.shape[2]:
             return self.keys, self.values
         else:

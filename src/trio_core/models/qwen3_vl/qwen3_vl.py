@@ -77,7 +77,8 @@ class Model(nn.Module):
 
         image_mask = image_mask[..., 0]
         visual_pos_masks = image_mask
-        deepstack_visual_embeds = mx.eval(deepstack_image_embeds)
+        mx.eval(deepstack_image_embeds)
+        deepstack_visual_embeds = deepstack_image_embeds
 
         if image_grid_thw is not None or video_grid_thw is not None:
             position_ids, rope_deltas = self.language_model.get_rope_index(

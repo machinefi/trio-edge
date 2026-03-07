@@ -109,7 +109,7 @@ def load_native(
     if not is_mlx_format:
         if hasattr(model, "sanitize"):
             weights = model.sanitize(weights)
-        if hasattr(model.vision_tower, "sanitize"):
+        if hasattr(model, "vision_tower") and hasattr(model.vision_tower, "sanitize"):
             weights = model.vision_tower.sanitize(weights)
 
     # Apply quantization if specified in config
