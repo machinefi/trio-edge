@@ -17,23 +17,23 @@ Every VLM inference decomposes into 5 stages. This is the map we optimize agains
 ```
 Stage 0: 输入 (Video Pipeline)      ██████████ 100%   done
 Stage 1: Vision Encoder + ToMe      ████████░░  80%   ToMe + adaptive r done; native化 remaining
-Stage 2: Visual Token Count          ██████░░░░  60%   FastV done(粗); mid-stream KV prune next
-Stage 3: LLM Prefill                 ████░░░░░░  40%   own generate loop done; shared prefix TODO
-Stage 4: KV Cache                    ██░░░░░░░░  20%   basic cache done; frame-to-frame reuse TODO
+Stage 2: Visual Token Count          ██████░░░░  60%   FastV done(粗); mid-stream KV prune WIP
+Stage 3: LLM Prefill                 ██████░░░░  60%   generate loop + prefix cache done; mlx-vlm dep remaining
+Stage 4: KV Cache                    ████░░░░░░  40%   persistent cache + prefix reuse done; frame-to-frame TODO
 Stage 5: Decode                      ██░░░░░░░░  20%   streaming done; speculative decode TODO
 ```
 
 ### Priority Ranking (ROI for video inference latency)
 
-| # | What | Expected Gain | Difficulty | Stage |
-|---|------|---------------|------------|-------|
-| 1 | Frame-to-frame KV reuse | -60~80% video latency | High | 4 |
-| 2 | Mid-stream FastV (true KV prune) | -30~50% visual tokens | Medium | 2 |
-| 3 | Shared text prefix KV | -20~40% prefill | Medium | 3 |
-| 4 | Speculative decoding | +30~50% decode TPS | Medium | 5 |
-| 5 | Content-aware adaptive r | +quality, same speed | Low | 2 |
-| 6 | Native ToMe (no monkey-patch) | cleaner arch | Medium | 1 |
-| 7 | Remove mlx-vlm load dep | zero dependency | High | 3 |
+| # | What | Expected Gain | Difficulty | Stage | Status |
+|---|------|---------------|------------|-------|--------|
+| 1 | Frame-to-frame KV reuse | -60~80% video latency | High | 4 | TODO |
+| 2 | Mid-stream FastV (true KV prune) | -30~50% visual tokens | Medium | 2 | WIP |
+| 3 | ~~Shared text prefix KV~~ | ~~-20~40% prefill~~ | ~~Medium~~ | ~~3~~ | DONE |
+| 4 | Speculative decoding | +30~50% decode TPS | Medium | 5 | TODO |
+| 5 | Content-aware adaptive r | +quality, same speed | Low | 2 | TODO |
+| 6 | Native ToMe (no monkey-patch) | cleaner arch | Medium | 1 | TODO |
+| 7 | Remove mlx-vlm load dep | zero dependency | High | 3 | TODO |
 
 ### Stage Details
 
@@ -49,17 +49,18 @@ Stage 5: Decode                      ██░░░░░░░░  20%   strea
 **Stage 2 — Visual Token Count** -- 60%
 - Done: ToMe compression (Qwen2.5 1080p: 748->242 tokens, -68%),
   post-encoder compression, FastV attention pruning (runs layers 0-N twice)
-- TODO: mid-stream FastV (prune KV cache in-place, no double computation),
-  content-aware adaptive ratio
+- WIP: mid-stream FastV (prune KV cache in-place, no double computation)
+- TODO: content-aware adaptive ratio
 
-**Stage 3 — LLM Prefill** -- 40%
+**Stage 3 — LLM Prefill** -- 60%
 - Done: own generate loop (sampler, KV cache, logits processors internalized),
-  mlx-lm runtime dep mostly removed
-- TODO: chunked prefill, shared text prefix across video frames,
-  remove mlx-vlm model loading dep
+  mlx-lm runtime dep mostly removed, chunked prefill, shared text prefix KV cache
+  (three-tier: exact hit > prefix hit > full miss), early stopping
+- TODO: remove mlx-vlm model loading dep
 
-**Stage 4 — KV Cache** -- 20% (BIGGEST UNTAPPED POTENTIAL)
-- Done: basic KVCache, quantized KV cache
+**Stage 4 — KV Cache** -- 40%
+- Done: persistent KVCache with buffer reuse, quantized KV cache,
+  text prefix KV reuse across frames (15 tokens saved per inference)
 - TODO: frame-to-frame KV reuse (consecutive frames share 80%+ context),
   streaming KV eviction for long video, cross-frame visual KV sharing
 
@@ -166,6 +167,28 @@ Throughput:   Batch Scheduling ───────────→ concurrent r
 | Baseline | 835ms | 323 | 4.07GB |
 | ToMe r=4 | 573ms (-31%) | 303 (-6%) | 3.71GB (-9%) |
 
+### Generate Loop A/B (trio-core vs mlx-vlm, Qwen2.5-VL-3B, 480p, 32 tokens)
+
+| Metric | mlx-vlm | trio-core | Diff |
+|---|---|---|---|
+| Prefill | 1018ms | 1016ms | -0.2% |
+| Decode | 524ms | 513ms | -2.1% |
+| Total | 1542ms | 1529ms | -0.8% |
+| Output match | - | - | 5/5 identical |
+
+Conclusion: zero overhead from custom generate loop. Output is bit-identical at temperature=0.
+
+### Prefix Cache A/B (Qwen2.5-VL-3B, 480p, same prompt different images)
+
+| Condition | Avg Prefill | Notes |
+|---|---|---|
+| Cold start (full miss) | 1069ms | Fresh cache each time |
+| Prefix hit (15/417 tokens reused) | 1045ms (-2%) | Same prompt, different pixels |
+
+Note: Qwen's chat template puts visual tokens very early (position 15), so text prefix
+is only 3.6% of total. Savings scale with prefix length — multi-turn conversations or
+long system prompts before `<|vision_start|>` would see larger gains.
+
 ### Key Findings
 
 1. **Qwen3-VL: zero quality loss** — 91% accuracy with and without ToMe, plus 31% prefill speedup
@@ -192,9 +215,10 @@ Finding: 0.25 is viable (~2% more loss for ~11% more compression). 0.2 is too ag
 
 ### Next Optimization Directions
 
-1. **Re-benchmark K-matrix with RoPE fix** — v2 should now match paper's recommendation
-2. **High-resolution eval** — 1080p where prefill dominates and compression matters most (--resolution flag added)
-3. **Fine-grained min_keep_ratio** — sweep 0.26-0.29 range
+1. **Mid-stream FastV** — prune KV cache in-place during prefill (WIP)
+2. **Frame-to-frame KV reuse** — consecutive video frames share 80%+ context
+3. **Speculative decoding** — draft model for faster decode
+4. **Content-aware adaptive r** — quality-preserving compression
 
 ## Status
 
@@ -211,6 +235,9 @@ Finding: 0.25 is viable (~2% more loss for ~11% more compression). 0.2 is too ag
 - [x] Qwen3.5 support verified (uses ToMeQwen3VisionWrapper, 36-50% prefill speedup)
 - [x] Multi-model profiles (Gemma 3, SmolVLM) + generalized Transformers backend
 - [x] mlx-vlm dependency analysis + phased replacement plan (native-engine-plan.md)
-- [ ] **Phase 1: Custom generate loop** — KV cache reuse, prompt caching, early stop
+- [x] **Phase 1: Custom generate loop** — own sampler, KV cache reuse, prompt caching, early stop, chunked prefill
+- [x] **Shared text prefix KV cache** — three-tier cache (exact hit > prefix hit > full miss), MRoPE-aware
+- [x] **FastV visual token pruning** — attention-based importance scoring, Qwen2.5/3/3.5 support
+- [ ] **Mid-stream FastV** — in-place KV cache pruning (no double computation) — WIP
 - [ ] Phase 2: Native Vision Encoder — built-in ToMe, adaptive r
 - [ ] Phase 3: Full native engine — zero mlx-vlm dependency
