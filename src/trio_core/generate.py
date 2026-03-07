@@ -280,11 +280,35 @@ class PromptCache:
         self._first_token = (first_token, first_logprobs)
         self._cached_kwargs = kwargs or {}
         # Record KV offset right after prefill (before decode starts)
-        # ArraysCache (DeltaNet) has no offset — cache reuse not supported
         if kv_cache and hasattr(kv_cache[0], 'offset'):
             self._prefill_offset = kv_cache[0].offset
         else:
             self._prefill_offset = 0
+        # Snapshot ArraysCache (DeltaNet) state right after prefill.
+        # DeltaNet recurrent state is modified in-place during decode and
+        # cannot be rolled back, so we deep-copy the state arrays here.
+        self._arrays_cache_snapshot = None
+        if kv_cache and not self.is_trimmable:
+            self._snapshot_arrays_cache(kv_cache)
+
+    def _snapshot_arrays_cache(self, kv_cache: List[Any]):
+        """Deep-copy ArraysCache states for later restore on visual_hit."""
+        snapshot = []
+        for c in kv_cache:
+            if hasattr(c, 'state'):
+                # ArraysCache: copy each state array
+                snapshot.append([mx.array(a) if a is not None else None for a in c.state])
+            else:
+                snapshot.append(None)
+        self._arrays_cache_snapshot = snapshot
+
+    def restore_arrays_cache(self):
+        """Restore ArraysCache state to post-prefill snapshot."""
+        if self._arrays_cache_snapshot is None or self._kv_cache is None:
+            return
+        for c, snap in zip(self._kv_cache, self._arrays_cache_snapshot):
+            if snap is not None and hasattr(c, 'state'):
+                c.state = [mx.array(a) if a is not None else None for a in snap]
 
     def get_cached_first_token(self) -> Optional[Tuple[mx.array, mx.array]]:
         """Get cached first token from exact-match hit."""
@@ -321,7 +345,7 @@ class PromptCache:
         """
         if self._last_embeds is None:
             return False
-        if not self.is_trimmable:
+        if self._kv_cache is None:
             return False
         if self._first_token is None:
             return False
@@ -693,11 +717,15 @@ def generate_step(
             if visual_hit:
                 # Reuse full KV cache from previous frame (approximate)
                 prompt_cache = prompt_cache_manager.kv_cache
+                # KVCache: trim decode tokens to restore prefill state
                 for c in prompt_cache:
                     if hasattr(c, 'trim'):
                         decode_tokens = c.offset - prompt_cache_manager._prefill_offset
                         if decode_tokens > 0:
                             c.trim(decode_tokens)
+                # ArraysCache (DeltaNet): restore from snapshot (state is
+                # modified in-place during decode, can't roll back)
+                prompt_cache_manager.restore_arrays_cache()
                 cached = prompt_cache_manager.get_cached_first_token()
                 y, logprobs = cached
                 kwargs = dict(prompt_cache_manager._cached_kwargs)
