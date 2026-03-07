@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import uuid
@@ -103,11 +104,15 @@ def _register_routes(app: FastAPI) -> None:
                 media_type="text/event-stream",
             )
 
-        result = engine.analyze_video(
-            video=request.video,
-            prompt=request.prompt,
-            max_tokens=request.max_tokens,
-            temperature=request.temperature,
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None,
+            lambda: engine.analyze_video(
+                video=request.video,
+                prompt=request.prompt,
+                max_tokens=request.max_tokens,
+                temperature=request.temperature,
+            ),
         )
 
         return VideoAnalyzeResponse(
@@ -138,11 +143,15 @@ def _register_routes(app: FastAPI) -> None:
                 media_type="text/event-stream",
             )
 
-        result = engine.analyze_video(
-            video=source,
-            prompt=prompt,
-            max_tokens=max_tokens,
-            temperature=temperature,
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None,
+            lambda: engine.analyze_video(
+                video=source,
+                prompt=prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
+            ),
         )
 
         return ChatCompletionResponse(
