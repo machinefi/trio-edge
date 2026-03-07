@@ -47,6 +47,10 @@ class FastVMLXBackend(MLXBackend):
         self, model_name: str,
         prune_ratio: float = 0.5,
         prune_after_layer: int = 2,
+        tome_r: int = 0,
+        tome_metric: str = "hidden",
+        tome_min_keep_ratio: float = 0.3,
+        tome_adaptive: bool = False,
         **kwargs,
     ):
         super().__init__(model_name, **kwargs)
@@ -58,6 +62,10 @@ class FastVMLXBackend(MLXBackend):
 
         self.prune_ratio = prune_ratio
         self.prune_after_layer = prune_after_layer
+        self.tome_r = tome_r
+        self.tome_metric = tome_metric
+        self.tome_min_keep_ratio = tome_min_keep_ratio
+        self.tome_adaptive = tome_adaptive
         self._is_qwen3: bool = False
         self._last_prune_log: dict | None = None
 
@@ -69,6 +77,27 @@ class FastVMLXBackend(MLXBackend):
         super().load()
         model_type = getattr(self._model.vision_tower, 'model_type', '')
         self._is_qwen3 = model_type in ('qwen3_vl', 'qwen3_5', 'qwen3_5_moe')
+
+        # Optionally wrap vision tower with ToMe (compound: ToMe + FastV)
+        if self.tome_r > 0:
+            from trio_core.tome_vision import ToMeQwen25VisionWrapper, ToMeQwen3VisionWrapper
+
+            wrapper_cls = ToMeQwen3VisionWrapper if self._is_qwen3 else ToMeQwen25VisionWrapper
+            self._tome_wrapper = wrapper_cls(
+                self._model.vision_tower,
+                r=self.tome_r,
+                metric=self.tome_metric,
+                min_keep_ratio=self.tome_min_keep_ratio,
+                adaptive=self.tome_adaptive,
+            )
+            self._model.vision_tower = self._tome_wrapper
+            logger.info(
+                "[FastV+ToMe] Wrapped vision_tower with ToMe r=%d, metric=%s",
+                self.tome_r, self.tome_metric,
+            )
+        else:
+            self._tome_wrapper = None
+
         logger.info(
             "[FastV] Loaded model with prune_ratio=%.2f, prune_after_layer=%d",
             self.prune_ratio, self.prune_after_layer,
@@ -123,13 +152,54 @@ class FastVMLXBackend(MLXBackend):
         else:
             hidden_states = vision_output
 
-        original_count = hidden_states.shape[0]
+        original_count = self._original_token_count(grid_thw)
+        compressed_count = hidden_states.shape[0]
 
-        # Step 2: Build full input sequence (all visual tokens)
+        # Step 2: Build input sequence (trim if ToMe compressed visual tokens)
         video_token_id, image_token_id = self._get_visual_token_ids(model)
 
         n_video = mx.sum(input_ids == video_token_id).item()
         visual_token_id = video_token_id if n_video > 0 else image_token_id
+
+        # If ToMe compressed tokens, trim input_ids to match
+        original_input_ids = input_ids  # keep for grid alignment rebuild
+        if self._tome_wrapper is not None and compressed_count < original_count:
+            from trio_core.compressed_backend import CompressedMLXBackend
+
+            logger.info(
+                "[FastV+ToMe] Vision tokens: %d → %d (%.0f%% ToMe reduction)",
+                original_count, compressed_count,
+                (1 - compressed_count / max(original_count, 1)) * 100,
+            )
+
+            # Compute compressed grid for position IDs
+            grid_thw = CompressedMLXBackend._compute_compressed_grid(
+                grid_thw, original_count, compressed_count
+            )
+            # Align to grid (rounding may change count)
+            grid_count = self._original_token_count(grid_thw)
+            if grid_count != compressed_count:
+                if grid_count > compressed_count:
+                    pad = mx.repeat(hidden_states[-1:], grid_count - compressed_count, axis=0)
+                    hidden_states = mx.concatenate([hidden_states, pad])
+                else:
+                    hidden_states = hidden_states[:grid_count]
+                compressed_count = grid_count
+
+            # Trim visual placeholder tokens in input_ids to match final count
+            # Use original_input_ids (has all visual placeholders) so we can
+            # both shrink and grow relative to compressed_count
+            ids_list = original_input_ids[0].tolist()
+            new_ids = []
+            vis_count = 0
+            for tid in ids_list:
+                if tid == visual_token_id:
+                    vis_count += 1
+                    if vis_count <= compressed_count:
+                        new_ids.append(tid)
+                else:
+                    new_ids.append(tid)
+            input_ids = mx.array([new_ids], dtype=input_ids.dtype)
 
         text_embeds = model.language_model.model.embed_tokens(input_ids)
 
@@ -147,7 +217,7 @@ class FastVMLXBackend(MLXBackend):
         # Build visual_mask: True for visual token positions
         visual_mask = (input_ids[0] == visual_token_id)
 
-        # Step 3: Compute position IDs for full sequence (needed for decode offsets)
+        # Step 3: Compute position IDs for sequence (uses compressed grid if ToMe active)
         new_mask = mx.ones(input_ids.shape, dtype=mx.int32)
         kw_grid = {}
         if n_video > 0:
@@ -319,6 +389,11 @@ class FastVMLXBackend(MLXBackend):
         target = min(self.prune_after_layer, n_layers - 1)
 
         mask = create_attention_mask(h, cache)
+        # mlx_vlm may return "causal" string instead of array — not supported
+        # by manual attention or DeltaNet layers. During prefill with empty cache,
+        # None is correct (full bidirectional attention over the prompt).
+        if isinstance(mask, str):
+            mask = None
 
         for i in range(target + 1):
             layer = layers[i]
