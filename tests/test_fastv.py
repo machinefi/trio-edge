@@ -113,39 +113,6 @@ class TestPruneVisualTokens:
 
 
 # ---------------------------------------------------------------------------
-# FastVMLXBackend._apply_mrope
-# ---------------------------------------------------------------------------
-
-class TestApplyMRoPE:
-    def test_output_shape_matches_input(self):
-        from trio_core.fastv_backend import FastVMLXBackend
-
-        B, H, L, D = 1, 4, 10, 16
-        q = mx.random.normal((B, H, L, D))
-        k = mx.random.normal((B, H, L, D))
-        cos = mx.ones((B, L, D))
-        sin = mx.zeros((B, L, D))
-
-        q_out, k_out = FastVMLXBackend._apply_mrope(q, k, cos, sin)
-        assert q_out.shape == (B, H, L, D)
-        assert k_out.shape == (B, H, L, D)
-
-    def test_identity_rotation(self):
-        """cos=1, sin=0 should preserve input."""
-        from trio_core.fastv_backend import FastVMLXBackend
-
-        B, H, L, D = 1, 2, 4, 8
-        q = mx.random.normal((B, H, L, D))
-        k = mx.random.normal((B, H, L, D))
-        cos = mx.ones((B, L, D))
-        sin = mx.zeros((B, L, D))
-
-        q_out, k_out = FastVMLXBackend._apply_mrope(q, k, cos, sin)
-        assert mx.allclose(q_out, q, atol=1e-6)
-        assert mx.allclose(k_out, k, atol=1e-6)
-
-
-# ---------------------------------------------------------------------------
 # FastVMLXBackend._original_token_count
 # ---------------------------------------------------------------------------
 
@@ -159,6 +126,141 @@ class TestFastVOriginalTokenCount:
         from trio_core.fastv_backend import FastVMLXBackend
         grid_thw = mx.array([[4, 14, 14]], dtype=mx.int32)
         assert FastVMLXBackend._original_token_count(grid_thw) == 196
+
+
+# ---------------------------------------------------------------------------
+# Config integration
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# FastVMLXBackend._prune_kv_cache
+# ---------------------------------------------------------------------------
+
+class TestPruneKVCache:
+    """Test in-place KV cache pruning for mid-stream FastV."""
+
+    def _make_cache(self, B, n_kv, seq_len, head_dim):
+        """Create a KVCache populated with sequential data."""
+        from mlx_lm.models.cache import KVCache
+        c = KVCache()
+        k = mx.arange(B * n_kv * seq_len * head_dim).reshape(
+            B, n_kv, seq_len, head_dim,
+        ).astype(mx.float32)
+        v = mx.arange(B * n_kv * seq_len * head_dim).reshape(
+            B, n_kv, seq_len, head_dim,
+        ).astype(mx.float32) + 1000
+        c.update_and_fetch(k, v)
+        return c
+
+    def test_prune_reduces_offset(self):
+        from trio_core.fastv_backend import FastVMLXBackend
+
+        B, n_kv, L, D = 1, 2, 8, 4
+        cache = [self._make_cache(B, n_kv, L, D) for _ in range(3)]
+        assert cache[0].offset == L
+
+        # Keep positions 0, 2, 5
+        keep = mx.array([0, 2, 5], dtype=mx.int32)
+        FastVMLXBackend._prune_kv_cache(cache, keep, n_layers=2)
+
+        # Pruned layers 0, 1
+        assert cache[0].offset == 3
+        assert cache[1].offset == 3
+        # Layer 2 untouched
+        assert cache[2].offset == L
+
+    def test_prune_preserves_correct_positions(self):
+        from trio_core.fastv_backend import FastVMLXBackend
+
+        B, n_kv, L, D = 1, 1, 6, 2
+        cache = [self._make_cache(B, n_kv, L, D)]
+
+        # Original keys at positions 0..5
+        original_keys = cache[0].keys[:, :, :L, :].tolist()
+
+        keep = mx.array([1, 3, 4], dtype=mx.int32)
+        FastVMLXBackend._prune_kv_cache(cache, keep, n_layers=1)
+
+        # After pruning: should contain positions 1, 3, 4 from original
+        pruned_keys = cache[0].keys[:, :, :cache[0].offset, :].tolist()
+        assert pruned_keys == [[
+            [original_keys[0][0][1],
+             original_keys[0][0][3],
+             original_keys[0][0][4]],
+        ]]
+
+    def test_prune_empty_cache_is_noop(self):
+        from mlx_lm.models.cache import KVCache
+        from trio_core.fastv_backend import FastVMLXBackend
+
+        cache = [KVCache()]  # keys/values are None
+        keep = mx.array([0, 1], dtype=mx.int32)
+        # Should not raise
+        FastVMLXBackend._prune_kv_cache(cache, keep, n_layers=1)
+        assert cache[0].offset == 0
+
+    def test_prune_keeps_all_positions(self):
+        from trio_core.fastv_backend import FastVMLXBackend
+
+        B, n_kv, L, D = 1, 2, 4, 4
+        cache = [self._make_cache(B, n_kv, L, D)]
+
+        keep = mx.arange(L, dtype=mx.int32)
+        FastVMLXBackend._prune_kv_cache(cache, keep, n_layers=1)
+
+        assert cache[0].offset == L
+
+
+# ---------------------------------------------------------------------------
+# FastVMLXBackend._score_visual
+# ---------------------------------------------------------------------------
+
+class TestScoreVisual:
+    """Test the visual importance scoring helper."""
+
+    def test_basic_importance_shape(self):
+        from trio_core.fastv_backend import FastVMLXBackend
+
+        B, n_heads, n_kv, L, D = 1, 4, 4, 10, 8
+        q = mx.random.normal((B, n_heads, L, D))
+        k = mx.random.normal((B, n_kv, L, D))
+        # 6 visual tokens, 4 text tokens
+        visual_mask = mx.array(
+            [False, False, True, True, True, True, True, True, False, False]
+        )
+
+        importance = FastVMLXBackend._score_visual(
+            q, k, visual_mask, n_heads, n_kv, D,
+        )
+        assert importance.shape == (6,)
+
+    def test_no_visual_tokens_returns_ones(self):
+        from trio_core.fastv_backend import FastVMLXBackend
+
+        B, n_heads, n_kv, L, D = 1, 2, 2, 4, 4
+        q = mx.random.normal((B, n_heads, L, D))
+        k = mx.random.normal((B, n_kv, L, D))
+        visual_mask = mx.zeros((L,), dtype=mx.bool_)
+
+        importance = FastVMLXBackend._score_visual(
+            q, k, visual_mask, n_heads, n_kv, D,
+        )
+        assert importance.shape == (1,)
+        assert importance[0].item() == 1.0
+
+    def test_gqa_expansion(self):
+        """With n_kv < n_heads, K should be expanded for scoring."""
+        from trio_core.fastv_backend import FastVMLXBackend
+
+        B, n_heads, n_kv, L, D = 1, 8, 2, 6, 4
+        q = mx.random.normal((B, n_heads, L, D))
+        k = mx.random.normal((B, n_kv, L, D))
+        visual_mask = mx.array([False, True, True, True, False, False])
+
+        importance = FastVMLXBackend._score_visual(
+            q, k, visual_mask, n_heads, n_kv, D,
+        )
+        assert importance.shape == (3,)
 
 
 # ---------------------------------------------------------------------------

@@ -1,9 +1,9 @@
 """MLX backend with FastV-style visual token pruning in LLM layers.
 
-Runs the vision encoder normally, merges visual+text embeddings, then runs
-the first N LLM layers to compute text→visual attention importance.
-Lowest-scoring visual tokens are pruned, and the full LLM runs on the
-shorter sequence.
+Mid-stream FastV: runs layers 0→N with KV cache, extracts text→visual
+attention importance at layer N, prunes the KV cache in-place, then
+continues layers N+1→end on the pruned sequence. Single-pass — no double
+computation.
 
 Training-free, following:
   - FastV (Chen et al., 2024): An Image is Worth 1/2 Tokens After Layer 2
@@ -36,11 +36,11 @@ def _bool_indices(mask):
 
 
 class FastVMLXBackend(MLXBackend):
-    """MLX backend with FastV-style visual token pruning in LLM layers.
+    """MLX backend with mid-stream FastV visual token pruning.
 
-    After merging visual + text embeddings, runs the first N LLM layers,
-    extracts text→visual attention scores at layer N, and prunes the
-    lowest-scoring visual tokens before running the full LLM.
+    Runs layers 0→N with KV cache, extracts text→visual attention importance
+    at layer N, prunes the KV cache and hidden states in-place, then
+    continues layers N+1→end. Single forward pass — zero double computation.
     """
 
     def __init__(
@@ -89,7 +89,11 @@ class FastVMLXBackend(MLXBackend):
         self, frames: np.ndarray, prompt: str, *,
         max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
     ) -> GenerationResult:
-        """Run inference with FastV visual token pruning."""
+        """Run inference with mid-stream FastV visual token pruning.
+
+        Single-pass: layers 0→N build KV cache, importance extracted at layer N,
+        cache pruned in-place, layers N+1→end continue on shorter sequence.
+        """
         import mlx.core as mx
         from trio_core.generate import make_prompt_cache, make_sampler, maybe_quantize_kv_cache
 
@@ -143,7 +147,7 @@ class FastVMLXBackend(MLXBackend):
         # Build visual_mask: True for visual token positions
         visual_mask = (input_ids[0] == visual_token_id)
 
-        # Step 3: Compute position IDs for full sequence
+        # Step 3: Compute position IDs for full sequence (needed for decode offsets)
         new_mask = mx.ones(input_ids.shape, dtype=mx.int32)
         kw_grid = {}
         if n_video > 0:
@@ -155,9 +159,18 @@ class FastVMLXBackend(MLXBackend):
             input_ids, attention_mask=new_mask, **kw_grid,
         )
 
-        # Step 4: Compute importance via LLM layer attention
-        importance = self._compute_visual_importance(
-            model.language_model, final_embeds, visual_mask, position_ids,
+        # Warn if Qwen3 deepstack is present — mid-stream doesn't support it yet
+        if self._is_qwen3 and deepstack_embeds is not None:
+            logger.warning(
+                "[FastV] Qwen3 deepstack_visual_embeds detected but not supported "
+                "in mid-stream mode — deepstack will be ignored. Quality may degrade."
+            )
+
+        # Step 4: Create cache and run layers 0→target_layer WITH cache
+        tic = time.perf_counter()
+        prompt_cache = make_prompt_cache(model.language_model)
+        h, importance = self._run_layers_with_cache(
+            model.language_model, final_embeds, visual_mask, prompt_cache,
         )
 
         # Step 5: Prune - keep top (1-prune_ratio) visual tokens
@@ -167,8 +180,8 @@ class FastVMLXBackend(MLXBackend):
         keep_visual_indices = mx.argsort(importance)[::-1][:n_keep]
         keep_visual_indices = mx.sort(keep_visual_indices)  # preserve order
 
-        # Step 6: Build pruned sequence
-        pruned_embeds, pruned_ids, all_keep = self._prune_visual_tokens(
+        # Step 6: Build pruned index (all text + kept visual positions)
+        _, pruned_ids, all_keep = self._prune_visual_tokens(
             final_embeds, input_ids, visual_mask, keep_visual_indices,
         )
 
@@ -183,51 +196,43 @@ class FastVMLXBackend(MLXBackend):
             n_visual, n_keep, self._last_prune_log["reduction_pct"],
         )
 
-        # Step 7: Slice position IDs for pruned sequence
-        # Keep original spatial positions — pruning doesn't change WHERE tokens are
+        # Step 7: Prune KV cache in-place (layers 0..target_layer)
+        target_layer = min(self.prune_after_layer, len(model.language_model.model.layers) - 1)
+        self._prune_kv_cache(prompt_cache, all_keep, target_layer + 1)
+
+        # Step 8: Prune hidden state to match
+        h = h[:, all_keep, :]
+
+        # Step 9: Set position info for AR decode
         position_ids = position_ids[:, :, all_keep]
-        # rope_deltas = max_position + 1 - seq_length (used for AR decoding offsets)
         max_pos = position_ids.max()
         rope_deltas = max_pos + 1 - pruned_ids.shape[1]
         model.language_model._position_ids = position_ids
         model.language_model._rope_deltas = rope_deltas
 
-        # Step 8: Generate from pruned sequence
-        prompt_cache = make_prompt_cache(model.language_model)
-        sampler = make_sampler(temperature, top_p)
+        # Step 10: Run remaining layers (target_layer+1 → end) with pruned cache + h
+        start_layer = target_layer + 1
+        normed = self._run_remaining_layers(
+            model.language_model, h, prompt_cache, start_layer,
+        )
+
+        # Step 11: Compute logits from normed output
+        lm = model.language_model
+        if lm.args.tie_word_embeddings:
+            logits_all = lm.model.embed_tokens.as_linear(normed)
+        else:
+            logits_all = lm.lm_head(normed)
+        logits = logits_all[:, -1, :]
+
         quantize_cache_fn = functools.partial(
             maybe_quantize_kv_cache,
             quantized_kv_start=5000,
             kv_group_size=64,
             kv_bits=None,
         )
-
-        tokenizer = self._processor.tokenizer if hasattr(self._processor, "tokenizer") else self._processor
-        tokenizer.stopping_criteria.reset(model.config.eos_token_id)
-
-        detokenizer = self._processor.detokenizer
-        detokenizer.reset()
-
-        # Deepstack for Qwen3
-        prefill_kwargs = {}
-        if self._is_qwen3 and deepstack_embeds is not None:
-            # Recompute image_mask for pruned sequence
-            pruned_visual_mask = (pruned_ids[0] == visual_token_id)
-            visual_pos_masks = pruned_visual_mask[None, :, None] if pruned_visual_mask is not None else None
-            prefill_kwargs["visual_pos_masks"] = visual_pos_masks
-            prefill_kwargs["deepstack_visual_embeds"] = mx.eval(deepstack_embeds)
-
-        # Prefill
-        tic = time.perf_counter()
-        outputs = model.language_model(
-            pruned_ids,
-            inputs_embeds=pruned_embeds,
-            cache=prompt_cache,
-            **prefill_kwargs,
-        )
-        logits = outputs.logits[:, -1, :]
         quantize_cache_fn(prompt_cache)
 
+        sampler = make_sampler(temperature, top_p)
         logprobs = logits - mx.logsumexp(logits)
         y = sampler(logprobs)
         mx.eval(y)
@@ -235,6 +240,12 @@ class FastVMLXBackend(MLXBackend):
         prompt_time = time.perf_counter() - tic
         prompt_token_count = pruned_ids.size
         prompt_tps = prompt_token_count / max(prompt_time, 1e-9)
+
+        tokenizer = self._processor.tokenizer if hasattr(self._processor, "tokenizer") else self._processor
+        tokenizer.stopping_criteria.reset(model.config.eos_token_id)
+
+        detokenizer = self._processor.detokenizer
+        detokenizer.reset()
 
         # Decode loop
         tic = time.perf_counter()
@@ -276,110 +287,181 @@ class FastVMLXBackend(MLXBackend):
             peak_memory=mx.get_peak_memory() / 1e9,
         )
 
-    def _compute_visual_importance(
-        self, language_model, embeds, visual_mask, position_ids,
-    ):
-        """Run first N LLM layers, extract attention importance at layer N.
+    # ── Mid-stream helpers ──────────────────────────────────────────────────
 
-        Computes text→visual attention scores using Q, K projections at
-        the target layer. Returns importance scores per visual token.
+    def _run_layers_with_cache(self, language_model, embeds, visual_mask, cache):
+        """Run layers 0→target_layer with KV cache, extract importance at target.
+
+        At the target layer, manually replicates Attention.__call__ to extract
+        Q/K for importance scoring while also writing to KV cache and computing
+        the real attention output. Zero-waste: the same Q/K/V serve both
+        importance extraction and the actual forward pass.
+
+        Returns:
+            (h, importance) — hidden state after layer target, and per-visual-token
+            importance scores.
         """
         import mlx.core as mx
+        from mlx_vlm.models.base import create_attention_mask
 
         h = embeds
         layers = language_model.model.layers
-
-        # Validate layer index
         n_layers = len(layers)
-        target_layer = min(self.prune_after_layer, n_layers - 1)
+        target = min(self.prune_after_layer, n_layers - 1)
 
-        # Run layers 0..target_layer
-        for i in range(target_layer + 1):
+        mask = create_attention_mask(h, cache)
+
+        for i in range(target + 1):
             layer = layers[i]
 
-            if i == target_layer:
-                # Extract Q, K before running full attention
+            if i == target:
+                # ── Manual forward: extract importance + complete real attention ──
                 normed = layer.input_layernorm(h)
                 B, L, D = normed.shape
+                attn = layer.self_attn
 
-                q = layer.self_attn.q_proj(normed)
-                k = layer.self_attn.k_proj(normed)
+                q = attn.q_proj(normed)
+                k = attn.k_proj(normed)
+                v = attn.v_proj(normed)
 
                 # Attribute names differ: mlx_vlm uses n_heads/n_kv_heads,
                 # some models use num_heads/num_kv_heads
-                n_heads = getattr(layer.self_attn, 'n_heads',
-                          getattr(layer.self_attn, 'num_heads', None))
-                n_kv = getattr(layer.self_attn, 'n_kv_heads',
-                       getattr(layer.self_attn, 'num_kv_heads', None))
-                head_dim = layer.self_attn.head_dim
+                n_heads = getattr(attn, 'n_heads',
+                          getattr(attn, 'num_heads', None))
+                n_kv = getattr(attn, 'n_kv_heads',
+                       getattr(attn, 'num_kv_heads', None))
+                head_dim = attn.head_dim
 
                 q = q.reshape(B, L, n_heads, head_dim).transpose(0, 2, 1, 3)
                 k = k.reshape(B, L, n_kv, head_dim).transpose(0, 2, 1, 3)
+                v = v.reshape(B, L, n_kv, head_dim).transpose(0, 2, 1, 3)
 
-                # Apply RoPE
-                cos, sin = layer.self_attn.rotary_emb(k, position_ids)
-                q, k = self._apply_mrope(q, k, cos, sin)
+                offset = cache[i].offset if cache[i] else 0
+                q = attn.rotary_emb(q, offset=offset)
+                k = attn.rotary_emb(k, offset=offset)
 
-                # GQA: repeat k for all heads
-                if n_kv < n_heads:
-                    repeats = n_heads // n_kv
-                    k = mx.repeat(k, repeats, axis=1)
+                # Extract importance from post-RoPE Q/K (before cache update)
+                importance = self._score_visual(q, k, visual_mask, n_heads, n_kv, head_dim)
 
-                # Identify text and visual positions
-                vis_idx = _bool_indices(visual_mask)
-                text_idx = _bool_indices(~visual_mask)
+                # Write to KV cache (same as Attention.__call__)
+                k, v = cache[i].update_and_fetch(k, v)
 
-                n_vis = int(visual_mask.astype(mx.int32).sum().item())
-                n_text = int((~visual_mask).astype(mx.int32).sum().item())
-                if n_text == 0 or n_vis == 0:
-                    return mx.ones((max(n_vis, 1),))
+                # Apply mask
+                layer_mask = mask
+                if layer_mask is not None:
+                    layer_mask = layer_mask[..., :k.shape[-2]]
 
-                q_text = q[:, :, text_idx, :]     # (B, H, n_text, D)
-                k_vis = k[:, :, vis_idx, :]        # (B, H, n_vis, D)
-
-                # text→visual attention scores
-                scores = (q_text @ k_vis.transpose(0, 1, 3, 2)) * (head_dim ** -0.5)
-                # Mean across batch, heads, text queries
-                importance = scores.mean(axis=(0, 1, 2))  # (n_vis,)
-                mx.eval(importance)
-                return importance
-            else:
-                # Run full layer (without cache — just forward pass)
-                normed = layer.input_layernorm(h)
-                attn_out = layer.self_attn(
-                    normed, mask=None, cache=None, position_ids=position_ids,
+                # Scaled dot-product attention
+                output = mx.fast.scaled_dot_product_attention(
+                    q, k, v, scale=attn.scale, mask=layer_mask,
                 )
-                h = h + attn_out
-                normed = layer.post_attention_layernorm(h)
-                h = h + layer.mlp(normed)
+                output = output.transpose(0, 2, 1, 3).reshape(B, L, -1)
+                attn_out = attn.o_proj(output)
 
-        # Shouldn't reach here
-        n_vis = int(visual_mask.astype(mx.int32).sum().item())
-        return mx.ones((max(n_vis, 1),))
+                # Residual + MLP (same as Qwen2VLDecoderLayer.__call__)
+                h = h + attn_out
+                h = h + layer.mlp(layer.post_attention_layernorm(h))
+            else:
+                # Standard layer forward with cache
+                h = layer(h, mask, cache[i])
+
+        mx.eval(h, importance)
+        return h, importance
 
     @staticmethod
-    def _apply_mrope(q, k, cos, sin):
-        """Apply multimodal rotary position embeddings."""
+    def _score_visual(q, k, visual_mask, n_heads, n_kv, head_dim):
+        """Compute text→visual attention importance from Q/K tensors.
+
+        Args:
+            q: (B, n_heads, L, head_dim) — post-RoPE queries
+            k: (B, n_kv_heads, L, head_dim) — post-RoPE keys (before cache)
+            visual_mask: (L,) bool — True at visual token positions
+            n_heads, n_kv, head_dim: attention geometry
+
+        Returns:
+            importance: (n_visual,) — mean text→visual attention score per visual token
+        """
         import mlx.core as mx
 
-        def rotate_half(x):
-            x1 = x[..., : x.shape[-1] // 2]
-            x2 = x[..., x.shape[-1] // 2 :]
-            return mx.concatenate([-x2, x1], axis=-1)
+        vis_idx = _bool_indices(visual_mask)
+        text_idx = _bool_indices(~visual_mask)
 
-        # Broadcast cos/sin to match q/k shape
-        # rotary_emb returns (cos, sin) each of shape (B, L, D)
-        # We need (B, 1, L, D) for broadcasting with (B, H, L, D)
-        if cos.ndim == 3:
-            cos = cos[:, None, :, :]
-            sin = sin[:, None, :, :]
-        elif cos.ndim == 4 and cos.shape[1] != q.shape[1]:
-            # MRoPE: cos is (B, 1, L, D) already
-            pass
+        n_vis = vis_idx.shape[0]
+        n_text = text_idx.shape[0]
+        if n_text == 0 or n_vis == 0:
+            return mx.ones((max(n_vis, 1),))
 
-        q_embed = (q * cos) + (rotate_half(q) * sin)
-        k_embed = (k * cos) + (rotate_half(k) * sin)
-        return q_embed, k_embed
+        # GQA: expand K heads to match Q heads for scoring
+        if n_kv < n_heads:
+            k_expanded = mx.repeat(k, n_heads // n_kv, axis=1)
+        else:
+            k_expanded = k
+
+        q_text = q[:, :, text_idx, :]      # (B, H, n_text, D)
+        k_vis = k_expanded[:, :, vis_idx, :]  # (B, H, n_vis, D)
+
+        # text→visual attention scores
+        scores = (q_text @ k_vis.transpose(0, 1, 3, 2)) * (head_dim ** -0.5)
+        # Mean across batch, heads, text queries → per visual token importance
+        importance = scores.mean(axis=(0, 1, 2))  # (n_vis,)
+        return importance
+
+    @staticmethod
+    def _prune_kv_cache(cache, keep_indices, n_layers):
+        """Remove pruned positions from KV cache for layers 0..n_layers-1.
+
+        Args:
+            cache: list of KVCache objects (one per LLM layer)
+            keep_indices: (n_keep,) int array — sequence positions to retain
+            n_layers: number of cache layers to prune (0..n_layers-1)
+        """
+        import mlx.core as mx
+
+        n_keep = keep_indices.shape[0]
+        eval_tensors = []
+        for i in range(n_layers):
+            c = cache[i]
+            if c.keys is not None:
+                # Slice valid portion then select kept positions
+                valid_k = c.keys[:, :, :c.offset, :]
+                valid_v = c.values[:, :, :c.offset, :]
+                c.keys = valid_k[:, :, keep_indices, :]
+                c.values = valid_v[:, :, keep_indices, :]
+                c.offset = n_keep
+                eval_tensors.extend([c.keys, c.values])
+        if eval_tensors:
+            mx.eval(*eval_tensors)
+
+    @staticmethod
+    def _run_remaining_layers(language_model, h, cache, start_layer):
+        """Run layers start_layer→end with existing KV cache.
+
+        Layers before start_layer have already been run (cache populated).
+        Layers from start_layer onward have empty caches and process the
+        (pruned) hidden state as a fresh prefill.
+
+        Returns:
+            Normalized hidden state (after final RMSNorm).
+        """
+        import mlx.core as mx
+        from mlx_vlm.models.base import create_attention_mask
+
+        layers = language_model.model.layers
+
+        if start_layer >= len(layers):
+            # All layers already run (e.g., prune_after_layer >= n_layers - 1)
+            return language_model.model.norm(h)
+
+        # Build mask using remaining cache slice (offset=0 → standard causal)
+        remaining_cache = cache[start_layer:]
+        mask = create_attention_mask(h, remaining_cache)
+
+        for i in range(start_layer, len(layers)):
+            h = layers[i](h, mask, cache[i])
+
+        return language_model.model.norm(h)
+
+    # ── Shared helpers ─────────────────────────────────────────────────────
 
     @staticmethod
     def _prune_visual_tokens(embeds, input_ids, visual_mask, keep_indices):
