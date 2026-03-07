@@ -22,12 +22,9 @@ import contextlib
 import functools
 import hashlib
 import logging
-import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Generator, List, Optional, Tuple
-
-import math
 from functools import partial
+from typing import Any, Callable, Dict, Generator, List, Optional, Tuple
 
 import mlx.core as mx
 import mlx.nn as nn

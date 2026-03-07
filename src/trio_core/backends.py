@@ -125,13 +125,10 @@ class BaseBackend(ABC):
 
 
 class MLXBackend(BaseBackend):
-    """VLM backend using mlx-vlm on Apple Silicon.
+    """VLM backend using MLX on Apple Silicon.
 
-    Uses mlx_vlm's video_generate pipeline which handles:
-    - process_vision_info: extracts video/image from messages
-    - fetch_video: loads and resizes frames with smart_resize
-    - process_inputs_with_fallback: converts to MLX tensors
-    - generate/stream_generate: KV cache, token sampling
+    Uses mlx_vlm only for model loading (load + load_config).
+    Preprocessing, generation, KV cache, and sampling are all internal.
     """
 
     @property
@@ -326,7 +323,6 @@ class MLXBackend(BaseBackend):
         file or mlx-vlm helpers needed.
         """
         import mlx.core as mx
-        from PIL import Image
 
         # Convert (T, C, H, W) float32 → list of PIL Images for video
         pil_frames = self._frames_to_pil(frames)
