@@ -1,0 +1,36 @@
+{
+  "model": "mlx-community/gemma-3-4b-it-4bit",
+  "config_key": "gemma-3-4b-it_mlxvlm_native",
+  "runner": "mlx-vlm-native",
+  "samples_per_bench": 50,
+  "timestamp": "2026-03-06 20:29:38",
+  "benchmarks": {
+    "pope_random": {
+      "accuracy": 0.88,
+      "avg_latency_ms": 667.95,
+      "n": 50,
+      "yes_rate": 0.46
+    },
+    "pope_adversarial": {
+      "accuracy": 0.78,
+      "avg_latency_ms": 1071.4,
+      "n": 50,
+      "yes_rate": 0.56
+    },
+    "textvqa": {
+      "accuracy": 0.44,
+      "avg_latency_ms": 874.93,
+      "n": 50
+    },
+    "gqa": {
+      "accuracy": 0.42,
+      "avg_latency_ms": 743.99,
+      "n": 50
+    },
+    "mmbench": {
+      "accuracy": 0.8,
+      "avg_latency_ms": 718.26,
+      "n": 50
+    }
+  }
+}
