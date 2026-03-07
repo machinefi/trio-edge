@@ -123,6 +123,7 @@ Gemma/SmolVLM have entirely different ViT — ToMe/FastV not yet supported.
 - [phase1-custom-generate.md](phase1-custom-generate.md) — Phase 1 detailed implementation: custom generate loop, persistent KV cache, early stopping. Code-level design with mlx-vlm source analysis.
 - [eval-results/mlxvlm-native-baselines.md](eval-results/mlxvlm-native-baselines.md) — mlx-vlm native baselines: ground-truth comparison (4 models × 5 benchmarks) showing trio-core adds no meaningful accuracy or latency overhead.
 - [eval-results/speculative-decode-benchmark.md](eval-results/speculative-decode-benchmark.md) — Speculative decode (prompt lookup) benchmark: 0% acceptance rate across 3 scenarios, confirms prompt lookup is not useful for VLM inference.
+- [eval-results/compound-tome-fastv-benchmark.md](eval-results/compound-tome-fastv-benchmark.md) — ToMe + FastV compound benchmark: 85% token reduction is too aggressive, use one or the other.
 - [eval-results/](eval-results/) — Baseline, compressed, and ToMe eval JSON files.
 
 ## Key Thesis
@@ -280,6 +281,6 @@ Finding: 0.25 is viable (~2% more loss for ~11% more compression). 0.2 is too ag
 - [x] **mlx-vlm native baselines** — 4 models × 5 benchmarks, trio-core matches or beats native on 3B+
 - [x] **Native ToMe ViT** — NativeToMeQwen25Vision / NativeToMeQwen3Vision, proper OO subclass, no monkey-patch
 - [x] **Unified ToMe generate path** — ToMeMLXBackend delegates to generate_step (gets PromptCache, early stopping, speculative, streaming for free). Fixed mx.eval() deepstack bug.
-- [ ] ToMe + FastV compound benchmark — measure combined compression
+- [x] **ToMe + FastV compound benchmark** — 85% token reduction too aggressive, recommend using one or the other
 - [ ] Phase 2: Native Vision Encoder — built-in ToMe, adaptive r
 - [ ] Phase 3: Full native engine — zero mlx-vlm dependency

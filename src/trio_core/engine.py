@@ -137,22 +137,30 @@ class TrioCore(CallbackMixin):
         )
 
         # If FastV is enabled and we got an MLX backend, swap to FastVMLXBackend
+        # FastV supports compound mode: ToMe (vision encoder) + FastV (LLM layers)
         if self.config.fastv_enabled and backend.backend_name == "mlx":
-            if self.config.tome_enabled:
-                logger.warning(
-                    "Both fastv_enabled and tome_enabled are set; using FastV (they are mutually exclusive)"
-                )
             from trio_core.fastv_backend import FastVMLXBackend
+
+            tome_kwargs = {}
+            if self.config.tome_enabled:
+                logger.info("Compound mode: ToMe (vision) + FastV (LLM)")
+                tome_kwargs = dict(
+                    tome_r=self.config.tome_r,
+                    tome_metric=self.config.tome_metric,
+                    tome_min_keep_ratio=self.config.tome_min_keep_ratio,
+                    tome_adaptive=self.config.tome_adaptive,
+                )
 
             backend = FastVMLXBackend(
                 self.config.model,
                 prune_ratio=self.config.fastv_ratio,
                 prune_after_layer=self.config.fastv_layer,
                 device_info=backend.device_info,
+                **tome_kwargs,
             )
 
-        # If ToMe is enabled and we got an MLX backend, swap to ToMeMLXBackend
-        if self.config.tome_enabled and backend.backend_name == "mlx":
+        # If only ToMe is enabled (no FastV) and we got an MLX backend, swap to ToMeMLXBackend
+        elif self.config.tome_enabled and backend.backend_name == "mlx":
             from trio_core.tome_backend import ToMeMLXBackend
 
             backend = ToMeMLXBackend(
