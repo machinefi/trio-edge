@@ -18,7 +18,7 @@ Every VLM inference decomposes into 5 stages. This is the map we optimize agains
 Stage 0: 输入 (Video Pipeline)      ██████████ 100%   done
 Stage 1: Vision Encoder + ToMe      ██████████ 100%   ToMe + adaptive r + native ViT + content-aware done
 Stage 2: Visual Token Count          ██████████ 100%   mid-stream FastV + content-aware adaptive ratio done
-Stage 3: LLM Prefill                 ██████░░░░  60%   generate loop + prefix cache done; mlx-vlm dep remaining
+Stage 3: LLM Prefill                 █████████░  90%   generate loop + prefix cache + native loading wired in
 Stage 4: KV Cache                    █████████░  90%   4-tier cache + KV reuse + StreamMem + attention sink done
 Stage 5: Decode                      ████░░░░░░  40%   streaming + speculative decode done; benchmark pending
 ```
@@ -34,7 +34,7 @@ Stage 5: Decode                      ████░░░░░░  40%   strea
 | 5 | ~~Content-aware adaptive r~~ | ~~+quality, same speed~~ | ~~Low~~ | ~~2~~ | DONE |
 | 6 | ~~Native ToMe (no monkey-patch)~~ | ~~cleaner arch~~ | ~~Medium~~ | ~~1~~ | DONE |
 | 7 | ~~Unify ToMe generate path~~ | ~~free features~~ | ~~Low~~ | ~~1/5~~ | DONE |
-| 8 | Remove mlx-vlm load dep | zero dependency | High | 3 | TODO |
+| 8 | ~~Remove mlx-vlm load dep~~ | ~~zero dependency~~ | ~~High~~ | ~~3~~ | 80% (T1 native, T2 fallback) |
 
 ### Stage Details
 
@@ -53,11 +53,13 @@ Stage 5: Decode                      ████░░░░░░  40%   strea
   zero double computation, MRoPE-aware),
   content-aware adaptive r (per-image diversity → dynamic merge ratio)
 
-**Stage 3 — LLM Prefill** -- 60%
+**Stage 3 — LLM Prefill** -- 90%
 - Done: own generate loop (sampler, KV cache, logits processors internalized),
   mlx-lm runtime dep mostly removed, chunked prefill, shared text prefix KV cache
-  (three-tier: exact hit > prefix hit > full miss), early stopping
-- TODO: remove mlx-vlm model loading dep
+  (three-tier: exact hit > prefix hit > full miss), early stopping,
+  native model loading for all T1 models (qwen2_5_vl, qwen3_vl, qwen3_5 — bit-identical),
+  load_native() wired into MLXBackend as primary path with mlx-vlm fallback
+- TODO: update ToMe/FastV imports to use native models (low priority while mlx-vlm still installed)
 
 **Stage 4 — KV Cache** -- 90%
 - Done: persistent KVCache with buffer reuse, quantized KV cache,
@@ -311,5 +313,6 @@ Finding: 0.25 is viable (~2% more loss for ~11% more compression). 0.2 is too ag
 - [x] **StreamMem bounded KV cache** — saliency-based eviction + prototype merging + attention sink. Hybrid model support (KVCache eviction + DeltaNet passthrough). Proxy query scoring (chat template end-tokens as stand-in query)
 - [x] **Attention sink (StreamingLLM)** — protect first N visual tokens from eviction, prevents model collapse after repeated eviction rounds
 - [x] **Cross-frame streaming analysis** — VLMs not trained for appended visual KV across requests; StreamMem works for single-video prefill only
-- [ ] Phase 2: Native Vision Encoder — built-in ToMe, adaptive r
-- [ ] Phase 3: Full native engine — zero mlx-vlm dependency
+- [x] **Native model loading (T1)** — vendored qwen2_5_vl (1080 lines), qwen3_vl (1240 lines), qwen3_5 (640 lines, reuses qwen3_vl vision). All bit-identical with mlx-vlm. Fixed upstream mx.eval() deepstack bug.
+- [x] **Wire native loading into MLXBackend** — load_native() as primary path, mlx-vlm fallback for T2 models
+- [ ] Phase 3: Full native engine — zero mlx-vlm dependency for T1 models

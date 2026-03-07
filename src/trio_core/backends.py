@@ -136,15 +136,23 @@ class MLXBackend(BaseBackend):
         return "mlx"
 
     def load(self) -> None:
-        from mlx_vlm import load
-        from mlx_vlm.utils import load_config
-
         logger.info("[MLX] Loading model: %s", self.model_name)
         t0 = time.monotonic()
-        self._model, self._processor = load(
-            self.model_name, trust_remote_code=True,
-        )
-        self._config = load_config(self.model_name)
+
+        # Try native loading first (T1 models), fall back to mlx-vlm (T2)
+        try:
+            from trio_core.models.loader import load_native, load_config_native
+            self._model, self._processor = load_native(self.model_name)
+            self._config = load_config_native(self.model_name)
+            logger.info("[MLX] Loaded via native path")
+        except ValueError:
+            from mlx_vlm import load
+            from mlx_vlm.utils import load_config
+            self._model, self._processor = load(
+                self.model_name, trust_remote_code=True,
+            )
+            self._config = load_config(self.model_name)
+            logger.info("[MLX] Loaded via mlx-vlm fallback")
         self._prompt_cache = None  # Lazily created on first generate
         self._early_stop = None   # Set via set_early_stop() after load
         self._speculative_lookahead = 0  # Set via set_speculative() after load
