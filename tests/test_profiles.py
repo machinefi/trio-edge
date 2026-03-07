@@ -100,3 +100,34 @@ class TestGetProfile:
         p = get_profile("mlx-community/gemma-3-4b-it-4bit")
         assert p.family == "gemma3"
         assert p.param_size == "4B"
+
+    # ── LLaVA-style models ──
+
+    def test_internvl3_1b(self):
+        p = get_profile("mlx-community/InternVL3-1B-4bit")
+        assert p.family == "internvl"
+        assert p.param_size == "1B"
+
+    def test_internvl3_2b(self):
+        p = get_profile("mlx-community/InternVL3-2B-4bit")
+        assert p.family == "internvl"
+        assert p.param_size == "2B"
+
+    def test_internvl3_fallback(self):
+        p = get_profile("OpenGVLab/InternVL3-1B")
+        assert p.family == "internvl"
+
+    def test_fastvlm_0_5b(self):
+        p = get_profile("InsightKeeper/FastVLM-0.5B-MLX-4bit")
+        assert p.family == "fastvlm"
+        assert p.param_size == "0.5B"
+
+    def test_fastvlm_1_5b(self):
+        p = get_profile("InsightKeeper/FastVLM-1.5B-MLX-4bit")
+        assert p.family == "fastvlm"
+        assert p.param_size == "1.5B"
+
+    def test_nanollava(self):
+        p = get_profile("mlx-community/nanoLLaVA-1.5-4bit")
+        assert p.family == "nanollava"
+        assert p.param_size == "1B"

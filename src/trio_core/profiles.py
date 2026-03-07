@@ -1,6 +1,6 @@
 """Model profiles — per-model architecture parameters for optimal inference.
 
-Each Qwen VL model has different patch sizes, merge factors, and token budgets.
+Each VLM has different patch sizes, merge factors, and token budgets.
 Using the wrong parameters wastes context window or produces misaligned tensors.
 
 Usage:
@@ -142,6 +142,25 @@ PROFILES: dict[str, ModelProfile] = {
         model_size_gb=0.5,
         inference_memory_gb=0.8,
     ),
+    "qwen3.5-2b": ModelProfile(
+        family="qwen3.5",
+        param_size="2B",
+        spatial_patch=16,
+        temporal_patch=2,
+        spatial_merge=2,
+        context_window=262_144,
+        max_visual_tokens=12_288,
+        default_visual_ratio=0.05,
+        recommended_fps=2.0,
+        min_frames=4,
+        max_frames=192,
+        has_deltanet=True,
+        deltanet_layers=20,
+        full_attn_layers=8,
+        kv_heads=2,
+        model_size_gb=1.5,
+        inference_memory_gb=2.0,
+    ),
     "qwen3.5-4b": ModelProfile(
         family="qwen3.5",
         param_size="4B",
@@ -218,6 +237,25 @@ PROFILES: dict[str, ModelProfile] = {
         model_size_gb=4.5,
         inference_memory_gb=6.0,
     ),
+    "qwen3-vl-2b": ModelProfile(
+        family="qwen3-vl",
+        param_size="2B",
+        spatial_patch=14,
+        temporal_patch=2,
+        spatial_merge=2,
+        context_window=128_000,
+        max_visual_tokens=24_576,
+        default_visual_ratio=0.19,
+        recommended_fps=2.0,
+        min_frames=4,
+        max_frames=768,
+        has_deltanet=False,
+        deltanet_layers=0,
+        full_attn_layers=28,
+        kv_heads=2,
+        model_size_gb=1.5,
+        inference_memory_gb=2.0,
+    ),
     "qwen3-vl-4b": ModelProfile(
         family="qwen3-vl",
         param_size="4B",
@@ -236,6 +274,25 @@ PROFILES: dict[str, ModelProfile] = {
         kv_heads=4,
         model_size_gb=2.5,
         inference_memory_gb=3.5,
+    ),
+    "qwen3-vl-8b": ModelProfile(
+        family="qwen3-vl",
+        param_size="8B",
+        spatial_patch=14,
+        temporal_patch=2,
+        spatial_merge=2,
+        context_window=128_000,
+        max_visual_tokens=24_576,
+        default_visual_ratio=0.19,
+        recommended_fps=2.0,
+        min_frames=4,
+        max_frames=768,
+        has_deltanet=False,
+        deltanet_layers=0,
+        full_attn_layers=36,
+        kv_heads=4,
+        model_size_gb=5.0,
+        inference_memory_gb=7.0,
     ),
     # ── Gemma 3n (edge-first, MatFormer nested architecture) ────────────
     "gemma3n-e2b": ModelProfile(
@@ -393,6 +450,104 @@ PROFILES: dict[str, ModelProfile] = {
         model_size_gb=1.5,
         inference_memory_gb=2.0,
     ),
+    # ── InternVL3 (LLaVA-style: InternViT-300M + MLP + Qwen2.5 LLM) ──
+    "internvl3-1b": ModelProfile(
+        family="internvl",
+        param_size="1B",
+        spatial_patch=14,       # InternViT-300M, patch_size=14
+        temporal_patch=1,       # Image model
+        spatial_merge=1,        # Pixel unshuffle + MLP (not PatchMerger)
+        context_window=32_000,
+        max_visual_tokens=1024, # Dynamic tiling, 256 tokens per 448x448 tile
+        default_visual_ratio=0.032,
+        recommended_fps=1.0,
+        min_frames=1,
+        max_frames=16,
+        has_deltanet=False,
+        deltanet_layers=0,
+        full_attn_layers=24,    # Qwen2.5-0.5B LLM
+        kv_heads=2,
+        model_size_gb=0.6,
+        inference_memory_gb=1.0,
+    ),
+    "internvl3-2b": ModelProfile(
+        family="internvl",
+        param_size="2B",
+        spatial_patch=14,
+        temporal_patch=1,
+        spatial_merge=1,
+        context_window=32_000,
+        max_visual_tokens=1024,
+        default_visual_ratio=0.032,
+        recommended_fps=1.0,
+        min_frames=1,
+        max_frames=16,
+        has_deltanet=False,
+        deltanet_layers=0,
+        full_attn_layers=28,    # Qwen2.5-1.5B LLM
+        kv_heads=2,
+        model_size_gb=1.0,
+        inference_memory_gb=1.6,
+    ),
+    # ── FastVLM (Apple: FastViTHD + MLP + Qwen2 LLM) ──────────────────
+    "fastvlm-0.5b": ModelProfile(
+        family="fastvlm",
+        param_size="0.5B",
+        spatial_patch=16,       # FastViTHD (hybrid CNN+ViT)
+        temporal_patch=1,
+        spatial_merge=1,        # MLP projector
+        context_window=32_000,
+        max_visual_tokens=576,  # Fewer tokens than standard ViT
+        default_visual_ratio=0.018,
+        recommended_fps=1.0,
+        min_frames=1,
+        max_frames=16,
+        has_deltanet=False,
+        deltanet_layers=0,
+        full_attn_layers=24,    # Qwen2-0.5B LLM
+        kv_heads=2,
+        model_size_gb=0.1,
+        inference_memory_gb=0.5,
+    ),
+    "fastvlm-1.5b": ModelProfile(
+        family="fastvlm",
+        param_size="1.5B",
+        spatial_patch=16,
+        temporal_patch=1,
+        spatial_merge=1,
+        context_window=32_000,
+        max_visual_tokens=576,
+        default_visual_ratio=0.018,
+        recommended_fps=1.0,
+        min_frames=1,
+        max_frames=16,
+        has_deltanet=False,
+        deltanet_layers=0,
+        full_attn_layers=28,    # Qwen2-1.5B LLM
+        kv_heads=2,
+        model_size_gb=0.3,
+        inference_memory_gb=1.0,
+    ),
+    # ── nanoLLaVA (SigLIP-384 + MLP + Qwen1.5 LLM) ───────────────────
+    "nanollava-1.5": ModelProfile(
+        family="nanollava",
+        param_size="1B",
+        spatial_patch=14,       # SigLIP so400m/14-384
+        temporal_patch=1,
+        spatial_merge=1,        # MLP projector
+        context_window=32_000,
+        max_visual_tokens=729,  # 27x27 = 729 SigLIP tokens (384/14 = 27)
+        default_visual_ratio=0.023,
+        recommended_fps=1.0,
+        min_frames=1,
+        max_frames=16,
+        has_deltanet=False,
+        deltanet_layers=0,
+        full_attn_layers=24,    # Qwen1.5-0.5B LLM
+        kv_heads=2,
+        model_size_gb=0.6,
+        inference_memory_gb=1.0,
+    ),
 }
 
 # Aliases for common HuggingFace model IDs
@@ -407,8 +562,11 @@ _ALIASES: dict[str, str] = {
 _PATTERNS: list[tuple[str, str]] = [
     (r"qwen3\.?5.*9b", "qwen3.5-9b"),
     (r"qwen3\.?5.*4b", "qwen3.5-4b"),
+    (r"qwen3\.?5.*2b", "qwen3.5-2b"),
     (r"qwen3\.?5.*0\.?8b", "qwen3.5-0.8b"),
+    (r"qwen3.*vl.*8b", "qwen3-vl-8b"),
     (r"qwen3.*vl.*4b", "qwen3-vl-4b"),
+    (r"qwen3.*vl.*2b", "qwen3-vl-2b"),
     (r"qwen2\.?5.*vl.*3b", "qwen2.5-vl-3b"),
     (r"qwen2\.?5.*vl.*7b", "qwen2.5-vl-7b"),
     # Gemma 3n (edge)
@@ -426,6 +584,17 @@ _PATTERNS: list[tuple[str, str]] = [
     (r"smolvlm.*2\.?2b", "smolvlm-2.2b"),
     (r"smolvlm.*500m", "smolvlm-500m"),
     (r"smolvlm.*256m", "smolvlm-256m"),
+    # InternVL3
+    (r"internvl.*3.*2b", "internvl3-2b"),
+    (r"internvl.*3.*1b", "internvl3-1b"),
+    (r"internvl", "internvl3-2b"),
+    # FastVLM (Apple)
+    (r"fastvlm.*1\.?5b", "fastvlm-1.5b"),
+    (r"fastvlm.*0\.?5b", "fastvlm-0.5b"),
+    (r"fastvlm", "fastvlm-0.5b"),
+    # nanoLLaVA
+    (r"nanollava", "nanollava-1.5"),
+    (r"nano.*llava", "nanollava-1.5"),
     # Broader fallbacks
     (r"qwen3\.?5", "qwen3.5-0.8b"),
     (r"qwen3.*vl", "qwen3-vl-4b"),

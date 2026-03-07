@@ -307,16 +307,19 @@ See [`research/`](research/) for detailed analysis, implementation notes, and ra
 
 TrioCore supports edge-class VLMs across multiple model families. Each model has a profile with architecture-specific parameters for optimal inference.
 
-### Tier 1 — Full Pipeline Support (video + ToMe + FastV + KV reuse)
+### Tier 1 — Full Pipeline Support (video + ToMe + FastV + KV reuse + StreamMem)
 
 | Model | Family | Params | 4-bit Size | Context | mlx-vlm ID | Video |
 |---|---|---|---|---|---|---|
 | **Qwen2.5-VL-3B** | qwen2.5-vl | 3B | 1.8 GB | 128K | `mlx-community/Qwen2.5-VL-3B-Instruct-4bit` | Yes |
 | **Qwen2.5-VL-7B** | qwen2.5-vl | 7B | 4.5 GB | 128K | `mlx-community/Qwen2.5-VL-7B-Instruct-4bit` | Yes |
+| **Qwen3-VL-2B** | qwen3-vl | 2B | 1.5 GB | 128K | `mlx-community/Qwen3-VL-2B-Instruct-4bit` | Yes |
 | **Qwen3-VL-4B** | qwen3-vl | 4B | 2.5 GB | 128K | `mlx-community/Qwen3-VL-4B-Instruct-4bit` | Yes |
-| **Qwen3.5-0.8B** | qwen3.5 | 0.8B | 0.5 GB | 262K | `mlx-community/Qwen3.5-VL-0.8B-4bit` | Yes |
-| **Qwen3.5-4B** | qwen3.5 | 4B | 2.5 GB | 262K | `mlx-community/Qwen3.5-VL-4B-4bit` | Yes |
-| **Qwen3.5-9B** | qwen3.5 | 9B | 5.0 GB | 262K | `mlx-community/Qwen3.5-VL-9B-4bit` | Yes |
+| **Qwen3-VL-8B** | qwen3-vl | 8B | 5.0 GB | 128K | `mlx-community/Qwen3-VL-8B-Instruct-4bit` | Yes |
+| **Qwen3.5-0.8B** | qwen3.5 | 0.8B | 0.5 GB | 262K | `mlx-community/Qwen3.5-0.8B-MLX-4bit` | Yes |
+| **Qwen3.5-2B** | qwen3.5 | 2B | 1.5 GB | 262K | `mlx-community/Qwen3.5-2B-4bit` | Yes |
+| **Qwen3.5-4B** | qwen3.5 | 4B | 2.5 GB | 262K | `mlx-community/Qwen3.5-4B-MLX-4bit` | Yes |
+| **Qwen3.5-9B** | qwen3.5 | 9B | 5.0 GB | 262K | `mlx-community/Qwen3.5-9B-MLX-4bit` | Yes |
 
 ### Tier 2 — Inference Support (video pipeline + profiles, no ToMe/FastV yet)
 
@@ -329,6 +332,11 @@ TrioCore supports edge-class VLMs across multiple model families. Each model has
 | **Gemma 3 4B** | gemma3 | 4B | 3.5 GB | 128K | `mlx-community/gemma-3-4b-it-4bit` | 140+ languages |
 | **Gemma 3 12B** | gemma3 | 12B | 10 GB | 128K | `mlx-community/gemma-3-12b-it-4bit` | Larger Gemma |
 | **SmolVLM 256M** | smolvlm | 256M | 0.5 GB | 8K | `mlx-community/SmolVLM-256M-Instruct-4bit` | Ultra-lightweight |
+| **InternVL3-1B** | internvl | 1B | 1.0 GB | 32K | `mlx-community/InternVL3-1B-4bit` | InternViT + Qwen2.5-0.5B |
+| **InternVL3-2B** | internvl | 2B | 1.6 GB | 32K | `mlx-community/InternVL3-2B-4bit` | InternViT + Qwen2.5-1.5B |
+| **FastVLM-0.5B** | fastvlm | 0.5B | 0.5 GB | 32K | `InsightKeeper/FastVLM-0.5B-MLX-4bit` | Apple FastViTHD encoder |
+| **FastVLM-1.5B** | fastvlm | 1.5B | 1.0 GB | 32K | `InsightKeeper/FastVLM-1.5B-MLX-4bit` | Apple FastViTHD encoder |
+| **nanoLLaVA-1.5** | nanollava | 1B | 1.0 GB | 32K | `mlx-community/nanoLLaVA-1.5-4bit` | SigLIP + Qwen1.5-0.5B |
 
 ```python
 from trio_core import get_profile
@@ -339,18 +347,33 @@ print(profile.merge_factor)       # 14
 print(profile.max_visual_tokens)  # 256
 ```
 
+### Watchlist — Evaluating for Future Support
+
+| Model | Architecture | Params | Vision Encoder | LLM Backbone | Status |
+|---|---|---|---|---|---|
+| **Penguin-VL-2B** | LLaVA-style | 2B | LLM-based (Qwen3-0.6B, 2D-RoPE) | Qwen3-1.7B | No mlx-vlm support yet |
+| **Penguin-VL-8B** | LLaVA-style | 8B | LLM-based (Qwen3-0.6B, 2D-RoPE) | Qwen3-8B | No mlx-vlm support yet |
+| **InternVL3-1B** | LLaVA-style | 0.8B | InternViT-300M | Qwen2.5-0.5B | Tier 2 supported |
+| **InternVL3-2B** | LLaVA-style | 1.8B | InternViT-300M | Qwen2.5-1.5B | Tier 2 supported |
+| **FastVLM-0.5B** | LLaVA-style | 0.5B | FastViTHD (Apple) | Qwen2-0.5B | Tier 2 supported |
+| **FastVLM-1.5B** | LLaVA-style | 1.5B | FastViTHD (Apple) | Qwen2-1.5B | Tier 2 supported |
+| **nanoLLaVA-1.5** | LLaVA-style | ~1B | SigLIP-384 | Qwen1.5-0.5B | Tier 2 supported |
+
+Penguin-VL uses an LLM-initialized vision encoder (not standard Qwen ViT), 2D-RoPE instead of 3D MRoPE — requires new architecture family when mlx-vlm adds support. InternVL3 and FastVLM are LLaVA-style (separate ViT + MLP projector + LLM) with existing mlx-vlm support — best candidates for a new `family="internvl"` / `family="fastvlm"` tier.
+
 ### Architecture Comparison
 
-| | Qwen2.5-VL | Qwen3-VL | Qwen3.5 | Gemma 3n | SmolVLM2 | Phi-4 | Gemma 3 |
-|---|---|---|---|---|---|---|---|
-| **ViT type** | Qwen ViT | Qwen ViT | Qwen ViT | MobileNet-v5 | SigLIP | SigLIP | SigLIP |
-| **Patch** | 14 | 14 | 16 | 14 | 14/16 | 14 | 14 |
-| **merge_factor** | 28 | 28 | 32 | 14 | 14/16 | 14 | 14 |
-| **Windowed attn** | Yes | No | No | No | No | No | No |
-| **Deepstack** | No | Yes | Yes | No | No | No | No |
-| **DeltaNet** | No | No | Yes | No | No | No | No |
-| **ToMe support** | Full | Full | Full | TODO | TODO | TODO | TODO |
-| **Video native** | Yes | Yes | Yes | Image | Video | Image | Image |
+| | Qwen2.5-VL | Qwen3-VL | Qwen3.5 | Gemma 3n | SmolVLM2 | Phi-4 | Gemma 3 | InternVL3 | FastVLM | nanoLLaVA |
+|---|---|---|---|---|---|---|---|---|---|---|
+| **ViT type** | Qwen ViT | Qwen ViT | Qwen ViT | MobileNet-v5 | SigLIP | SigLIP | SigLIP | InternViT | FastViTHD | SigLIP |
+| **Patch** | 14 | 14 | 16 | 14 | 14/16 | 14 | 14 | 14 | 16 | 14 |
+| **merge_factor** | 28 | 28 | 32 | 14 | 14/16 | 14 | 14 | 14 | 16 | 14 |
+| **Windowed attn** | Yes | No | No | No | No | No | No | No | No | No |
+| **Deepstack** | No | Yes | Yes | No | No | No | No | No | No | No |
+| **DeltaNet** | No | No | Yes | No | No | No | No | No | No | No |
+| **StreamMem** | Full | Full | Full (DeltaNet skip) | TODO | TODO | TODO | TODO | TODO | TODO | TODO |
+| **ToMe support** | Full | Full | Full | TODO | TODO | TODO | TODO | TODO | TODO | TODO |
+| **Video native** | Yes | Yes | Yes | Image | Video | Image | Image | Image | Image | Image |
 
 The engine auto-selects the correct profile and computes optimal `(frames, height, width)` for each model's token budget:
 
@@ -449,6 +472,9 @@ TRIO_TOME_ENABLED=false
 TRIO_TOME_R=4
 TRIO_TOME_METRIC=hidden
 TRIO_TOME_MIN_KEEP_RATIO=0.3
+TRIO_STREAMING_MEMORY_ENABLED=false
+TRIO_STREAMING_MEMORY_BUDGET=6000
+TRIO_STREAMING_MEMORY_PROTOTYPE_RATIO=0.1
 TRIO_HOST=0.0.0.0
 TRIO_PORT=8000
 ```
@@ -495,6 +521,7 @@ trio-core/                        ~4,800 lines production code
 │   ├── tome.py               161   ToMe bipartite soft matching algorithm
 │   ├── tome_vision.py        371   ViT wrappers (Qwen2.5-VL + Qwen3-VL)
 │   ├── tome_backend.py       308   MLX backend with ToMe integration
+│   ├── streaming_memory.py   312   StreamMem — bounded KV cache for streams
 │   ├── eval.py               406   Synthetic eval framework
 │   ├── eval_benchmarks.py    491   POPE/TextVQA/Custom benchmarks
 │   ├── token_compression.py  206   Post-encoder compression (baseline)
@@ -507,7 +534,7 @@ trio-core/                        ~4,800 lines production code
 │   ├── visual-token-compression.md
 │   ├── tome-implementation-plan.md
 │   └── eval-results/
-└── tests/                          120 tests
+└── tests/                          257 tests
     ├── test_api.py           114
     ├── test_backends.py       61
     ├── test_callbacks.py      59
@@ -528,8 +555,9 @@ trio-core/                        ~4,800 lines production code
 - [x] **v0.3:** Custom generate loop — own KV cache, speculative decoding, early stopping
 - [x] **v0.3.1:** Native ToMe ViT, FastV pruning, frame-to-frame KV reuse (1.6x speedup)
 - [x] **v0.3.2:** Content-aware adaptive r, visual similarity gating, 4-tier cache hierarchy
-- [ ] **v0.4:** Multi-model support — Gemma 3n, SmolVLM2, Phi-4, Gemma 3 inference + benchmarks
-- [ ] **v0.5:** StreamMem — streaming video memory for infinite-length video understanding
+- [x] **v0.3.3:** StreamMem — bounded KV cache for continuous video streams (saliency eviction + prototypes)
+- [ ] **v0.4:** Tier 1 expansion (Qwen3-VL-2B/8B, Qwen3.5-2B) + comprehensive benchmarks
+- [ ] **v0.5:** Multi-model support — Gemma 3n, SmolVLM2, Phi-4, Gemma 3 full pipeline (SigLIP ToMe)
 - [ ] **v0.6:** Full native engine — zero mlx-vlm dependency
 - [ ] **Ongoing:** Continuous batching, PyPI packaging
 
