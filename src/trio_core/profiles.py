@@ -237,6 +237,65 @@ PROFILES: dict[str, ModelProfile] = {
         model_size_gb=2.5,
         inference_memory_gb=3.5,
     ),
+    # ── Gemma 3n (edge-first, MatFormer nested architecture) ────────────
+    "gemma3n-e2b": ModelProfile(
+        family="gemma3n",
+        param_size="E2B",
+        spatial_patch=14,       # MobileNet-v5 vision encoder (not standard ViT)
+        temporal_patch=1,       # Image model, no temporal patching
+        spatial_merge=1,        # MLP projector, no PatchMerger
+        context_window=32_000,
+        max_visual_tokens=256,  # Fixed 256 tokens per image (256x256/512x512/768x768)
+        default_visual_ratio=0.008,
+        recommended_fps=1.0,
+        min_frames=1,
+        max_frames=16,
+        has_deltanet=False,
+        deltanet_layers=0,
+        full_attn_layers=26,    # MatFormer nested layers
+        kv_heads=4,
+        model_size_gb=1.5,      # 5B params but 2GB memory footprint
+        inference_memory_gb=2.0,
+    ),
+    "gemma3n-e4b": ModelProfile(
+        family="gemma3n",
+        param_size="E4B",
+        spatial_patch=14,
+        temporal_patch=1,
+        spatial_merge=1,
+        context_window=32_000,
+        max_visual_tokens=256,
+        default_visual_ratio=0.008,
+        recommended_fps=1.0,
+        min_frames=1,
+        max_frames=16,
+        has_deltanet=False,
+        deltanet_layers=0,
+        full_attn_layers=34,
+        kv_heads=8,
+        model_size_gb=2.5,      # 8B params but 4GB memory footprint
+        inference_memory_gb=3.0,
+    ),
+    # ── Phi-4 Multimodal ─────────────────────────────────────────────
+    "phi4-multimodal": ModelProfile(
+        family="phi4",
+        param_size="3.8B",
+        spatial_patch=14,       # SigLIP ViT
+        temporal_patch=1,
+        spatial_merge=1,
+        context_window=131_072,
+        max_visual_tokens=1024, # Dynamic resolution, up to 1024 tokens
+        default_visual_ratio=0.008,
+        recommended_fps=1.0,
+        min_frames=1,
+        max_frames=16,
+        has_deltanet=False,
+        deltanet_layers=0,
+        full_attn_layers=32,
+        kv_heads=8,
+        model_size_gb=2.0,
+        inference_memory_gb=3.0,
+    ),
     # ── Gemma 3 ─────────────────────────────────────────────────────────
     "gemma3-4b": ModelProfile(
         family="gemma3",
@@ -352,9 +411,17 @@ _PATTERNS: list[tuple[str, str]] = [
     (r"qwen3.*vl.*4b", "qwen3-vl-4b"),
     (r"qwen2\.?5.*vl.*3b", "qwen2.5-vl-3b"),
     (r"qwen2\.?5.*vl.*7b", "qwen2.5-vl-7b"),
+    # Gemma 3n (edge)
+    (r"gemma.*3n.*e4b", "gemma3n-e4b"),
+    (r"gemma.*3n.*e2b", "gemma3n-e2b"),
+    (r"gemma.*3n", "gemma3n-e2b"),
     # Gemma 3
     (r"gemma.*3.*12b", "gemma3-12b"),
     (r"gemma.*3.*4b", "gemma3-4b"),
+    # Phi-4
+    (r"phi.*4.*multimodal", "phi4-multimodal"),
+    (r"phi.*4.*vision", "phi4-multimodal"),
+    (r"phi3_v", "phi4-multimodal"),
     # SmolVLM
     (r"smolvlm.*2\.?2b", "smolvlm-2.2b"),
     (r"smolvlm.*500m", "smolvlm-500m"),
@@ -365,6 +432,7 @@ _PATTERNS: list[tuple[str, str]] = [
     (r"qwen2\.?5.*vl", "qwen2.5-vl-3b"),
     (r"gemma.*3", "gemma3-4b"),
     (r"smolvlm", "smolvlm-2.2b"),
+    (r"phi", "phi4-multimodal"),
 ]
 
 

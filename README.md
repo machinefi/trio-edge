@@ -303,36 +303,59 @@ Supported benchmarks:
 
 See [`research/`](research/) for detailed analysis, implementation notes, and raw eval results.
 
-## Model Profiles
+## Supported Models
 
-TrioCore is optimized for the Qwen VL family. Each model has different architecture parameters — using the wrong ones wastes context or produces misaligned tensors.
+TrioCore supports edge-class VLMs across multiple model families. Each model has a profile with architecture-specific parameters for optimal inference.
+
+### Tier 1 — Full Pipeline Support (video + ToMe + FastV + KV reuse)
+
+| Model | Family | Params | 4-bit Size | Context | mlx-vlm ID | Video |
+|---|---|---|---|---|---|---|
+| **Qwen2.5-VL-3B** | qwen2.5-vl | 3B | 1.8 GB | 128K | `mlx-community/Qwen2.5-VL-3B-Instruct-4bit` | Yes |
+| **Qwen2.5-VL-7B** | qwen2.5-vl | 7B | 4.5 GB | 128K | `mlx-community/Qwen2.5-VL-7B-Instruct-4bit` | Yes |
+| **Qwen3-VL-4B** | qwen3-vl | 4B | 2.5 GB | 128K | `mlx-community/Qwen3-VL-4B-Instruct-4bit` | Yes |
+| **Qwen3.5-0.8B** | qwen3.5 | 0.8B | 0.5 GB | 262K | `mlx-community/Qwen3.5-VL-0.8B-4bit` | Yes |
+| **Qwen3.5-4B** | qwen3.5 | 4B | 2.5 GB | 262K | `mlx-community/Qwen3.5-VL-4B-4bit` | Yes |
+| **Qwen3.5-9B** | qwen3.5 | 9B | 5.0 GB | 262K | `mlx-community/Qwen3.5-VL-9B-4bit` | Yes |
+
+### Tier 2 — Inference Support (video pipeline + profiles, no ToMe/FastV yet)
+
+| Model | Family | Params | Memory | Context | mlx-vlm ID | Notes |
+|---|---|---|---|---|---|---|
+| **Gemma 3n E2B** | gemma3n | 5B (2GB mem) | 2.0 GB | 32K | `mlx-community/gemma-3n-E2B-it-4bit` | Edge-first, MatFormer |
+| **Gemma 3n E4B** | gemma3n | 8B (4GB mem) | 3.0 GB | 32K | `mlx-community/gemma-3n-E4B-it-4bit` | LMArena 1300+ |
+| **SmolVLM2 2.2B** | smolvlm | 2.2B | 2.0 GB | 16K | `mlx-community/SmolVLM2-2.2B-Instruct-4bit` | Smallest practical VLM |
+| **Phi-4 Multimodal** | phi4 | 3.8B | 3.0 GB | 131K | `mlx-community/Phi-4-multimodal-instruct-4bit` | Strong STEM reasoning |
+| **Gemma 3 4B** | gemma3 | 4B | 3.5 GB | 128K | `mlx-community/gemma-3-4b-it-4bit` | 140+ languages |
+| **Gemma 3 12B** | gemma3 | 12B | 10 GB | 128K | `mlx-community/gemma-3-12b-it-4bit` | Larger Gemma |
+| **SmolVLM 256M** | smolvlm | 256M | 0.5 GB | 8K | `mlx-community/SmolVLM-256M-Instruct-4bit` | Ultra-lightweight |
 
 ```python
 from trio_core import get_profile
 
-profile = get_profile("mlx-community/Qwen2.5-VL-3B-Instruct-4bit")
-print(profile.merge_factor)       # 28
-print(profile.max_visual_tokens)  # 24576
+profile = get_profile("mlx-community/gemma-3n-E2B-it-4bit")
+print(profile.family)             # "gemma3n"
+print(profile.merge_factor)       # 14
+print(profile.max_visual_tokens)  # 256
 ```
 
-| | Qwen3.5-0.8B | Qwen2.5-VL-3B | Qwen3-VL-4B | Qwen2.5-VL-7B |
-|---|---|---|---|---|
-| **Architecture** | Gated DeltaNet + Attn | Full GQA | Full GQA + Deepstack | Full GQA |
-| **Context** | 262K | 128K | 128K | 128K |
-| **Patch size** | 16 | 14 | 14 | 14 |
-| **merge_factor** | 32 | 28 | 28 | 28 |
-| **Max visual tokens** | 8,192 | 24,576 | 24,576 | 24,576 |
-| **DeltaNet layers** | 18/24 | 0 | 0 | 0 |
-| **KV heads** | 2 | 2 | 4 | 4 |
-| **4-bit size** | ~0.5 GB | ~1.8 GB | ~2.5 GB | ~4.5 GB |
+### Architecture Comparison
 
-The engine automatically selects the correct `merge_factor` for resize alignment and computes optimal `(frames, height, width)` to fit within each model's visual token budget:
+| | Qwen2.5-VL | Qwen3-VL | Qwen3.5 | Gemma 3n | SmolVLM2 | Phi-4 | Gemma 3 |
+|---|---|---|---|---|---|---|---|
+| **ViT type** | Qwen ViT | Qwen ViT | Qwen ViT | MobileNet-v5 | SigLIP | SigLIP | SigLIP |
+| **Patch** | 14 | 14 | 16 | 14 | 14/16 | 14 | 14 |
+| **merge_factor** | 28 | 28 | 32 | 14 | 14/16 | 14 | 14 |
+| **Windowed attn** | Yes | No | No | No | No | No | No |
+| **Deepstack** | No | Yes | Yes | No | No | No | No |
+| **DeltaNet** | No | No | Yes | No | No | No | No |
+| **ToMe support** | Full | Full | Full | TODO | TODO | TODO | TODO |
+| **Video native** | Yes | Yes | Yes | Image | Video | Image | Image |
+
+The engine auto-selects the correct profile and computes optimal `(frames, height, width)` for each model's token budget:
 
 ```python
-# Visual tokens = (frames / temporal_patch) x (H / merge_factor) x (W / merge_factor)
 profile.compute_visual_tokens(8, 224, 224)  # 256 tokens
-
-# Auto-optimize dimensions for token budget
 frames, h, w = profile.compute_optimal_params(
     duration_sec=30.0, native_height=1080, native_width=1920
 )
@@ -501,11 +524,14 @@ trio-core/                        ~4,800 lines production code
 
 - [x] **v0.1:** Core engine — video pipeline, temporal dedup, motion gating
 - [x] **v0.2:** Visual token compression (ToMe) + eval framework (POPE, TextVQA)
-- [x] **v0.2.1:** Qwen3-VL + Qwen3.5 support, multi-model profiles (Gemma 3, SmolVLM)
-- [ ] **v0.3:** Custom generate loop — own KV cache, speculative decoding, frame-to-frame reuse
-- [ ] **v0.4:** Native Vision Encoder — built-in ToMe, adaptive r, LLM-layer pruning
-- [ ] **v0.5:** Full native engine — zero mlx-vlm dependency, custom quantization
-- [ ] **Ongoing:** PyPI packaging, `/metrics` endpoint, continuous batching
+- [x] **v0.2.1:** Qwen3-VL + Qwen3.5 support, multi-model profiles
+- [x] **v0.3:** Custom generate loop — own KV cache, speculative decoding, early stopping
+- [x] **v0.3.1:** Native ToMe ViT, FastV pruning, frame-to-frame KV reuse (1.6x speedup)
+- [x] **v0.3.2:** Content-aware adaptive r, visual similarity gating, 4-tier cache hierarchy
+- [ ] **v0.4:** Multi-model support — Gemma 3n, SmolVLM2, Phi-4, Gemma 3 inference + benchmarks
+- [ ] **v0.5:** StreamMem — streaming video memory for infinite-length video understanding
+- [ ] **v0.6:** Full native engine — zero mlx-vlm dependency
+- [ ] **Ongoing:** Continuous batching, PyPI packaging
 
 ## License
 

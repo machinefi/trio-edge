@@ -68,3 +68,35 @@ class TestGetProfile:
     def test_case_insensitive(self):
         p = get_profile("QWEN2.5-VL-3B")
         assert p.family == "qwen2.5-vl"
+
+    # ── New model families ──
+
+    def test_gemma3n_e2b(self):
+        p = get_profile("mlx-community/gemma-3n-E2B-it-4bit")
+        assert p.family == "gemma3n"
+        assert p.param_size == "E2B"
+        assert p.inference_memory_gb == 2.0
+
+    def test_gemma3n_e4b(self):
+        p = get_profile("mlx-community/gemma-3n-E4B-it-4bit")
+        assert p.family == "gemma3n"
+        assert p.param_size == "E4B"
+
+    def test_gemma3n_fallback(self):
+        p = get_profile("google/gemma-3n-E2B-it")
+        assert p.family == "gemma3n"
+
+    def test_smolvlm2(self):
+        p = get_profile("mlx-community/SmolVLM2-2.2B-Instruct-4bit")
+        assert p.family == "smolvlm"
+        assert p.param_size == "2.2B"
+
+    def test_phi4_multimodal(self):
+        p = get_profile("mlx-community/Phi-4-multimodal-instruct-4bit")
+        assert p.family == "phi4"
+        assert p.param_size == "3.8B"
+
+    def test_gemma3_4b(self):
+        p = get_profile("mlx-community/gemma-3-4b-it-4bit")
+        assert p.family == "gemma3"
+        assert p.param_size == "4B"
