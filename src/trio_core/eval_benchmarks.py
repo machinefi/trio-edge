@@ -5,10 +5,11 @@ Supports:
   - TextVQA — OCR-based QA, accuracy via exact match
   - GQA — Real-world visual reasoning (spatial, attributes, counting)
   - MMBench — Multi-ability benchmark (20 dimensions, multiple choice)
+  - MVBench — Video understanding (20 temporal tasks, multiple choice)
   - Custom QA — user-provided image+question+answer sets
 
 Usage:
-    from trio_core.eval_benchmarks import POPEBenchmark, GQABenchmark, BenchmarkRunner
+    from trio_core.eval_benchmarks import POPEBenchmark, MVBenchBenchmark, BenchmarkRunner
     bench = POPEBenchmark(split="random", max_samples=100)
     runner = BenchmarkRunner(engine)
     result = runner.run(bench)
@@ -55,6 +56,7 @@ class PredictionResult:
     correct: bool
     latency_ms: float = 0.0
     prompt_tokens: int = 0
+    metadata: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -113,6 +115,19 @@ class BenchmarkResult:
             return 0.0
         return sum(p.prompt_tokens for p in self.predictions) / len(self.predictions)
 
+    @property
+    def per_category_accuracy(self) -> dict[str, tuple[float, int]]:
+        """Per-category accuracy: {category: (accuracy, count)}."""
+        from collections import defaultdict
+        cats: dict[str, list[bool]] = defaultdict(list)
+        for p in self.predictions:
+            cat = p.metadata.get("category", "") if p.metadata else ""
+            cats[cat].append(p.correct)
+        return {
+            cat: (sum(vals) / len(vals), len(vals))
+            for cat, vals in sorted(cats.items())
+        }
+
     def print(self) -> None:
         print(f"\n{'='*60}")
         print(f"  {self.name}")
@@ -126,6 +141,13 @@ class BenchmarkResult:
         if self.metadata:
             for k, v in self.metadata.items():
                 print(f"  {k}: {v}")
+        # Per-category breakdown (for MVBench tasks, etc.)
+        cat_acc = self.per_category_accuracy
+        if len(cat_acc) > 1:
+            print(f"\n  Per-category accuracy:")
+            for cat, (acc, cnt) in cat_acc.items():
+                if cat:
+                    print(f"    {cat:<30s} {acc:.1%}  (n={cnt})")
         print(f"{'='*60}\n")
 
     def save(self, path: str) -> None:
@@ -148,6 +170,7 @@ class BenchmarkResult:
                     "correct": p.correct,
                     "latency_ms": p.latency_ms,
                     "prompt_tokens": p.prompt_tokens,
+                    "category": p.metadata.get("category", ""),
                 }
                 for p in self.predictions
             ],
@@ -555,6 +578,375 @@ class MMBenchBenchmark(Benchmark):
         return False
 
 
+class MVBenchBenchmark(Benchmark):
+    """MVBench: Multi-modal Video Understanding Benchmark.
+
+    Tests 20 temporal reasoning tasks on video clips. Multiple-choice format.
+    Dataset: OpenGVLab/MVBench on HuggingFace.
+
+    Videos must be downloaded separately (17.3GB total). Use download_videos()
+    or set video_dir to a pre-downloaded directory.
+
+    Surveillance-relevant tasks: action_sequence, object_interaction,
+    state_change, moving_direction, object_existence.
+    """
+
+    # Task name → (json_file, video_subfolder, data_type, has_temporal_bounds)
+    TASK_CONFIG = {
+        "action_sequence": ("action_sequence.json", "star/Charades_v1_480", "video", True),
+        "action_prediction": ("action_prediction.json", "star/Charades_v1_480", "video", True),
+        "action_antonym": ("action_antonym.json", "ssv2_video", "video", False),
+        "fine_grained_action": ("fine_grained_action.json", "Moments_in_Time_Raw/videos", "video", False),
+        "unexpected_action": ("unexpected_action.json", "FunQA_test/test", "video", False),
+        "object_existence": ("object_existence.json", "clevrer/video_validation", "video", False),
+        "object_interaction": ("object_interaction.json", "star/Charades_v1_480", "video", True),
+        "object_shuffle": ("object_shuffle.json", "perception/videos", "video", False),
+        "moving_direction": ("moving_direction.json", "clevrer/video_validation", "video", False),
+        "action_localization": ("action_localization.json", "sta/sta_video", "video", True),
+        "scene_transition": ("scene_transition.json", "scene_qa/video", "video", False),
+        "action_count": ("action_count.json", "perception/videos", "video", False),
+        "moving_count": ("moving_count.json", "clevrer/video_validation", "video", False),
+        "moving_attribute": ("moving_attribute.json", "clevrer/video_validation", "video", False),
+        "state_change": ("state_change.json", "perception/videos", "video", False),
+        "fine_grained_pose": ("fine_grained_pose.json", "nturgbd", "video", False),
+        "character_order": ("character_order.json", "perception/videos", "video", False),
+        "egocentric_navigation": ("egocentric_navigation.json", "vlnqa", "video", False),
+        "episodic_reasoning": ("episodic_reasoning.json", "tvqa/frames_fps3_hq", "frame", True),
+        "counterfactual_inference": ("counterfactual_inference.json", "clevrer/video_validation", "video", False),
+    }
+
+    # Tasks grouped by video source for selective download
+    VIDEO_SOURCES = {
+        "clevrer": ["object_existence", "moving_direction", "moving_count",
+                     "moving_attribute", "counterfactual_inference"],
+        "star": ["action_sequence", "action_prediction", "object_interaction"],
+        "perception": ["object_shuffle", "action_count", "state_change", "character_order"],
+        "scene_qa": ["scene_transition"],
+        "sta": ["action_localization"],
+        "ssv2_video": ["action_antonym"],
+        "Moments_in_Time_Raw": ["fine_grained_action"],
+        "FunQA_test": ["unexpected_action"],
+        "vlnqa": ["egocentric_navigation"],
+        "tvqa": ["episodic_reasoning"],
+        "nturgbd": ["fine_grained_pose"],
+    }
+
+    _PROMPT_TEMPLATE = (
+        "Watch the video carefully and answer the following question.\n"
+        "{question}\n{options}\n"
+        "Answer with the option letter only."
+    )
+
+    def __init__(
+        self,
+        video_dir: str,
+        tasks: list[str] | None = None,
+        max_samples_per_task: int | None = None,
+        max_frames: int = 16,
+        fps: float = 1.0,
+        cache_dir: str | None = None,
+    ):
+        """
+        Args:
+            video_dir: Root directory containing extracted video folders
+                       (e.g., video_dir/star/Charades_v1_480/ZS9XR.mp4).
+            tasks: List of task names to evaluate. None = all available.
+            max_samples_per_task: Limit samples per task (for quick testing).
+            max_frames: Max frames to extract per video clip.
+            fps: Frame extraction rate.
+        """
+        self.video_dir = Path(video_dir)
+        self.tasks = tasks
+        self.max_samples_per_task = max_samples_per_task
+        self.max_frames = max_frames
+        self.fps = fps
+        self.cache_dir = cache_dir
+
+    @property
+    def name(self) -> str:
+        n_tasks = len(self.tasks) if self.tasks else 20
+        n = f" (n={self.max_samples_per_task}/task)" if self.max_samples_per_task else ""
+        return f"MVBench-{n_tasks}tasks{n}"
+
+    def load(self) -> list[BenchmarkSample]:
+        try:
+            from huggingface_hub import hf_hub_download
+        except ImportError:
+            raise ImportError("Install 'huggingface_hub': pip install huggingface_hub")
+
+        import cv2
+
+        tasks_to_run = self.tasks or list(self.TASK_CONFIG.keys())
+        # Filter to tasks with valid config
+        tasks_to_run = [t for t in tasks_to_run if t in self.TASK_CONFIG]
+
+        all_samples = []
+        skipped = 0
+
+        for task_name in tasks_to_run:
+            json_file, video_subdir, data_type, has_bounds = self.TASK_CONFIG[task_name]
+
+            # Download annotation JSON from HuggingFace
+            json_path = hf_hub_download(
+                "OpenGVLab/MVBench",
+                f"json/{json_file}",
+                repo_type="dataset",
+                cache_dir=self.cache_dir,
+            )
+            with open(json_path) as f:
+                annotations = json.load(f)
+
+            n = self.max_samples_per_task or len(annotations)
+            task_samples = 0
+
+            for item in annotations[:n]:
+                video_name = item["video"]
+                video_path = self.video_dir / video_subdir / video_name
+
+                # Try with .mp4 extension if not found
+                if not video_path.exists() and not video_name.endswith((".mp4", ".avi", ".webm", ".mkv")):
+                    video_path = self.video_dir / video_subdir / f"{video_name}.mp4"
+
+                if not video_path.exists():
+                    skipped += 1
+                    continue
+
+                # Extract frames from video
+                start = item.get("start")
+                end = item.get("end")
+                if data_type == "frame":
+                    frames = self._load_frame_sequence(video_path, start, end)
+                else:
+                    frames = self._extract_video_frames(
+                        str(video_path), start, end
+                    )
+
+                if frames is None:
+                    skipped += 1
+                    continue
+
+                # Build multiple-choice question
+                candidates = item["candidates"]
+                option_letters = [chr(ord("A") + i) for i in range(len(candidates))]
+                options_text = "\n".join(
+                    f"{letter}. {cand}" for letter, cand in zip(option_letters, candidates)
+                )
+                question = self._PROMPT_TEMPLATE.format(
+                    question=item["question"], options=options_text
+                )
+
+                # Find correct answer letter
+                answer_text = item["answer"]
+                answer_letter = "A"  # default
+                for i, cand in enumerate(candidates):
+                    if cand == answer_text:
+                        answer_letter = chr(ord("A") + i)
+                        break
+
+                all_samples.append(BenchmarkSample(
+                    id=f"{task_name}_{task_samples}",
+                    image=frames,
+                    question=question,
+                    answer=answer_letter,
+                    category=task_name,
+                    metadata={
+                        "answer_text": answer_text,
+                        "video": video_name,
+                    },
+                ))
+                task_samples += 1
+
+            logger.info("Loaded %d samples for task '%s'", task_samples, task_name)
+
+        if skipped:
+            logger.warning(
+                "Skipped %d samples (videos not found in %s). "
+                "Download videos with MVBenchBenchmark.download_videos().",
+                skipped, self.video_dir,
+            )
+
+        logger.info("Loaded %d total MVBench samples", len(all_samples))
+        return all_samples
+
+    def _extract_video_frames(
+        self, video_path: str, start: float | None, end: float | None
+    ) -> np.ndarray | None:
+        """Extract frames from a video file, returning (T, C, H, W) float32."""
+        import cv2
+
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            logger.warning("Cannot open video: %s", video_path)
+            return None
+
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        video_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+
+        # Determine frame range
+        if start is not None and end is not None:
+            start_frame = int(start * video_fps)
+            end_frame = int(end * video_fps)
+        else:
+            start_frame = 0
+            end_frame = total_frames
+
+        end_frame = min(end_frame, total_frames)
+        duration_frames = max(end_frame - start_frame, 1)
+
+        # Sample frames uniformly
+        n_frames = min(self.max_frames, duration_frames)
+        if n_frames <= 0:
+            cap.release()
+            return None
+
+        indices = np.linspace(start_frame, end_frame - 1, n_frames, dtype=int)
+
+        frames = []
+        for idx in indices:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+            ret, frame = cap.read()
+            if ret:
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                # Resize to reasonable size for VLM
+                h, w = frame.shape[:2]
+                if max(h, w) > 480:
+                    scale = 480.0 / max(h, w)
+                    frame = cv2.resize(frame, (int(w * scale), int(h * scale)))
+                frames.append(frame)
+
+        cap.release()
+
+        if not frames:
+            return None
+
+        # Stack to (T, C, H, W) float32
+        # All frames should be same size (from same video)
+        frames_arr = np.stack(frames)  # (T, H, W, 3)
+        frames_arr = frames_arr.transpose(0, 3, 1, 2).astype(np.float32) / 255.0
+        return frames_arr
+
+    def _load_frame_sequence(
+        self, frame_dir: Path, start: float | None, end: float | None
+    ) -> np.ndarray | None:
+        """Load frames from a directory of images (for episodic_reasoning)."""
+        import cv2
+
+        if not frame_dir.is_dir():
+            # Try as video file
+            return self._extract_video_frames(str(frame_dir), start, end)
+
+        frame_files = sorted(frame_dir.glob("*.jpg")) + sorted(frame_dir.glob("*.png"))
+        if not frame_files:
+            return None
+
+        # Subsample
+        n_frames = min(self.max_frames, len(frame_files))
+        indices = np.linspace(0, len(frame_files) - 1, n_frames, dtype=int)
+
+        frames = []
+        for idx in indices:
+            img = cv2.imread(str(frame_files[idx]))
+            if img is not None:
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                h, w = img.shape[:2]
+                if max(h, w) > 480:
+                    scale = 480.0 / max(h, w)
+                    img = cv2.resize(img, (int(w * scale), int(h * scale)))
+                frames.append(img)
+
+        if not frames:
+            return None
+
+        frames_arr = np.stack(frames)
+        frames_arr = frames_arr.transpose(0, 3, 1, 2).astype(np.float32) / 255.0
+        return frames_arr
+
+    def judge(self, sample: BenchmarkSample, prediction: str) -> bool:
+        """Match option letter from prediction."""
+        pred = prediction.strip().upper()
+        gt = sample.answer.strip().upper()
+
+        # Direct letter match
+        if pred == gt:
+            return True
+        # First character is the answer letter
+        if pred and pred[0] == gt:
+            return True
+        # Pattern like "A." or "(A)"
+        match = re.match(r'^([A-Z])[.\s)\]]', pred)
+        if match and match.group(1) == gt:
+            return True
+        # Answer text match as fallback
+        answer_text = sample.metadata.get("answer_text", "")
+        if answer_text and answer_text.lower() in prediction.lower():
+            return True
+        return False
+
+    @staticmethod
+    def download_videos(
+        output_dir: str,
+        sources: list[str] | None = None,
+    ) -> None:
+        """Download MVBench video zip files from HuggingFace and extract them.
+
+        Args:
+            output_dir: Directory to extract videos into.
+            sources: Which video sources to download (e.g., ["clevrer", "star"]).
+                     None = all sources. Total ~17.3GB.
+        """
+        from huggingface_hub import hf_hub_download
+
+        # Zip file mapping
+        source_zips = {
+            "clevrer": "video/clevrer.zip",
+            "star": "video/star.zip",
+            "perception": "video/perception.zip",
+            "scene_qa": "video/scene_qa.zip",
+            "sta": "video/sta.zip",
+            "ssv2_video": "video/ssv2_video.zip",
+            "Moments_in_Time_Raw": "video/Moments_in_Time_Raw.zip",
+            "FunQA_test": "video/FunQA_test.zip",
+            "vlnqa": "video/vlnqa.zip",
+            "tvqa": "video/tvqa.zip",
+            # nturgbd needs manual download from ROSE Lab
+        }
+
+        sources_to_dl = sources or list(source_zips.keys())
+        out = Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+
+        import zipfile
+
+        for source in sources_to_dl:
+            if source not in source_zips:
+                logger.warning("Unknown source '%s', skipping", source)
+                continue
+
+            zip_path_hf = source_zips[source]
+            logger.info("Downloading %s...", zip_path_hf)
+            local_zip = hf_hub_download(
+                "OpenGVLab/MVBench",
+                zip_path_hf,
+                repo_type="dataset",
+            )
+
+            logger.info("Extracting %s to %s...", source, out)
+            with zipfile.ZipFile(local_zip, "r") as zf:
+                zf.extractall(out)
+
+            logger.info("Done: %s", source)
+
+    @staticmethod
+    def available_tasks() -> list[str]:
+        """Return list of all 20 MVBench task names."""
+        return list(MVBenchBenchmark.TASK_CONFIG.keys())
+
+    @staticmethod
+    def tasks_for_source(source: str) -> list[str]:
+        """Return task names that use a given video source."""
+        return MVBenchBenchmark.VIDEO_SOURCES.get(source, [])
+
+
 class CustomBenchmark(Benchmark):
     """Load a custom benchmark from a JSON file.
 
@@ -668,6 +1060,7 @@ class BenchmarkRunner:
                 correct=correct,
                 latency_ms=latency,
                 prompt_tokens=out.metrics.prompt_tokens,
+                metadata={"category": sample.category},
             ))
 
             if (i + 1) % 50 == 0 or (i + 1) == len(samples):

@@ -248,8 +248,11 @@ class MLXBackend(BaseBackend):
             if hasattr(self._processor, "tokenizer")
             else self._processor
         )
-        detokenizer = self._processor.detokenizer
-        detokenizer.reset()
+        # Detokenizer: mlx-vlm processor has .detokenizer, native uses tokenizer.decode
+        has_detokenizer = hasattr(self._processor, "detokenizer")
+        if has_detokenizer:
+            detokenizer = self._processor.detokenizer
+            detokenizer.reset()
 
         # Reset stopping criteria
         if hasattr(tokenizer, "stopping_criteria"):
@@ -259,6 +262,8 @@ class MLXBackend(BaseBackend):
         prompt_tps = 0.0
         generation_tps = 0.0
         n_tokens = 0
+        token_ids = []
+        eos_token_id = getattr(self._model.config, "eos_token_id", None)
 
         with _wired_limit(self._model):
             tic = time.perf_counter()
@@ -281,11 +286,25 @@ class MLXBackend(BaseBackend):
                 if hasattr(tokenizer, "stopping_criteria") and tokenizer.stopping_criteria(token):
                     break
 
-                detokenizer.add_token(token)
+                # Check EOS for native path
+                if eos_token_id is not None and not has_detokenizer:
+                    if isinstance(eos_token_id, list):
+                        if token in eos_token_id:
+                            break
+                    elif token == eos_token_id:
+                        break
+
+                if has_detokenizer:
+                    detokenizer.add_token(token)
+                else:
+                    token_ids.append(token)
                 n_tokens = n + 1
 
-            detokenizer.finalize()
-            text = detokenizer.text
+            if has_detokenizer:
+                detokenizer.finalize()
+                text = detokenizer.text
+            else:
+                text = tokenizer.decode(token_ids, skip_special_tokens=True)
 
             if n_tokens > 0:
                 generation_tps = n_tokens / max(time.perf_counter() - tic, 1e-9)
@@ -317,11 +336,16 @@ class MLXBackend(BaseBackend):
             if hasattr(self._processor, "tokenizer")
             else self._processor
         )
-        detokenizer = self._processor.detokenizer
-        detokenizer.reset()
+        has_detokenizer = hasattr(self._processor, "detokenizer")
+        if has_detokenizer:
+            detokenizer = self._processor.detokenizer
+            detokenizer.reset()
 
         if hasattr(tokenizer, "stopping_criteria"):
             tokenizer.stopping_criteria.reset(self._model.config.eos_token_id)
+
+        eos_token_id = getattr(self._model.config, "eos_token_id", None)
+        token_ids = []
 
         with _wired_limit(self._model):
             tic = time.perf_counter()
@@ -343,21 +367,38 @@ class MLXBackend(BaseBackend):
                 if hasattr(tokenizer, "stopping_criteria") and tokenizer.stopping_criteria(token):
                     break
 
-                detokenizer.add_token(token)
-                yield StreamChunk(
-                    text=detokenizer.last_segment,
-                    prompt_tokens=input_ids.size,
-                    completion_tokens=n + 1,
-                )
+                if eos_token_id is not None and not has_detokenizer:
+                    if isinstance(eos_token_id, list):
+                        if token in eos_token_id:
+                            break
+                    elif token == eos_token_id:
+                        break
 
-            detokenizer.finalize()
-            if detokenizer.last_segment:
-                yield StreamChunk(
-                    text=detokenizer.last_segment,
-                    prompt_tokens=input_ids.size,
-                    completion_tokens=n + 1,
-                    finished=True,
-                )
+                if has_detokenizer:
+                    detokenizer.add_token(token)
+                    yield StreamChunk(
+                        text=detokenizer.last_segment,
+                        prompt_tokens=input_ids.size,
+                        completion_tokens=n + 1,
+                    )
+                else:
+                    token_ids.append(token)
+                    text = tokenizer.decode(token_ids, skip_special_tokens=True)
+                    yield StreamChunk(
+                        text=text,
+                        prompt_tokens=input_ids.size,
+                        completion_tokens=n + 1,
+                    )
+
+            if has_detokenizer:
+                detokenizer.finalize()
+                if detokenizer.last_segment:
+                    yield StreamChunk(
+                        text=detokenizer.last_segment,
+                        prompt_tokens=input_ids.size,
+                        completion_tokens=n + 1,
+                        finished=True,
+                    )
 
             mx.clear_cache()
 

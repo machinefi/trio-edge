@@ -17,6 +17,15 @@ Usage:
     # TextVQA benchmark
     python examples/run_benchmark.py --bench textvqa --samples 100
 
+    # MVBench (video understanding, 20 temporal tasks)
+    # First download videos (clevrer + star = ~1.8GB, covers 8 tasks):
+    python examples/run_benchmark.py --bench mvbench --mvbench-download clevrer,star
+    # Then run:
+    python examples/run_benchmark.py --bench mvbench --mvbench-dir ./mvbench_videos --samples 10
+    # Run specific tasks:
+    python examples/run_benchmark.py --bench mvbench --mvbench-dir ./mvbench_videos \\
+        --mvbench-tasks object_existence,moving_direction,action_sequence
+
     # Compare two results
     python examples/run_benchmark.py --compare baseline.json tome_r8.json
 """
@@ -27,13 +36,13 @@ from pathlib import Path
 
 def main():
     parser = argparse.ArgumentParser(description="VLM benchmark runner")
-    parser.add_argument("--bench", choices=["pope", "textvqa", "gqa", "mmbench", "custom"],
+    parser.add_argument("--bench", choices=["pope", "textvqa", "gqa", "mmbench", "mvbench", "custom"],
                         default="pope", help="Benchmark to run")
     parser.add_argument("--split", default="random",
                         choices=["random", "popular", "adversarial"],
                         help="POPE split (default: random)")
     parser.add_argument("--samples", "-n", type=int, default=None,
-                        help="Max samples (default: all)")
+                        help="Max samples (default: all). For mvbench, per-task limit.")
     parser.add_argument("--output", "-o", default=None,
                         help="Output JSON path")
     parser.add_argument("--model", "-m", default=None,
@@ -52,12 +61,38 @@ def main():
                         help="Path to custom benchmark JSON file")
     parser.add_argument("--compare", nargs=2, metavar=("A", "B"),
                         help="Compare two saved benchmark results")
+    # MVBench-specific
+    parser.add_argument("--mvbench-dir", default="./mvbench_videos",
+                        help="MVBench video directory (default: ./mvbench_videos)")
+    parser.add_argument("--mvbench-tasks", default=None,
+                        help="Comma-separated MVBench tasks (default: all available)")
+    parser.add_argument("--mvbench-download", default=None, metavar="SOURCES",
+                        help="Download MVBench videos and exit. "
+                             "Comma-separated sources: clevrer,star,perception,scene_qa,etc. "
+                             "Use 'all' for everything (~17GB).")
+    parser.add_argument("--max-frames", type=int, default=16,
+                        help="Max frames per video clip (default: 16)")
     args = parser.parse_args()
 
     # Compare mode
     if args.compare:
         from trio_core.eval_benchmarks import BenchmarkResult
         BenchmarkResult.compare(args.compare[0], args.compare[1])
+        return
+
+    # MVBench download mode
+    if args.mvbench_download:
+        from trio_core.eval_benchmarks import MVBenchBenchmark
+        sources = None if args.mvbench_download == "all" else args.mvbench_download.split(",")
+        print(f"Downloading MVBench videos to {args.mvbench_dir}...")
+        if sources:
+            print(f"Sources: {sources}")
+            tasks = []
+            for s in sources:
+                tasks.extend(MVBenchBenchmark.tasks_for_source(s))
+            print(f"This will enable tasks: {tasks}")
+        MVBenchBenchmark.download_videos(args.mvbench_dir, sources=sources)
+        print("Done! Now run with --bench mvbench --mvbench-dir", args.mvbench_dir)
         return
 
     # Default output path
@@ -75,7 +110,7 @@ def main():
     # Setup benchmark
     from trio_core.eval_benchmarks import (
         POPEBenchmark, TextVQABenchmark, GQABenchmark, MMBenchBenchmark,
-        CustomBenchmark, BenchmarkRunner,
+        MVBenchBenchmark, CustomBenchmark, BenchmarkRunner,
     )
 
     if args.bench == "pope":
@@ -86,6 +121,14 @@ def main():
         benchmark = GQABenchmark(max_samples=args.samples)
     elif args.bench == "mmbench":
         benchmark = MMBenchBenchmark(max_samples=args.samples)
+    elif args.bench == "mvbench":
+        tasks = args.mvbench_tasks.split(",") if args.mvbench_tasks else None
+        benchmark = MVBenchBenchmark(
+            video_dir=args.mvbench_dir,
+            tasks=tasks,
+            max_samples_per_task=args.samples,
+            max_frames=args.max_frames,
+        )
     elif args.bench == "custom":
         if not args.custom_path:
             parser.error("--custom-path required for custom benchmark")

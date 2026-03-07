@@ -278,11 +278,24 @@ Finding: 0.25 is viable (~2% more loss for ~11% more compression). 0.2 is too ag
 - **v1 (without RoPE)**: 82% accuracy — worse than hidden states (90%). K was recomputed post-block without rotary position embeddings, producing different similarity structure than actual attention.
 - **v2 (with RoPE)**: Fixed to apply rotary position embeddings to K before similarity computation, matching what the actual attention mechanism computes. Needs re-benchmarking.
 
-### Next Optimization Directions
+### Next: Real Video Benchmarks
 
-1. **Remove mlx-vlm model loading dep** — zero external dependency (Phase 3)
-2. **Continuous batching** — concurrent request handling for server mode
-3. **Session-based API** — cross-request KV cache persistence via session_id for StreamMem
+Current benchmarks (POPE/TextVQA) are image-only. Need video QA to validate optimizations on real video tasks.
+Target use case: Frigate-style security/surveillance monitoring.
+
+| Priority | Benchmark | Scale | Format | Surveillance Relevance |
+|---|---|---|---|---|
+| **1st** | **MVBench** | 4000 samples, 20 tasks | 多选 (3选1) | 中 — action/object/state tasks map to surveillance |
+| 2nd | VideoMME | 900 videos, 2700 QA | 多选 ABCD | 低 — 通用视频理解, 行业标准参照 |
+| 3rd | UCVL | 1699 videos, 16990 QA | 多任务 | 高 — 专门监控异常检测, 数据待公开 |
+
+**MVBench 优先**：HuggingFace 直接下载, 多选格式复用 POPE 框架, 20 子任务可定位哪个能力受优化影响。
+关键子任务：action_sequence, object_interaction, state_change, moving_direction
+
+### Engineering TODO
+
+1. **Continuous batching** — concurrent request handling for server mode
+2. **Full native engine** — zero mlx-vlm dependency for T1 models
 
 ## Status
 
