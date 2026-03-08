@@ -324,6 +324,17 @@ class MLXBackend(BaseBackend):
 
     # ── Unified decode loop (shared by all MLX backend subclasses) ───────
 
+    def _make_generate_config(self, max_tokens: int, temperature: float, top_p: float):
+        """Build GenerateConfig from backend state + per-request sampling params."""
+        from trio_core.generate import GenerateConfig
+        return GenerateConfig(
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            early_stop=self._early_stop,
+            visual_similarity_threshold=self._visual_similarity_threshold,
+        )
+
     def _run_generate(
         self, input_ids, pixel_values, mask, *,
         max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
@@ -337,6 +348,7 @@ class MLXBackend(BaseBackend):
         from trio_core.generate import generate_step, _wired_limit
 
         th = self._make_token_handler()
+        cfg = self._make_generate_config(max_tokens, temperature, top_p)
         prompt_tps = 0.0
         generation_tps = 0.0
         n_tokens = 0
@@ -346,10 +358,8 @@ class MLXBackend(BaseBackend):
             for n, (token, logprobs) in enumerate(
                 generate_step(
                     input_ids, self._model, pixel_values, mask,
-                    max_tokens=max_tokens, temperature=temperature, top_p=top_p,
+                    config=cfg,
                     prompt_cache_manager=self._get_prompt_cache(),
-                    early_stop=self._early_stop,
-                    visual_similarity_threshold=self._visual_similarity_threshold,
                     inputs_embeds=inputs_embeds,
                     **extra_kwargs,
                 )
@@ -389,16 +399,15 @@ class MLXBackend(BaseBackend):
         from trio_core.generate import generate_step, _wired_limit
 
         th = self._make_token_handler()
+        cfg = self._make_generate_config(max_tokens, temperature, top_p)
         n = 0
 
         with _wired_limit(self._model):
             for n, (token, logprobs) in enumerate(
                 generate_step(
                     input_ids, self._model, pixel_values, mask,
-                    max_tokens=max_tokens, temperature=temperature, top_p=top_p,
+                    config=cfg,
                     prompt_cache_manager=self._get_prompt_cache(),
-                    early_stop=self._early_stop,
-                    visual_similarity_threshold=self._visual_similarity_threshold,
                     inputs_embeds=inputs_embeds,
                     **extra_kwargs,
                 )

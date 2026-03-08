@@ -3,16 +3,17 @@
 Phase 1: Custom generate with persistent KV cache and early stopping.
 
 Usage:
-    from trio_core.generate import generate_step, PromptCache
+    from trio_core.generate import generate_step, GenerateConfig, PromptCache
 
     # Basic (no cache reuse):
     for token, logprobs in generate_step(input_ids, model, pixel_values, mask):
         ...
 
-    # With persistent cache:
+    # With config object:
+    cfg = GenerateConfig(max_tokens=512, temperature=0.7)
     pcache = PromptCache(model)
     for token, logprobs in generate_step(input_ids, model, pixel_values, mask,
-                                          prompt_cache_manager=pcache):
+                                          config=cfg, prompt_cache_manager=pcache):
         ...
 """
 
@@ -184,6 +185,37 @@ class EarlyStopConfig:
                 )
                 return True
         return False
+
+
+@dataclass
+class GenerateConfig:
+    """Configuration for generate_step — groups sampling, cache, and engine params.
+
+    Separates stable config (set once) from per-request inputs (input_ids,
+    pixel_values, etc.), reducing generate_step's parameter count from 20+
+    keyword args to a single config object.
+    """
+
+    # Sampling
+    max_tokens: int = 256
+    temperature: float = 0.0
+    top_p: float = 1.0
+    repetition_penalty: Optional[float] = None
+    repetition_context_size: int = 20
+    logit_bias: Optional[Dict[int, float]] = None
+    sampler: Optional[Callable[[mx.array], mx.array]] = None
+    logits_processors: Optional[List[Callable]] = None
+
+    # Cache
+    max_kv_size: Optional[int] = None
+    kv_bits: Optional[int] = None
+    kv_group_size: int = 64
+    quantized_kv_start: int = 0
+    prefill_step_size: Optional[int] = 2048
+
+    # Engine features
+    early_stop: Optional[EarlyStopConfig] = None
+    visual_similarity_threshold: float = 0.0
 
 
 class PromptCache:
@@ -857,14 +889,18 @@ def generate_step(
     pixel_values,
     mask,
     *,
+    config: Optional[GenerateConfig] = None,
+    prompt_cache: Optional[List[Any]] = None,
+    prompt_cache_manager: Optional[PromptCache] = None,
+    inputs_embeds: Optional[mx.array] = None,
+    # Legacy kwargs — used when config is not provided.
+    # Prefer passing a GenerateConfig object instead.
     max_tokens: int = 256,
     temperature: float = 0.0,
     repetition_penalty: Optional[float] = None,
     repetition_context_size: Optional[int] = 20,
     top_p: float = 1.0,
     logit_bias: Optional[Dict[int, float]] = None,
-    prompt_cache: Optional[List[Any]] = None,
-    prompt_cache_manager: Optional[PromptCache] = None,
     max_kv_size: Optional[int] = None,
     kv_bits: Optional[int] = None,
     kv_group_size: int = 64,
@@ -873,7 +909,6 @@ def generate_step(
     logits_processors: Optional[List[Callable[[mx.array, mx.array], mx.array]]] = None,
     prefill_step_size: Optional[int] = 2048,
     early_stop: Optional[EarlyStopConfig] = None,
-    inputs_embeds: Optional[mx.array] = None,
     visual_similarity_threshold: float = 0.0,
     **kwargs,
 ) -> Generator[Tuple[mx.array, mx.array], None, None]:
@@ -881,9 +916,33 @@ def generate_step(
 
     Orchestrates: cache resolution → prefill → decode loop.
 
+    Args:
+        config: GenerateConfig with sampling/cache/engine params.
+                If provided, overrides legacy keyword arguments.
+
     Yields:
         (token_id, logprobs) tuples.
     """
+    # Resolve config: explicit GenerateConfig wins over legacy kwargs
+    if config is not None:
+        max_tokens = config.max_tokens
+        temperature = config.temperature
+        top_p = config.top_p
+        repetition_penalty = config.repetition_penalty
+        repetition_context_size = config.repetition_context_size
+        logit_bias = config.logit_bias
+        max_kv_size = config.max_kv_size
+        kv_bits = config.kv_bits
+        kv_group_size = config.kv_group_size
+        quantized_kv_start = config.quantized_kv_start
+        prefill_step_size = config.prefill_step_size
+        early_stop = config.early_stop
+        visual_similarity_threshold = config.visual_similarity_threshold
+        if config.sampler is not None:
+            sampler = config.sampler
+        if config.logits_processors is not None:
+            logits_processors = config.logits_processors
+
     quantize_cache_fn = functools.partial(
         maybe_quantize_kv_cache,
         quantized_kv_start=quantized_kv_start,
