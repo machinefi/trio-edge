@@ -12,7 +12,6 @@ Training-free, following:
 
 from __future__ import annotations
 
-import functools
 import logging
 import time
 from typing import Generator
@@ -132,7 +131,7 @@ class FastVMLXBackend(MLXBackend):
             (first_token, prompt_cache, prompt_token_count)
         """
         import mlx.core as mx
-        from trio_core.generate import make_prompt_cache, make_sampler, maybe_quantize_kv_cache
+        from trio_core.generate import make_prompt_cache, make_sampler
 
         formatted, kwargs = self._prepare(frames, prompt)
 
@@ -279,12 +278,6 @@ class FastVMLXBackend(MLXBackend):
         else:
             logits_all = lm.lm_head(normed)
         logits = logits_all[:, -1, :]
-
-        quantize_cache_fn = functools.partial(
-            maybe_quantize_kv_cache,
-            quantized_kv_start=5000, kv_group_size=64, kv_bits=None,
-        )
-        quantize_cache_fn(prompt_cache)
 
         sampler = make_sampler(temperature, top_p)
         logprobs = logits - mx.logsumexp(logits)

@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -26,15 +27,15 @@ logger = logging.getLogger(__name__)
 @dataclass
 class VisionOutput:
     """Result from running the vision encoder."""
-    hidden_states: object  # mx.array — (N, D) visual features
+    hidden_states: Any  # mx.array — (N, D) visual features
     deepstack_embeds: list | None = None  # Qwen3-VL deepstack features
 
 
 @dataclass
 class MergeResult:
     """Result from merging visual features into text embeddings."""
-    embeds: object  # mx.array — (B, L, D) merged embeddings
-    image_mask: object | None = None  # mx.array — Qwen3-VL image mask
+    embeds: Any  # mx.array — (B, L, D) merged embeddings
+    image_mask: Any | None = None  # mx.array — Qwen3-VL image mask
 
 
 # ── Abstract adapter ─────────────────────────────────────────────────────────

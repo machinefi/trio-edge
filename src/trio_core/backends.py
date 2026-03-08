@@ -406,9 +406,8 @@ class MLXBackend(BaseBackend):
             prompt_token_count: Number of prompt tokens (for metrics).
             prompt_tps: Prompt throughput (for metrics).
         """
-        import functools
         import mlx.core as mx
-        from trio_core.generate import make_sampler, maybe_quantize_kv_cache
+        from trio_core.generate import make_sampler
 
         tokenizer = (
             self._processor.tokenizer
@@ -425,10 +424,6 @@ class MLXBackend(BaseBackend):
 
         eos_token_id = getattr(self._model.config, "eos_token_id", None)
         sampler = make_sampler(temperature, top_p)
-        quantize_cache_fn = functools.partial(
-            maybe_quantize_kv_cache,
-            quantized_kv_start=5000, kv_group_size=64, kv_bits=None,
-        )
 
         token_ids = []
         y = first_token
@@ -455,7 +450,6 @@ class MLXBackend(BaseBackend):
 
             outputs = self._model.language_model(y[None], cache=prompt_cache)
             logits = outputs.logits[:, -1, :]
-            quantize_cache_fn(prompt_cache)
             logprobs = logits - mx.logsumexp(logits)
             y = sampler(logprobs)
             mx.eval(y)
@@ -490,9 +484,8 @@ class MLXBackend(BaseBackend):
         prompt_token_count: int = 0,
     ) -> Generator[StreamChunk, None, None]:
         """Streaming AR decode for backends with custom prefill."""
-        import functools
         import mlx.core as mx
-        from trio_core.generate import make_sampler, maybe_quantize_kv_cache
+        from trio_core.generate import make_sampler
 
         tokenizer = (
             self._processor.tokenizer
@@ -509,10 +502,6 @@ class MLXBackend(BaseBackend):
 
         eos_token_id = getattr(self._model.config, "eos_token_id", None)
         sampler = make_sampler(temperature, top_p)
-        quantize_cache_fn = functools.partial(
-            maybe_quantize_kv_cache,
-            quantized_kv_start=5000, kv_group_size=64, kv_bits=None,
-        )
 
         token_ids = []
         prev_text = ""
@@ -552,7 +541,6 @@ class MLXBackend(BaseBackend):
 
             outputs = self._model.language_model(y[None], cache=prompt_cache)
             logits = outputs.logits[:, -1, :]
-            quantize_cache_fn(prompt_cache)
             logprobs = logits - mx.logsumexp(logits)
             y = sampler(logprobs)
             mx.eval(y)
@@ -572,6 +560,35 @@ class MLXBackend(BaseBackend):
 
         mx.clear_cache()
 
+    # ── OOM guard ──────────────────────────────────────────────────────
+
+    def _check_memory(self, pixel_values, input_ids) -> None:
+        """Estimate prefill memory and raise before Metal OOM kills process."""
+        import mlx.core as mx
+        try:
+            info = mx.device_info()
+        except AttributeError:
+            info = mx.metal.device_info()
+        budget = info.get("max_recommended_working_set_size", 0)
+        if budget <= 0:
+            return
+        active = mx.metal.get_active_memory()
+        available = budget - active
+
+        # Rough estimate: prefill needs ~6x pixel_values (forward + gradients-like intermediates)
+        # plus ~2x input_ids embedding size (hidden_dim ≈ 2048, float16 = 2 bytes)
+        pixel_bytes = pixel_values.nbytes if hasattr(pixel_values, "nbytes") else 0
+        estimated = pixel_bytes * 6
+        if estimated > available:
+            pixel_mb = pixel_bytes / (1024 ** 2)
+            avail_mb = available / (1024 ** 2)
+            est_mb = estimated / (1024 ** 2)
+            raise MemoryError(
+                f"Visual input too large for available memory: "
+                f"pixel_values={pixel_mb:.0f}MB, estimated prefill={est_mb:.0f}MB, "
+                f"available={avail_mb:.0f}MB. Reduce frame count or resolution."
+            )
+
     # ── Public generate/stream_generate (thin wrappers) ───────────────
 
     def generate(
@@ -582,6 +599,7 @@ class MLXBackend(BaseBackend):
         input_ids = kwargs.pop("input_ids")
         pixel_values = kwargs.pop("pixel_values")
         mask = kwargs.pop("mask")
+        self._check_memory(pixel_values, input_ids)
         return self._run_generate(
             input_ids, pixel_values, mask,
             max_tokens=max_tokens, temperature=temperature, top_p=top_p,
@@ -596,6 +614,7 @@ class MLXBackend(BaseBackend):
         input_ids = kwargs.pop("input_ids")
         pixel_values = kwargs.pop("pixel_values")
         mask = kwargs.pop("mask")
+        self._check_memory(pixel_values, input_ids)
         return self._run_stream_generate(
             input_ids, pixel_values, mask,
             max_tokens=max_tokens, temperature=temperature, top_p=top_p,
