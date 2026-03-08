@@ -166,19 +166,6 @@ class TrioCore(CallbackMixin):
         self._apply_auto_optimize()
 
         backend = resolve_backend(self.config, backend_override=self._backend_override)
-
-        # If compressed is enabled, swap to CompressedMLXBackend
-        if self.config.compress_enabled and backend.backend_name == "mlx":
-            from trio_core.compressed_backend import CompressedMLXBackend
-            from trio_core.token_compression import TokenCompressor
-
-            compressor = TokenCompressor(
-                strategy="similarity", ratio=self.config.compress_ratio,
-            )
-            backend = CompressedMLXBackend(
-                self.config.model, compressor, device_info=backend.device_info,
-            )
-
         self._backend = backend
         self._backend.load()
 

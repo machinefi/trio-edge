@@ -20,7 +20,7 @@
 
 | # | 耦合点 | 涉及模块 | 危害 |
 |---|--------|---------|------|
-| ~~1~~ | ~~**Engine 直接构造后端子类**~~ | ~~`engine.py`~~ | **已修复**: `resolve_backend(config)` + `register_backend()` |
+| ~~1~~ | ~~**Engine 直接构造后端子类**~~ | ~~`engine.py`~~ | **已修复**: `resolve_backend(config)` + `register_backend()`。`compress_enabled` 分支也已纳入 `resolve_backend`，engine 不再直接构造任何后端子类 |
 | ~~3~~ | ~~generate_step 访问 PromptCache 内部~~ | ~~`generate.py`~~ | **已修复**: 公开 API (`prefill_offset`, `prefix_len`, `cached_kwargs`, `trim_to_prefill_state()` 等)，消除所有 `_` 前缀属性访问 |
 | 4 | **model.language_model._position_ids 突变** | `tome_backend.py`, `fastv_backend.py`, `compressed_backend.py` | MRoPE 位置编码通过 mutation 传递。当前 threading.Lock 保护下安全，但架构不良。 |
 | 5 | **mlx-vlm 紧耦合** | `fastv_backend.py`, `generate.py` | `create_attention_mask`、`KVCache` 依赖第三方内部 API。 |
@@ -81,3 +81,4 @@
 | Hash 优化 | P3 | `generate.py` | `_hash_input` 大 pixel_values 用 strided sampling（shape+首尾+stride），<64K 元素仍全量 hash。self-review: `reshape(-1)` 替代 `flatten()` 避免多余拷贝 |
 | generate_step 拆分 | -1.0 扣分 | `generate.py` | 360→131 行。拆为 `_resolve_cache`(44L) + `_run_prefill`(62L) + `_prefill_suffix`(31L) + `_prefill_full`(38L) + `_post_prefill_bookkeeping`(57L)。self-review: 用 `cache_ref[0]` 可变容器修复闭包 prompt_cache 一致性 bug |
 | PromptCache 封装 | 耦合#3 | `generate.py` | 添加 `prefill_offset`/`prefix_len`/`cached_kwargs`/`trim_to_prefill_state()` 等公开 API，消除 generate_step 中所有 `prompt_cache_manager._xxx` 访问 |
+| compress_enabled 纳入 registry | 耦合#1 补充 | `backends.py`, `engine.py` | `compress_enabled` 分支从 engine.py 移入 `resolve_backend()`，engine 彻底不再构造任何后端子类。self-review: compress 与 FastV/ToMe 互斥无复合实现，加 warning log 提示冲突配置 |
