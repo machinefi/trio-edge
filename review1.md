@@ -1,15 +1,15 @@
 # trio-core VLM 推理引擎 — 全面审查报告
 
-## 1. 整体引擎健康度评分：7.5 / 10 (修复后)
+## 1. 整体引擎健康度评分：8.5 / 10 (修复后)
 
-原始评分 6.5，修复后提升至 7.5。
+原始评分 6.5，修复后提升至 8.5（+2.0: 代码重复 +1.5, generate_step 复杂度 +1.0, 多项 P2/P3 修复 -0.5 剩余项）。
 
 **已修复的致命扣分项：**
 
 | 原扣分 | 类别 | 修复状态 |
 |--------|------|----------|
 | ~~-1.5~~ | ~~代码重复~~ | **已修复**: 4 个 backend 的 decode loop 统一到 `MLXBackend._run_generate`/`_run_stream_generate`/`_run_ar_decode`/`_run_ar_stream_decode`。消除 ~240 行重复。 |
-| **-1.0** | **generate_step 复杂度** | 未修复：仍是 360 行单函数，圈复杂度 > 25。 |
+| ~~-1.0~~ | ~~generate_step 复杂度~~ | **已修复**: 360→131 行，拆分为 `_resolve_cache` + `_run_prefill` + `_prefill_suffix` + `_prefill_full` + `_post_prefill_bookkeeping`。每个函数 <65 行。 |
 | **-1.0** | **无并发 / 无 batching** | 未修复：单请求串行。 |
 
 ---
@@ -21,7 +21,7 @@
 | # | 耦合点 | 涉及模块 | 危害 |
 |---|--------|---------|------|
 | ~~1~~ | ~~**Engine 直接构造后端子类**~~ | ~~`engine.py`~~ | **已修复**: `resolve_backend(config)` + `register_backend()` |
-| 3 | **generate_step 访问 PromptCache 内部** | `generate.py` | 直接读 `_prefill_offset`、`_last_embeds`，打破封装。 |
+| ~~3~~ | ~~generate_step 访问 PromptCache 内部~~ | ~~`generate.py`~~ | **已修复**: 公开 API (`prefill_offset`, `prefix_len`, `cached_kwargs`, `trim_to_prefill_state()` 等)，消除所有 `_` 前缀属性访问 |
 | 4 | **model.language_model._position_ids 突变** | `tome_backend.py`, `fastv_backend.py`, `compressed_backend.py` | MRoPE 位置编码通过 mutation 传递。当前 threading.Lock 保护下安全，但架构不良。 |
 | 5 | **mlx-vlm 紧耦合** | `fastv_backend.py`, `generate.py` | `create_attention_mask`、`KVCache` 依赖第三方内部 API。 |
 
@@ -48,8 +48,8 @@
 
 | # | 目标 | 涉及模块 | 收益 | 风险 |
 |---|------|---------|------|------|
-| 3 | **拆分 `generate_step` 为 prefill + decode + cache_manager** | `generate.py` | 圈复杂度从 25+ 降到 <10 | 中 |
-| 4 | **PromptCache 封装** | `generate.py` | 不再通过 `_` 前缀属性交互 | 低 |
+| 3 | ~~**拆分 `generate_step`**~~ | ~~`generate.py`~~ | **已修复**: 360→131 行 | 中 |
+| 4 | ~~**PromptCache 封装**~~ | ~~`generate.py`~~ | **已修复**: 公开 API 替代 `_` 访问 | 低 |
 
 ### Week 3: 性能优化
 
@@ -79,3 +79,5 @@
 | stream_analyze async 桥接 | P2 | `engine.py` | `stream_analyze` 用 thread+queue 桥接同步 `stream_generate`，不再阻塞 event loop。self-review: 加 `self._lock` 防并发 GPU 访问，`get_running_loop()` 替换废弃 API |
 | Backend registry | P2 耦合 | `backends.py`, `engine.py` | `resolve_backend(config)` 统一后端选择逻辑，engine 不再直接构造子类。`register_backend()` 支持插件注册 |
 | Hash 优化 | P3 | `generate.py` | `_hash_input` 大 pixel_values 用 strided sampling（shape+首尾+stride），<64K 元素仍全量 hash。self-review: `reshape(-1)` 替代 `flatten()` 避免多余拷贝 |
+| generate_step 拆分 | -1.0 扣分 | `generate.py` | 360→131 行。拆为 `_resolve_cache`(44L) + `_run_prefill`(62L) + `_prefill_suffix`(31L) + `_prefill_full`(38L) + `_post_prefill_bookkeeping`(57L) |
+| PromptCache 封装 | 耦合#3 | `generate.py` | 添加 `prefill_offset`/`prefix_len`/`cached_kwargs`/`trim_to_prefill_state()` 等公开 API，消除 generate_step 中所有 `prompt_cache_manager._xxx` 访问 |

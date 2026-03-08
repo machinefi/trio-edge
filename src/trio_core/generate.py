@@ -249,6 +249,43 @@ class PromptCache:
                 and len(self._kv_cache) > 0
                 and hasattr(self._kv_cache[0], 'offset'))
 
+    @property
+    def has_saved_embeds(self) -> bool:
+        return self._last_embeds is not None
+
+    @property
+    def prefill_offset(self) -> int:
+        return self._prefill_offset
+
+    def update_prefill_offset(self, offset: int) -> None:
+        self._prefill_offset = offset
+
+    @property
+    def prefix_len(self) -> int:
+        return self._prefix_len
+
+    @property
+    def prefix_position_ids(self):
+        return self._prefix_position_ids
+
+    @property
+    def prefix_rope_deltas(self):
+        return self._prefix_rope_deltas
+
+    @property
+    def cached_kwargs(self) -> Dict[str, Any]:
+        return dict(self._cached_kwargs)
+
+    def trim_to_prefill_state(self) -> None:
+        """Trim decode tokens from KV cache, keeping only prefill state."""
+        if self._kv_cache is None:
+            return
+        for c in self._kv_cache:
+            if hasattr(c, 'trim'):
+                decode_tokens = c.offset - self._prefill_offset
+                if decode_tokens > 0:
+                    c.trim(decode_tokens)
+
     def get_or_create_cache(self) -> List[Any]:
         """Get existing cache (trimmed to 0) or create new one.
 
@@ -555,6 +592,261 @@ def _wired_limit(model: nn.Module):
         mx.set_wired_limit(old_limit)
 
 
+@dataclass
+class _CacheResolution:
+    """Result of cache hit/miss resolution."""
+    prompt_cache: List[Any]
+    cache_hit: bool
+    prefix_hit: bool
+    may_visual_hit: bool
+
+
+def _resolve_cache(
+    input_ids: mx.array,
+    pixel_values,
+    model: nn.Module,
+    prompt_cache: Optional[List[Any]],
+    prompt_cache_manager: Optional[PromptCache],
+    visual_similarity_threshold: float,
+    max_kv_size: Optional[int],
+) -> _CacheResolution:
+    """Resolve KV cache state: exact-hit, prefix-hit, visual-deferred, or full-miss."""
+    may_visual_hit = (
+        visual_similarity_threshold > 0
+        and prompt_cache_manager is not None
+        and prompt_cache_manager.has_saved_embeds
+    )
+
+    cache_hit = False
+    prefix_hit = False
+
+    if prompt_cache_manager is not None:
+        cache_hit = prompt_cache_manager.check_hit(input_ids, pixel_values)
+        if cache_hit:
+            prompt_cache = prompt_cache_manager.kv_cache
+            prompt_cache_manager.trim_to_prefill_state()
+            logger.debug("Cache HIT — skipping prefill (%d tokens)", input_ids.size)
+        elif may_visual_hit:
+            prefix_hit = prompt_cache_manager.check_prefix_hit(input_ids)
+            prompt_cache = prompt_cache_manager.kv_cache or prompt_cache_manager.get_or_create_cache()
+            logger.debug("Cache MISS — deferring for visual similarity check (prefix_match=%s)", prefix_hit)
+        else:
+            prefix_hit = prompt_cache_manager.check_prefix_hit(input_ids)
+            if prefix_hit:
+                prompt_cache = prompt_cache_manager.restore_prefix_cache()
+                logger.debug(
+                    "Prefix HIT — reusing %d prefix tokens, re-prefilling suffix",
+                    prompt_cache_manager.prefix_len,
+                )
+            else:
+                prompt_cache = prompt_cache_manager.get_or_create_cache()
+                logger.debug("Cache MISS — full prefill (%d tokens)", input_ids.size)
+    elif prompt_cache is None:
+        prompt_cache = make_prompt_cache(model.language_model, max_kv_size=max_kv_size)
+
+    return _CacheResolution(prompt_cache, cache_hit, prefix_hit, may_visual_hit)
+
+
+def _run_prefill(
+    model: nn.Module,
+    input_ids: mx.array,
+    original_input_ids: mx.array,
+    pixel_values,
+    mask,
+    inputs_embeds: Optional[mx.array],
+    prompt_cache: List[Any],
+    prompt_cache_manager: Optional[PromptCache],
+    resolution: _CacheResolution,
+    step_fn: Callable,
+    quantize_cache_fn: Callable,
+    prefill_step_size: Optional[int],
+    visual_similarity_threshold: float,
+    kwargs: dict,
+) -> Tuple[mx.array, mx.array, bool, Optional[mx.array], Optional[dict]]:
+    """Run ViT + prefill, return (first_token, logprobs, visual_hit, full_embeds, new_kwargs).
+
+    new_kwargs is non-None only when kwargs must be replaced (visual_hit).
+    For other paths, _step's nonlocal closure already updates kwargs.
+    """
+    may_visual_hit = resolution.may_visual_hit
+    prefix_hit = resolution.prefix_hit
+
+    with mx.stream(_generation_stream):
+        if inputs_embeds is not None:
+            pass  # Pre-computed (e.g. ToMe path)
+        else:
+            embedding_output = model.get_input_embeddings(
+                input_ids, pixel_values, mask=mask, **kwargs
+            )
+            inputs_embeds = embedding_output.inputs_embeds
+            kwargs.update(
+                {k: v for k, v in embedding_output.to_dict().items()
+                 if k != "inputs_embeds" and v is not None}
+            )
+
+        full_inputs_embeds = inputs_embeds
+
+        # Visual similarity check (tier 2)
+        visual_hit = (
+            may_visual_hit
+            and prompt_cache_manager.check_visual_hit(
+                inputs_embeds, original_input_ids, visual_similarity_threshold,
+            )
+        )
+
+        new_kwargs = None
+        if visual_hit:
+            prompt_cache_manager.trim_to_prefill_state()
+            prompt_cache_manager.restore_arrays_cache()
+            y, logprobs = prompt_cache_manager.get_cached_first_token()
+            new_kwargs = prompt_cache_manager.cached_kwargs
+            logger.debug("Visual similarity HIT — reusing KV cache (skipping LLM prefill)")
+        elif prefix_hit:
+            y, logprobs = _prefill_suffix(
+                model, input_ids, inputs_embeds, prompt_cache,
+                prompt_cache_manager, may_visual_hit, step_fn, quantize_cache_fn,
+            )
+        else:
+            y, logprobs = _prefill_full(
+                model, input_ids, original_input_ids, inputs_embeds, prompt_cache,
+                prompt_cache_manager, may_visual_hit, step_fn, quantize_cache_fn,
+                prefill_step_size, kwargs,
+            )
+
+    return y, logprobs, visual_hit, full_inputs_embeds, new_kwargs
+
+
+def _prefill_suffix(
+    model, input_ids, inputs_embeds, prompt_cache,
+    prompt_cache_manager, may_visual_hit, step_fn, quantize_cache_fn,
+):
+    """Prefix-hit path: skip text prefix, prefill only visual + suffix tokens."""
+    if may_visual_hit:
+        prompt_cache_manager.restore_prefix_cache()
+    prefix_len = prompt_cache_manager.prefix_len
+    lm = model.language_model
+
+    if hasattr(lm, '_position_ids'):
+        lm._position_ids = prompt_cache_manager.prefix_position_ids
+        saved_rope_deltas = prompt_cache_manager.prefix_rope_deltas
+        lm._rope_deltas = None
+    else:
+        saved_rope_deltas = None
+
+    suffix_embeds = inputs_embeds[:, prefix_len:]
+    suffix_ids = input_ids[:, prefix_len:]
+    y, logprobs = step_fn(suffix_ids, inputs_embeds=suffix_embeds)
+    quantize_cache_fn(prompt_cache)
+
+    if hasattr(lm, '_rope_deltas'):
+        lm._rope_deltas = saved_rope_deltas
+
+    logger.debug(
+        "Prefix prefill skipped %d tokens, prefilled %d suffix tokens",
+        prefix_len, suffix_ids.shape[1],
+    )
+    return y, logprobs
+
+
+def _prefill_full(
+    model, input_ids, original_input_ids, inputs_embeds, prompt_cache,
+    prompt_cache_manager, may_visual_hit, step_fn, quantize_cache_fn,
+    prefill_step_size, kwargs,
+):
+    """Full-miss path: complete prefill (possibly chunked)."""
+    if may_visual_hit and prompt_cache_manager is not None:
+        prompt_cache = prompt_cache_manager.get_or_create_cache()
+
+    if prefill_step_size is not None and inputs_embeds.shape[1] > prefill_step_size:
+        while inputs_embeds.shape[1] > 1:
+            n_to_process = min(prefill_step_size, inputs_embeds.shape[1] - 1)
+            model.language_model(
+                inputs=input_ids[:, :n_to_process],
+                inputs_embeds=inputs_embeds[:, :n_to_process],
+                cache=prompt_cache,
+                **kwargs,
+            )
+            quantize_cache_fn(prompt_cache)
+            mx.eval([c.state for c in prompt_cache])
+            inputs_embeds = inputs_embeds[:, n_to_process:]
+            input_ids = input_ids[:, n_to_process:]
+            mx.clear_cache()
+        input_ids = input_ids[:, -1:]
+
+    y, logprobs = step_fn(input_ids, inputs_embeds=inputs_embeds)
+
+    if prompt_cache_manager is not None:
+        vis_boundary = _find_visual_boundary(original_input_ids, model)
+        if vis_boundary > 0:
+            lm = model.language_model
+            prompt_cache_manager.save_prefix(
+                original_input_ids, vis_boundary, prompt_cache,
+                position_ids=getattr(lm, '_position_ids', None),
+                rope_deltas=getattr(lm, '_rope_deltas', None),
+            )
+
+    return y, logprobs
+
+
+def _post_prefill_bookkeeping(
+    model: nn.Module,
+    original_input_ids: mx.array,
+    pixel_values,
+    prompt_cache: List[Any],
+    prompt_cache_manager: Optional[PromptCache],
+    y: mx.array,
+    logprobs: mx.array,
+    visual_hit: bool,
+    cache_hit: bool,
+    full_inputs_embeds: Optional[mx.array],
+    kwargs: dict,
+) -> None:
+    """Save state for future cache hits + StreamMem bookkeeping."""
+    if prompt_cache_manager is None:
+        return
+
+    # Save state for exact-match and visual-similarity (skip on visual_hit — keep old state)
+    if not visual_hit:
+        prompt_cache_manager.save_state(
+            original_input_ids, y, logprobs, prompt_cache, pixel_values, kwargs=kwargs
+        )
+        prompt_cache_manager.save_embeds(full_inputs_embeds, original_input_ids)
+
+    # StreamMem: register frame + evict if over budget
+    sm = prompt_cache_manager.streaming_memory
+    if sm is not None and not cache_hit and not visual_hit:
+        import numpy as np
+
+        img_id = getattr(model.config, 'image_token_id', None)
+        if img_id is None:
+            img_id = getattr(model.config, 'image_token_index', None)
+        vid_id = getattr(model.config, 'video_token_id', None)
+        if vid_id is None:
+            vid_id = getattr(model.config, 'video_token_index', None)
+
+        ids_np = np.array(original_input_ids[0])
+        n_visual = 0
+        if img_id is not None:
+            n_visual += int((ids_np == img_id).sum())
+        if vid_id is not None:
+            n_visual += int((ids_np == vid_id).sum())
+
+        vis_boundary = _find_visual_boundary(original_input_ids, model)
+        sm.append_frame(n_visual, text_prefix_len=vis_boundary)
+
+        proxy_ids = original_input_ids[:, -8:]
+        stats = sm.maybe_evict(prompt_cache, model.language_model, proxy_ids)
+        if stats:
+            logger.info(
+                "StreamMem: %d→%d tokens (%d prototypes)",
+                stats.tokens_before, stats.tokens_after, stats.n_prototypes,
+            )
+            for c in prompt_cache:
+                if hasattr(c, 'offset'):
+                    prompt_cache_manager.update_prefill_offset(c.offset)
+                    break
+
+
 def generate_step(
     input_ids: mx.array,
     model: nn.Module,
@@ -583,18 +875,7 @@ def generate_step(
 ) -> Generator[Tuple[mx.array, mx.array], None, None]:
     """Generate tokens with optional persistent cache and early stopping.
 
-    When prompt_cache_manager is provided:
-    - Reuses GPU buffers across requests (avoids re-allocation)
-    - Detects exact-match inputs → skips entire prefill (ViT + LLM)
-
-    When inputs_embeds is provided:
-    - Skips model.get_input_embeddings() (ViT + embedding)
-    - Uses pre-computed embeddings directly (e.g., ToMe path)
-    - Caller must set position_ids on model.language_model before calling
-
-    When early_stop is provided:
-    - Checks P(EOS) after each decode step
-    - Stops early if model is confident response is complete
+    Orchestrates: cache resolution → prefill → decode loop.
 
     Yields:
         (token_id, logprobs) tuples.
@@ -615,86 +896,38 @@ def generate_step(
     if logits_processors is not None:
         processors.extend(logits_processors)
 
-    y = input_ids
-    original_input_ids = input_ids  # Save before chunked prefill modifies it
+    original_input_ids = input_ids
     tokens = mx.array([], dtype=input_ids.dtype)
 
-    # Check for exact-match cache hit, then prefix hit
-    # Note: visual similarity check happens later (after ViT) — we must NOT
-    # trim/reset the KV cache here if visual similarity might apply.
-    cache_hit = False
-    prefix_hit = False
-    may_visual_hit = (
-        visual_similarity_threshold > 0
-        and prompt_cache_manager is not None
-        and prompt_cache_manager._last_embeds is not None
+    # ── Phase 1: Cache resolution ─────────────────────────────────────
+    resolution = _resolve_cache(
+        input_ids, pixel_values, model, prompt_cache,
+        prompt_cache_manager, visual_similarity_threshold, max_kv_size,
     )
-    if prompt_cache_manager is not None:
-        cache_hit = prompt_cache_manager.check_hit(original_input_ids, pixel_values)
-        if cache_hit:
-            prompt_cache = prompt_cache_manager.kv_cache
-            # Trim decode tokens, keep only prefill state
-            for c in prompt_cache:
-                if hasattr(c, 'trim'):
-                    decode_tokens = c.offset - prompt_cache_manager._prefill_offset
-                    if decode_tokens > 0:
-                        c.trim(decode_tokens)
-            logger.debug("Cache HIT — skipping prefill (%d tokens)", input_ids.size)
-        else:
-            if may_visual_hit:
-                # Don't trim/restore KV cache yet — visual similarity check
-                # needs the full previous-frame KV cache intact. Defer prefix_hit
-                # until after ViT forward + visual similarity check.
-                prefix_hit = prompt_cache_manager.check_prefix_hit(original_input_ids)
-                prompt_cache = prompt_cache_manager.kv_cache or prompt_cache_manager.get_or_create_cache()
-                logger.debug("Cache MISS — deferring for visual similarity check (prefix_match=%s)", prefix_hit)
-            else:
-                prefix_hit = prompt_cache_manager.check_prefix_hit(original_input_ids)
-                if prefix_hit:
-                    prompt_cache = prompt_cache_manager.restore_prefix_cache()
-                    logger.debug(
-                        "Prefix HIT — reusing %d prefix tokens, re-prefilling suffix",
-                        prompt_cache_manager._prefix_len,
-                    )
-                else:
-                    prompt_cache = prompt_cache_manager.get_or_create_cache()
-                    logger.debug("Cache MISS — full prefill (%d tokens)", input_ids.size)
-    elif prompt_cache is None:
-        prompt_cache = make_prompt_cache(
-            model.language_model,
-            max_kv_size=max_kv_size,
-        )
+    prompt_cache = resolution.prompt_cache
 
+    # ── Shared step function (closure over mutable state) ─────────────
     def _step(y, inputs_embeds=None):
         nonlocal tokens, kwargs
 
         with mx.stream(_generation_stream):
             if "decoder_input_ids" in kwargs:
-                outputs = model.language_model(
-                    cache=prompt_cache,
-                    **kwargs,
-                )
+                outputs = model.language_model(cache=prompt_cache, **kwargs)
             else:
                 outputs = model.language_model(
-                    y,
-                    inputs_embeds=inputs_embeds,
-                    cache=prompt_cache,
-                    **kwargs,
+                    y, inputs_embeds=inputs_embeds, cache=prompt_cache, **kwargs,
                 )
 
             logits = outputs.logits[:, -1, :]
-
             if len(processors) > 0 and len(y) > 0:
                 tokens = mx.concat([tokens, y.flatten()])
                 for processor in processors:
                     logits = processor(tokens, logits)
 
             quantize_cache_fn(prompt_cache)
-
             logprobs = logits - mx.logsumexp(logits)
             y = sampler(logprobs)
 
-            # Propagate cross-attention / encoder states (for encoder-decoder models)
             if outputs.cross_attention_states is not None:
                 kwargs = {"cross_attention_states": outputs.cross_attention_states}
             elif outputs.encoder_outputs is not None:
@@ -704,192 +937,30 @@ def generate_step(
 
             return y, logprobs.squeeze(0)
 
-    visual_hit = False
-
-    if cache_hit:
-        # Exact match — skip ViT + prefill entirely, use cached first token
-        cached = prompt_cache_manager.get_cached_first_token()
-        y, logprobs = cached
-        # Restore kwargs (cross_attention_states etc.) for encoder-decoder models
-        kwargs = dict(prompt_cache_manager._cached_kwargs)
+    # ── Phase 2: Prefill ──────────────────────────────────────────────
+    if resolution.cache_hit:
+        y, logprobs = prompt_cache_manager.get_cached_first_token()
+        kwargs = prompt_cache_manager.cached_kwargs
+        visual_hit = False
+        full_inputs_embeds = None
     else:
-        with mx.stream(_generation_stream):
-            if inputs_embeds is not None:
-                # Pre-computed embeddings (e.g., ToMe path)
-                # Caller already set position_ids and kwargs (deepstack etc.)
-                pass
-            else:
-                # Get input embeddings (ViT forward + embedding projection)
-                embedding_output = model.get_input_embeddings(
-                    input_ids, pixel_values, mask=mask, **kwargs
-                )
+        y, logprobs, visual_hit, full_inputs_embeds, new_kwargs = _run_prefill(
+            model, input_ids, original_input_ids, pixel_values, mask,
+            inputs_embeds, prompt_cache, prompt_cache_manager, resolution,
+            _step, quantize_cache_fn, prefill_step_size,
+            visual_similarity_threshold, kwargs,
+        )
+        if new_kwargs is not None:
+            kwargs = new_kwargs
 
-                inputs_embeds = embedding_output.inputs_embeds
+    _post_prefill_bookkeeping(
+        model, original_input_ids, pixel_values, prompt_cache,
+        prompt_cache_manager, y, logprobs, visual_hit,
+        resolution.cache_hit, full_inputs_embeds, kwargs,
+    )
 
-                kwargs.update(
-                    {
-                        k: v
-                        for k, v in embedding_output.to_dict().items()
-                        if k != "inputs_embeds" and v is not None
-                    }
-                )
-
-            # Save full embeddings before chunked prefill may slice them
-            full_inputs_embeds = inputs_embeds
-
-            # Visual similarity check (tier 2: between exact hit and prefix hit)
-            # When may_visual_hit, we deferred prefix_hit restoration so the
-            # full previous-frame KV cache is still intact for reuse.
-            visual_hit = (
-                may_visual_hit
-                and prompt_cache_manager.check_visual_hit(
-                    inputs_embeds, original_input_ids, visual_similarity_threshold,
-                )
-            )
-
-            if visual_hit:
-                # Reuse full KV cache from previous frame (approximate)
-                prompt_cache = prompt_cache_manager.kv_cache
-                # KVCache: trim decode tokens to restore prefill state
-                for c in prompt_cache:
-                    if hasattr(c, 'trim'):
-                        decode_tokens = c.offset - prompt_cache_manager._prefill_offset
-                        if decode_tokens > 0:
-                            c.trim(decode_tokens)
-                # ArraysCache (DeltaNet): restore from snapshot (state is
-                # modified in-place during decode, can't roll back)
-                prompt_cache_manager.restore_arrays_cache()
-                cached = prompt_cache_manager.get_cached_first_token()
-                y, logprobs = cached
-                kwargs = dict(prompt_cache_manager._cached_kwargs)
-                logger.debug(
-                    "Visual similarity HIT — reusing KV cache (skipping LLM prefill)"
-                )
-            elif prefix_hit:
-                # Prefix cache hit: skip text prefix prefill, only prefill
-                # visual + suffix tokens. Restore prefix cache state now
-                # (deferred earlier when may_visual_hit was true).
-                if may_visual_hit:
-                    prompt_cache = prompt_cache_manager.restore_prefix_cache()
-                prefix_len = prompt_cache_manager._prefix_len
-                lm = model.language_model
-
-                # Restore full position_ids so model can slice for suffix
-                # (only Qwen models with MRoPE store _position_ids/_rope_deltas)
-                if hasattr(lm, '_position_ids'):
-                    lm._position_ids = prompt_cache_manager._prefix_position_ids
-                    saved_rope_deltas = prompt_cache_manager._prefix_rope_deltas
-                    lm._rope_deltas = None
-                else:
-                    saved_rope_deltas = None
-
-                suffix_embeds = inputs_embeds[:, prefix_len:]
-                suffix_ids = input_ids[:, prefix_len:]
-
-                y, logprobs = _step(suffix_ids, inputs_embeds=suffix_embeds)
-                quantize_cache_fn(prompt_cache)
-
-                # Restore rope_deltas for sequential decode phase
-                if hasattr(lm, '_rope_deltas'):
-                    lm._rope_deltas = saved_rope_deltas
-
-                logger.debug(
-                    "Prefix prefill skipped %d tokens, prefilled %d suffix tokens",
-                    prefix_len, suffix_ids.shape[1],
-                )
-            else:
-                # Visual similarity was deferred but failed — reset cache now
-                if may_visual_hit and prompt_cache_manager is not None:
-                    prompt_cache = prompt_cache_manager.get_or_create_cache()
-
-                # Full prefill (possibly chunked)
-                if prefill_step_size is not None and inputs_embeds.shape[1] > prefill_step_size:
-                    while inputs_embeds.shape[1] > 1:
-                        n_to_process = min(prefill_step_size, inputs_embeds.shape[1] - 1)
-                        model.language_model(
-                            inputs=input_ids[:, :n_to_process],
-                            inputs_embeds=inputs_embeds[:, :n_to_process],
-                            cache=prompt_cache,
-                            **kwargs,
-                        )
-                        quantize_cache_fn(prompt_cache)
-                        mx.eval([c.state for c in prompt_cache])
-                        inputs_embeds = inputs_embeds[:, n_to_process:]
-                        input_ids = input_ids[:, n_to_process:]
-                        mx.clear_cache()
-
-                    input_ids = input_ids[:, -1:]
-
-                y, logprobs = _step(input_ids, inputs_embeds=inputs_embeds)
-
-                # Save text prefix KV for future prefix-match reuse
-                if prompt_cache_manager is not None:
-                    vis_boundary = _find_visual_boundary(original_input_ids, model)
-                    if vis_boundary > 0:
-                        lm = model.language_model
-                        prompt_cache_manager.save_prefix(
-                            original_input_ids, vis_boundary, prompt_cache,
-                            position_ids=getattr(lm, '_position_ids', None),
-                            rope_deltas=getattr(lm, '_rope_deltas', None),
-                        )
-
-        # Save state for future exact-match and visual-similarity detection
-        # On visual_hit: keep existing saved state (KV is from original prefill)
-        if prompt_cache_manager is not None and not visual_hit:
-            prompt_cache_manager.save_state(
-                original_input_ids, y, logprobs, prompt_cache, pixel_values, kwargs=kwargs
-            )
-            prompt_cache_manager.save_embeds(full_inputs_embeds, original_input_ids)
-
-        # StreamMem: register frame + evict if over budget
-        if (
-            prompt_cache_manager is not None
-            and prompt_cache_manager.streaming_memory is not None
-            and not cache_hit
-            and not visual_hit
-        ):
-            import numpy as _np_sm
-
-            sm = prompt_cache_manager.streaming_memory
-
-            # Count visual tokens (model-agnostic: check both _id and _index)
-            img_id = getattr(model.config, 'image_token_id', None)
-            if img_id is None:
-                img_id = getattr(model.config, 'image_token_index', None)
-            vid_id = getattr(model.config, 'video_token_id', None)
-            if vid_id is None:
-                vid_id = getattr(model.config, 'video_token_index', None)
-
-            ids_np = _np_sm.array(original_input_ids[0])
-            n_visual = 0
-            if img_id is not None:
-                n_visual += int((ids_np == img_id).sum())
-            if vid_id is not None:
-                n_visual += int((ids_np == vid_id).sum())
-
-            # Text prefix length = position of first visual token
-            vis_boundary = _find_visual_boundary(original_input_ids, model)
-
-            sm.append_frame(n_visual, text_prefix_len=vis_boundary)
-
-            # Proxy query: last 8 tokens (chat template end tokens)
-            proxy_ids = original_input_ids[:, -8:]
-
-            stats = sm.maybe_evict(prompt_cache, model.language_model, proxy_ids)
-            if stats:
-                logger.info(
-                    "StreamMem: %d→%d tokens (%d prototypes)",
-                    stats.tokens_before, stats.tokens_after, stats.n_prototypes,
-                )
-                # Update prefill_offset for KVCache layers
-                for c in prompt_cache:
-                    if hasattr(c, 'offset'):
-                        prompt_cache_manager._prefill_offset = c.offset
-                        break
-
+    # ── Phase 3: Decode loop ──────────────────────────────────────────
     mx.async_eval(y)
-
-    # Decode loop
     n = 0
     while True:
         if n != max_tokens:
@@ -902,7 +973,6 @@ def generate_step(
 
         yield y.item(), logprobs
 
-        # Early stopping: check NEXT step's P(EOS) — already computed at loop top
         if early_stop is not None and early_stop.should_stop(next_logprobs, n + 1):
             break
 
