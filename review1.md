@@ -1,84 +1,122 @@
-# trio-core VLM 推理引擎 — 全面审查报告
+# trio-core VLM 推理引擎全面审查报告 (v2)
 
-## 1. 整体引擎健康度评分：8.5 / 10 (修复后)
+## 1. 整体引擎健康度评分：8.0 / 10
 
-原始评分 6.5，修复后提升至 8.5（+2.0: 代码重复 +1.5, generate_step 复杂度 +1.0, 多项 P2/P3 修复 -0.5 剩余项）。
+对于一个 ~14.4K LOC 的单人项目，代码质量远超预期。干净的 DAG 依赖、无循环导入、合理的抽象层次。
 
-**已修复的致命扣分项：**
+**扣分项（修复后更新）：**
 
-| 原扣分 | 类别 | 修复状态 |
-|--------|------|----------|
-| ~~-1.5~~ | ~~代码重复~~ | **已修复**: 4 个 backend 的 decode loop 统一到 `MLXBackend._run_generate`/`_run_stream_generate`/`_run_ar_decode`/`_run_ar_stream_decode`。消除 ~240 行重复。 |
-| ~~-1.0~~ | ~~generate_step 复杂度~~ | **已修复**: 360→131 行，拆分为 `_resolve_cache` + `_run_prefill` + `_prefill_suffix` + `_prefill_full` + `_post_prefill_bookkeeping`。每个函数 <65 行。 |
-| **-1.0** | **无并发 / 无 batching** | 未修复：单请求串行。 |
+| 扣分 | 维度 | 说明 |
+|------|------|------|
+| ~~-1.0~~ | ~~可维护性/代码重复~~ | **已修复**: `_TokenHandler` 类统一 tokenizer init / EOS 检测 / detokenizer 分支，四个 decode loop 共享逻辑。`_frames_to_pil` 提升至 `BaseBackend`。 |
+| **-0.8** | **性能** | 每次 decode step 的 `y.item()` 强制 GPU→CPU 同步（generate.py:980）；~~streaming 模式下 O(n²) decode~~ 非 detokenizer 路径仍存在但已标注为 rare path |
+| **-0.7** | **内存/正确性** | `PromptCache` 持有前一帧完整 `_last_embeds`（generate.py:228-229, 445-449），9B 模型约 ~50MB/帧永驻内存；prefix cache 的 `save_prefix` 做全层 KV slice + `mx.eval`（generate.py:492-497），是同步阻塞点 |
+| **-0.5** | **可维护性** | generate_step 24 参数爆炸；视觉 token ID 探测散布 3 处；`get_rope_index()` 三模型 450 行重复 |
 
 ---
 
 ## 2. 模块耦合 & 依赖分析
 
-### 2.1 剩余高耦合点
+### 依赖拓扑（健康）
+```
+CLI/API → engine → backends → generate
+                             → fastv_backend/tome_backend/compressed_backend
+                             → models/loader
+                  → video
+                  → profiles
+```
 
-| # | 耦合点 | 涉及模块 | 危害 |
-|---|--------|---------|------|
-| ~~1~~ | ~~**Engine 直接构造后端子类**~~ | ~~`engine.py`~~ | **已修复**: `resolve_backend(config)` + `register_backend()`。`compress_enabled` 分支也已纳入 `resolve_backend`，engine 不再直接构造任何后端子类 |
-| ~~3~~ | ~~generate_step 访问 PromptCache 内部~~ | ~~`generate.py`~~ | **已修复**: 公开 API (`prefill_offset`, `prefix_len`, `cached_kwargs`, `trim_to_prefill_state()` 等)，消除所有 `_` 前缀属性访问 |
-| 4 | **model.language_model._position_ids 突变** | `tome_backend.py`, `fastv_backend.py`, `compressed_backend.py` | MRoPE 位置编码通过 mutation 传递。当前 threading.Lock 保护下安全，但架构不良。 |
-| 5 | **mlx-vlm 紧耦合** | `fastv_backend.py`, `generate.py` | `create_attention_mask`、`KVCache` 依赖第三方内部 API。 |
+**无循环依赖**。但存在以下反模式：
 
-**已修复:** #2 Backend 子类重复 detokenize 循环 — 统一到基类方法。
+### Top 5 耦合问题
+
+| # | 问题 | 位置 | 危害 | 建议 | 状态 |
+|---|------|------|------|------|------|
+| 1 | ~~Decode loop 四重复制~~ | ~~`backends.py` 330 行~~ | ~~修改 EOS 逻辑需改 4 处~~ | ~~抽取 `_TokenHandler`~~ | **已修复** |
+| 2 | **generate_step 参数爆炸** | `generate.py:854-878`，24 个参数 | 任何新功能都要穿透全调用栈传参 | 引入 `GenerateConfig` dataclass | 未修复 |
+| 3 | **Backend 直接操作 model internals** | `_prefill_suffix` 写 `lm._position_ids`；FastV 修改 `model.vision_tower` | 多请求并发 race condition | 用 context manager 或 adapter 模式 | 未修复 |
+| 4 | **视觉 token ID 探测散布各处** | `_find_visual_boundary`、`_post_prefill_bookkeeping`、`model_adapter.py` 3 处重复 | 新模型要改多处 | 统一到 config 层 | 未修复 |
+| 5 | ~~`_frames_to_pil` 双重实现~~ | ~~`MLXBackend` 和 `TransformersBackend` 完全一致~~ | ~~改一个忘另一个~~ | ~~提升为 `BaseBackend`~~ | **已修复** |
 
 ---
 
 ## 3. VLM 特有问题清单
 
-| 优先级 | 问题类型 | 影响模块/文件 | 描述 | 建议修复 | 工作量 |
-|--------|---------|--------------|------|---------|--------|
-| ~~P2~~ | ~~错误处理缺失~~ | ~~`backends.py`~~ | ~~`generate_step` 没有 OOM 处理~~ | **已修复**: `_check_memory()` prefill 前检查 Metal 可用内存 | ~~M~~ |
-| ~~P2~~ | ~~量化死代码~~ | ~~`generate.py`, `backends.py`, `fastv_backend.py`~~ | ~~`quantize_cache_fn` 硬编码 `kv_bits=None`~~ | **已修复**: 删除所有 no-op quantize_cache_fn 调用 | ~~S~~ |
-| **P2** | 可测试性差 | 全部 backend 文件 | `generate()` 强依赖 GPU，无 CI 测试 | Protocol 抽象 model forward | **L** |
-| ~~P2~~ | ~~stream_generate 不是真 async~~ | ~~`engine.py`~~ | ~~`stream_analyze` 内部同步阻塞事件循环~~ | **已修复**: thread+queue 桥接，不阻塞 event loop | ~~M~~ |
-| ~~P3~~ | ~~命名不一致~~ | ~~`model_adapter.py`~~ | ~~`VisionOutput.hidden_states` 声明为 `object`~~ | **已修复**: `object` → `Any` | ~~S~~ |
-| ~~P3~~ | ~~hash 性能~~ | ~~`generate.py`~~ | ~~MD5 hash 大型 pixel_values 较慢~~ | **已修复**: strided sampling，大 tensor 只 hash shape+首尾+stride | ~~S~~ |
+| 优先级 | 问题类型 | 影响模块/文件 | 描述 | 建议修复 | 工作量 | 状态 |
+|--------|----------|---------------|------|----------|--------|------|
+| ~~P0~~ | ~~代码重复~~ | ~~`backends.py:228-561`~~ | ~~四个 decode loop 变体 80% 代码相同~~ | ~~抽取 `_TokenHandler`~~ | ~~M~~ | **已修复** |
+| **P1** | 内存泄漏 | `generate.py:228,445-449` | `PromptCache._last_embeds` 永驻内存，9B 模型约 ~28MB float16 不释放 | 添加 TTL 或保存降维指纹 | **S** | 未修复 |
+| **P1** | 同步阻塞 | `generate.py:492-497` | `save_prefix` 对所有层做 KV slice + `mx.eval(k, v)` — 36 层同步点 | 延迟到下次 prefix_hit 时才 eval | **S** | 未修复 |
+| **P1** | 正确性 | `generate.py:731-734` | `_prefill_suffix` 直接写 `lm._position_ids` — 非线程安全 | 参数传递 position_ids | **M** | 未修复 |
+| **P1** | KV cache 碎片 | `models/base.py:144-194` | `trim` 只移 offset 不释放 buffer | 添加 `compact()` 方法 | **M** | 未修复 |
+| **P2** | 量化精度 | `generate.py:125-131` | prefix-hit restored cache 可能被二次量化 | 添加 `is_quantized` flag | **S** | 未修复 |
+| **P2** | 多图支持 | `backends.py:643-646` | 单图被 duplicate 为视频，浪费 prefill | 单图走 `_prepare_images` | **S** | 未修复 |
+| **P2** | OOM 估算粗糙 | `backends.py:580-581` | `pixel_bytes * 6` 不考虑模型/KV/ToMe | 更精确估算 | **S** | 未修复 |
+| **P2** | 错误恢复 | `api/server.py` | streaming 异常不保证 temp 清理；中文触发检测失效 | `async with` + i18n | **S** | 未修复 |
+| **P2** | 可测试性 | `generate.py` | `generate_step` 强依赖 `mx.core`，无法 CPU-only CI | 分离纯逻辑层 | **L** | 未修复 |
+| **P3** | 命名一致性 | 多处 | `prompt_cache` vs `prompt_cache_manager` 混淆 | 统一命名 | **S** | 未修复 |
+| **P3** | 代码重复 | `models/*/language.py` | `get_rope_index()` 三模型 450 行重复 | 提取到共享 mixin | **M** | 未修复 |
+| **P3** | Hash 安全 | `generate.py:516-538` | MD5 + stride 采样在极端情况可碰撞 | 考虑 xxhash 提速 | **S** | 未修复 |
 
 ---
 
-## 4. 推荐的重构 Roadmap（剩余项）
+## 4. 推荐的重构 Roadmap（1-4 周）
 
-### Week 2: generate_step 拆分
+### Week 1: 低风险高收益
 
-| # | 目标 | 涉及模块 | 收益 | 风险 |
-|---|------|---------|------|------|
-| 3 | ~~**拆分 `generate_step`**~~ | ~~`generate.py`~~ | **已修复**: 360→131 行 | 中 |
-| 4 | ~~**PromptCache 封装**~~ | ~~`generate.py`~~ | **已修复**: 公开 API 替代 `_` 访问 | 低 |
+| # | 目标 | 涉及模块 | 收益 | 风险 | 需 benchmark | 状态 |
+|---|------|----------|------|------|-------------|------|
+| 1 | ~~消除 decode loop 四重复制~~ | `backends.py` | 删 ~130 行重复，EOS bug 修一处即可 | 低 | 否 | **已完成** |
+| 2 | ~~修复非 streaming 路径的多余 decode~~ | `backends.py` | 非 streaming `add_token` 不再做 decode | 低 | 否 | **已完成** |
+| 3 | **统一 `visual_token_ids` 获取** | `generate.py` / `model_adapter.py` | 消除 3 处重复 getattr 链 | 极低 | 否 | 待做 |
 
-### Week 3: 性能优化
+### Week 2: 中等投入
 
-| # | 目标 | 涉及模块 | 收益 | 风险 |
-|---|------|---------|------|------|
-| 6 | ~~**hash 优化**~~ | ~~`generate.py`~~ | **已修复**: strided sampling | 低 |
+| # | 目标 | 涉及模块 | 收益 | 风险 | 需 benchmark |
+|---|------|----------|------|------|-------------|
+| 4 | **`GenerateConfig` dataclass 封装 generate_step 参数** | `generate.py` | 参数从 24 降到 3-4 个 | 中 | 否 |
+| 5 | **prefix cache `save_prefix` 异步化** | `generate.py:492-497` | 消除同步阻塞点，prefill TPS ~+10% | 中 | 是 |
 
-### Week 4: 健壮性
+### Week 3-4: 架构改进
 
-| # | 目标 | 涉及模块 | 收益 | 风险 |
-|---|------|---------|------|------|
-| 7 | ~~**OOM 防护 + token count guard**~~ | ~~`backends.py`~~ | **已修复**: `_check_memory()` | 低 |
+| # | 目标 | 涉及模块 | 收益 | 风险 | 需 benchmark |
+|---|------|----------|------|------|-------------|
+| 6 | **Position IDs 通过参数传递，不 mutate model** | `generate.py` / `models/*/language.py` | 消除并发 race condition | 高 | 是 |
+| 7 | **提取 `get_rope_index()` 到共享 mixin** | `models/*/language.py` | 消除 450 行重复 | 中 | 否 |
 
 ---
 
-## 已完成修复记录
+## 5. 已完成修复记录
 
-| 修复项 | 优先级 | 文件 | 修改内容 |
-|--------|--------|------|----------|
-| 统一 4 个 decode loop | P0 | `backends.py`, `tome_backend.py`, `fastv_backend.py`, `compressed_backend.py` | 基类添加 `_run_generate`/`_run_stream_generate`/`_run_ar_decode`/`_run_ar_stream_decode`；3 个子类删除重复 decode loop |
-| 修复假流式输出 | P0/P1 | `fastv_backend.py`, `compressed_backend.py` | `stream_generate` 从 generate-then-yield 改为真正逐 token 流式 |
-| Server temp file leak | P0 | `api/server.py` | `_resolve_media` 返回 temp_path，调用方 try/finally 清理 |
-| merge_tokens 向量化 | P1 | `tome.py` | 消除 Python for loop，改用 broadcast argmin + 批量 gather/scatter |
-| 量化死代码清理 | P2 | `backends.py`, `fastv_backend.py` | 删除所有 `quantize_cache_fn(kv_bits=None)` no-op 调用和未使用的 `functools`/`maybe_quantize_kv_cache` import |
-| OOM 防护 | P2 | `backends.py` | `_check_memory()` prefill 前估算 pixel_values 内存，超出 Metal 可用内存时抛出 `MemoryError`。self-review 修复：移入 `_prepare()` 覆盖所有子类路径 |
-| 类型命名修复 | P3 | `model_adapter.py` | `VisionOutput.hidden_states: object` → `Any`，`MergeResult.embeds: object` → `Any` |
-| stream_analyze async 桥接 | P2 | `engine.py` | `stream_analyze` 用 thread+queue 桥接同步 `stream_generate`，不再阻塞 event loop。self-review: 加 `self._lock` 防并发 GPU 访问，`get_running_loop()` 替换废弃 API |
-| Backend registry | P2 耦合 | `backends.py`, `engine.py` | `resolve_backend(config)` 统一后端选择逻辑，engine 不再直接构造子类。`register_backend()` 支持插件注册 |
-| Hash 优化 | P3 | `generate.py` | `_hash_input` 大 pixel_values 用 strided sampling（shape+首尾+stride），<64K 元素仍全量 hash。self-review: `reshape(-1)` 替代 `flatten()` 避免多余拷贝 |
-| generate_step 拆分 | -1.0 扣分 | `generate.py` | 360→131 行。拆为 `_resolve_cache`(44L) + `_run_prefill`(62L) + `_prefill_suffix`(31L) + `_prefill_full`(38L) + `_post_prefill_bookkeeping`(57L)。self-review: 用 `cache_ref[0]` 可变容器修复闭包 prompt_cache 一致性 bug |
-| PromptCache 封装 | 耦合#3 | `generate.py` | 添加 `prefill_offset`/`prefix_len`/`cached_kwargs`/`trim_to_prefill_state()` 等公开 API，消除 generate_step 中所有 `prompt_cache_manager._xxx` 访问 |
-| compress_enabled 纳入 registry | 耦合#1 补充 | `backends.py`, `engine.py` | `compress_enabled` 分支从 engine.py 移入 `resolve_backend()`，engine 彻底不再构造任何后端子类。self-review: compress 与 FastV/ToMe 互斥无复合实现，加 warning log 提示冲突配置 |
+### 本轮修复：`_TokenHandler` 提取 + `_frames_to_pil` 去重
+
+**变更文件:** `backends.py` (1062 → 1002 行, −60 行)
+
+**修改内容:**
+
+1. **新增 `_TokenHandler` 类** (backends.py:138-210, 73 行)
+   - 统一 tokenizer init (`processor.tokenizer` vs `processor`)
+   - 统一 detokenizer reset + `stopping_criteria.reset()`
+   - `should_stop(token)` — 合并 EOS 检测 + stopping criteria（原 4 处重复）
+   - `add_token(token)` — 非 streaming 路径仅 append，不做 decode（修复原代码无此问题但新代码首版引入的性能回归）
+   - `add_token_streaming(token)` — streaming 路径返回增量 delta（detokenizer 或 full decode fallback）
+   - `finalize()` / `finalize_delta()` — 结束时统一 decode / 获取残余 delta
+
+2. **简化四个 decode loop**
+   - `_run_generate`: 83 → 51 行
+   - `_run_stream_generate`: 81 → 46 行
+   - `_run_ar_decode`: 84 → 53 行
+   - `_run_ar_stream_decode`: 81 → 46 行
+
+3. **`_frames_to_pil` 提升至 `BaseBackend`**
+   - 删除 `MLXBackend._frames_to_pil` 和 `TransformersBackend._frames_to_pil` 两个完全一致的实现
+   - 所有子类通过继承获取
+
+**Self-review 发现 & 修复:**
+
+| 发现 | 严重性 | 修复 |
+|------|--------|------|
+| `add_token` 首版在非 streaming `_run_generate` 中仍做 `tokenizer.decode(all_ids)` — 原代码此路径只 append 不 decode，新代码引入了 O(n²) 性能回归 | 中 | 拆分为 `add_token()`（仅 append）和 `add_token_streaming()`（计算 delta），streaming 调用方用后者 |
+| 行为等价性全面验证 | — | 确认所有 5 个边界场景行为一致：空生成、立即 EOS、detokenizer 路径、non-detokenizer 路径、finalize_delta 空返回 |
+
+**风险:** 零 — 纯重构，403 测试全部通过。
