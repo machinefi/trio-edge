@@ -281,6 +281,176 @@ def bench(
     typer.echo(f"\n{runs} runs, avg {avg:.0f}ms")
 
 
+@app.command()
+def smoke(
+    model: str = typer.Option(None, "--model", "-m", help="Override model"),
+    backend: str = typer.Option(None, "--backend", "-b", help="Force backend: mlx, transformers"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Debug logging"),
+):
+    """Run end-to-end smoke tests to verify everything works."""
+    _setup_logging(verbose)
+    import asyncio
+    import time
+
+    import numpy as np
+    from PIL import Image, ImageDraw
+
+    from trio_core.config import EngineConfig
+    from trio_core.engine import TrioCore
+
+    config = EngineConfig()
+    if model:
+        config.model = model
+
+    results: list[tuple[str, bool, str]] = []  # (name, passed, detail)
+
+    def _run(name: str, fn):
+        typer.echo(f"  {name}...", nl=False)
+        t0 = time.monotonic()
+        try:
+            detail = fn()
+            dt = time.monotonic() - t0
+            results.append((name, True, f"{detail} ({dt:.1f}s)"))
+            typer.echo(f" ✓ {detail} ({dt:.1f}s)")
+        except Exception as e:
+            dt = time.monotonic() - t0
+            results.append((name, False, f"{e} ({dt:.1f}s)"))
+            typer.echo(f" ✗ {e} ({dt:.1f}s)")
+
+    # Generate synthetic test image: colored rectangles with shapes
+    def _make_test_image() -> np.ndarray:
+        img = Image.new("RGB", (224, 224), (135, 206, 235))  # sky blue
+        draw = ImageDraw.Draw(img)
+        draw.rectangle([20, 120, 80, 200], fill=(34, 139, 34))   # green box
+        draw.rectangle([140, 100, 200, 200], fill=(220, 20, 60))  # red box
+        draw.ellipse([80, 30, 150, 100], fill=(255, 215, 0))      # yellow circle
+        arr = np.array(img, dtype=np.float32) / 255.0
+        return arr.transpose(2, 0, 1)[np.newaxis]  # (1, 3, 224, 224)
+
+    # Generate synthetic test video: 4 frames with slight variation
+    def _make_test_video() -> np.ndarray:
+        frames = []
+        for i in range(4):
+            img = Image.new("RGB", (224, 224), (135, 206, 235))
+            draw = ImageDraw.Draw(img)
+            offset = i * 15
+            draw.rectangle([20 + offset, 120, 80 + offset, 200], fill=(34, 139, 34))
+            draw.ellipse([80, 30, 150, 100], fill=(255, 215, 0))
+            arr = np.array(img, dtype=np.float32) / 255.0
+            frames.append(arr.transpose(2, 0, 1))
+        return np.stack(frames)  # (4, 3, 224, 224)
+
+    typer.echo(f"\ntrio smoke — {config.model}\n")
+
+    # Phase 1: Load model
+    engine = TrioCore(config, backend=backend)
+
+    def _load():
+        engine.load()
+        be = engine._backend
+        return f"{be.backend_name} on {be.device_info.device_name}"
+    _run("Load model", _load)
+
+    if not engine._loaded:
+        typer.echo("\n✗ Cannot continue — model failed to load.")
+        raise typer.Exit(1)
+
+    # Phase 2: Single image inference
+    test_image = _make_test_image()
+
+    def _single_image():
+        r = engine.analyze_video(test_image, "What shapes and colors do you see?", max_tokens=64)
+        assert len(r.text.strip()) > 0, "empty response"
+        return f"{len(r.text)} chars, {r.metrics.tokens_per_sec:.1f} tok/s"
+    _run("Single image", _single_image)
+
+    # Phase 3: Multi-frame (video) inference
+    test_video = _make_test_video()
+
+    def _video():
+        r = engine.analyze_video(test_video, "Describe what is happening.", max_tokens=64)
+        assert len(r.text.strip()) > 0, "empty response"
+        return f"{len(r.text)} chars, {r.metrics.prompt_tokens} prompt tokens"
+    _run("Video (4 frames)", _video)
+
+    # Phase 4: Streaming
+    def _streaming():
+        chunks = []
+
+        async def _run_stream():
+            async for chunk in engine.stream_analyze(
+                test_image, "What do you see?", max_tokens=32,
+            ):
+                if chunk.get("text"):
+                    chunks.append(chunk["text"])
+
+        asyncio.run(_run_stream())
+        text = "".join(chunks)
+        assert len(text.strip()) > 0, "empty streaming response"
+        return f"{len(chunks)} chunks, {len(text)} chars"
+    _run("Streaming", _streaming)
+
+    # Phase 5: API endpoints (using FastAPI TestClient, no server needed)
+    def _api():
+        try:
+            from starlette.testclient import TestClient
+        except ImportError:
+            return "skipped (httpx not installed)"
+
+        from trio_core.api.server import create_app, _engine as _old
+        import trio_core.api.server as srv
+
+        app_instance = create_app(config, backend=backend)
+        # Inject already-loaded engine instead of loading again
+        srv._engine = engine
+
+        client = TestClient(app_instance, raise_server_exceptions=False)
+
+        # Health
+        r = client.get("/health")
+        assert r.status_code == 200, f"/health → {r.status_code}"
+
+        # /healthz
+        r = client.get("/healthz")
+        assert r.status_code == 200, f"/healthz → {r.status_code}"
+
+        # /v1/models
+        r = client.get("/v1/models")
+        assert r.status_code == 200, f"/v1/models → {r.status_code}"
+
+        # /analyze-frame with base64 image
+        import base64
+        import io
+        img = Image.new("RGB", (64, 64), (255, 0, 0))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG")
+        b64 = base64.b64encode(buf.getvalue()).decode()
+
+        r = client.post("/analyze-frame", json={
+            "frame_b64": b64,
+            "question": "What color is this?",
+        })
+        assert r.status_code == 200, f"/analyze-frame → {r.status_code}: {r.text}"
+
+        return f"4 endpoints OK"
+    _run("API endpoints", _api)
+
+    # Summary
+    passed = sum(1 for _, ok, _ in results if ok)
+    total = len(results)
+    typer.echo(f"\n{'─' * 50}")
+    for name, ok, detail in results:
+        mark = "✓" if ok else "✗"
+        typer.echo(f"  {mark} {name}: {detail}")
+    typer.echo(f"{'─' * 50}")
+
+    if passed == total:
+        typer.echo(f"\n✓ All {total} checks passed. trio-core is ready.")
+    else:
+        typer.echo(f"\n✗ {passed}/{total} checks passed.")
+        raise typer.Exit(1)
+
+
 def _die_load_error(e: Exception, model: str) -> None:
     """Print a friendly error message for model loading failures and exit."""
     msg = str(e)
