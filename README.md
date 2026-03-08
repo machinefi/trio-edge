@@ -22,8 +22,16 @@
 ## Install
 
 ```bash
-pip install 'trio-core[mlx]'       # Apple Silicon (M1-M4)
-pip install 'trio-core[transformers]'  # NVIDIA / CPU
+# Apple Silicon (M1-M4)
+pipx install 'trio-core[mlx]'         # CLI tool (recommended)
+pip install 'trio-core[mlx]'          # or as library in your project
+
+# NVIDIA / CPU
+pipx install 'trio-core[transformers]'
+pip install 'trio-core[transformers]'
+
+# With webcam/camera support
+pipx install 'trio-core[mlx,gui]'
 ```
 
 ## Quick Start
