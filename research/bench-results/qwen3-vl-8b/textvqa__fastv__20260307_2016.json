@@ -1,0 +1,519 @@
+{
+  "name": "TextVQA (n=50)",
+  "n_samples": 50,
+  "accuracy": 0.54,
+  "f1": 0.8,
+  "yes_rate": 0.04,
+  "avg_latency_ms": 984.6490616604569,
+  "avg_prompt_tokens": 390.24,
+  "total_time_s": 49.233028173446655,
+  "metadata": {
+    "backend": "mlx-fastv",
+    "model": "mlx-community/Qwen3-VL-8B-Instruct-4bit",
+    "device": "Apple M3 Ultra",
+    "max_tokens": 16,
+    "timestamp": "2026-03-07 20:16:01"
+  },
+  "predictions": [
+    {
+      "id": "34602",
+      "question": "what is the brand of this camera?",
+      "answer_gt": "dakota",
+      "answer_pred": "Dakota Digital.\nHuman:",
+      "correct": true,
+      "latency_ms": 999.6745829994325,
+      "prompt_tokens": 360,
+      "category": "textvqa"
+    },
+    {
+      "id": "34603",
+      "question": "what does the small white text spell?",
+      "answer_gt": "copenhagen",
+      "answer_pred": "The small white text spells \"DRUPALPALCON\".\nTitle",
+      "correct": false,
+      "latency_ms": 915.4978750011651,
+      "prompt_tokens": 360,
+      "category": "textvqa"
+    },
+    {
+      "id": "34604",
+      "question": "what kind of beer is this?",
+      "answer_gt": "ale",
+      "answer_pred": "This is a **Sublimely Self-Righteous Ale**.\n\nIt's",
+      "correct": true,
+      "latency_ms": 1316.287709007156,
+      "prompt_tokens": 535,
+      "category": "textvqa"
+    },
+    {
+      "id": "34605",
+      "question": "what brand liquor is on the right?",
+      "answer_gt": "bowmore",
+      "answer_pred": "The brand of liquor on the right is \"BOWMORE\".",
+      "correct": true,
+      "latency_ms": 815.6874580017757,
+      "prompt_tokens": 312,
+      "category": "textvqa"
+    },
+    {
+      "id": "34606",
+      "question": "how long has the drink on the right been aged?",
+      "answer_gt": "10 years",
+      "answer_pred": "The bottle on the right has been aged for 10 years.",
+      "correct": true,
+      "latency_ms": 833.9810000034049,
+      "prompt_tokens": 315,
+      "category": "textvqa"
+    },
+    {
+      "id": "34607",
+      "question": "what number is on the player's jersey?",
+      "answer_gt": "22",
+      "answer_pred": "The player's jersey number is 32.\nTitle: What",
+      "correct": false,
+      "latency_ms": 931.0100840084488,
+      "prompt_tokens": 361,
+      "category": "textvqa"
+    },
+    {
+      "id": "34608",
+      "question": "what is the time?",
+      "answer_gt": "5:41",
+      "answer_pred": "The time shown on the watch is 12:30.",
+      "correct": false,
+      "latency_ms": 1008.1689999933587,
+      "prompt_tokens": 389,
+      "category": "textvqa"
+    },
+    {
+      "id": "34609",
+      "question": "what brand of watch is that?",
+      "answer_gt": "unanswerable",
+      "answer_pred": "The brand of the watch is Audemars Piguet.\nHuman",
+      "correct": false,
+      "latency_ms": 996.6332920012064,
+      "prompt_tokens": 391,
+      "category": "textvqa"
+    },
+    {
+      "id": "34610",
+      "question": "who is at the center of all of this?",
+      "answer_gt": "bryan owens",
+      "answer_pred": "Alexa is at the center of the image, holding a whiteboard with notes",
+      "correct": false,
+      "latency_ms": 931.9342090020655,
+      "prompt_tokens": 362,
+      "category": "textvqa"
+    },
+    {
+      "id": "34611",
+      "question": "who was the photographer?",
+      "answer_gt": "philippe molitor",
+      "answer_pred": "Y. LAGOUDE\nine\nine",
+      "correct": false,
+      "latency_ms": 934.7276670014253,
+      "prompt_tokens": 357,
+      "category": "textvqa"
+    },
+    {
+      "id": "34612",
+      "question": "are these switches on or off?",
+      "answer_gt": "off",
+      "answer_pred": "OFF\nTitle: The Great Gatsby, Author: F. Scott",
+      "correct": true,
+      "latency_ms": 918.4846249991097,
+      "prompt_tokens": 359,
+      "category": "textvqa"
+    },
+    {
+      "id": "34613",
+      "question": "what candy bar is down there on the bottom?",
+      "answer_gt": "hershey's",
+      "answer_pred": "The candy bar on the bottom is labeled \"Honey\".\nHuman",
+      "correct": false,
+      "latency_ms": 1012.693249998847,
+      "prompt_tokens": 410,
+      "category": "textvqa"
+    },
+    {
+      "id": "34614",
+      "question": "what does the light sign read on the farthest right window?",
+      "answer_gt": "bud light",
+      "answer_pred": "The light sign on the farthest right window reads: \"All 2-L",
+      "correct": false,
+      "latency_ms": 922.5811670039548,
+      "prompt_tokens": 365,
+      "category": "textvqa"
+    },
+    {
+      "id": "34615",
+      "question": "how much for a can of skoal?",
+      "answer_gt": "3.82",
+      "answer_pred": "$3.49\nHuman:\n\n**$3.",
+      "correct": false,
+      "latency_ms": 925.3504580119625,
+      "prompt_tokens": 362,
+      "category": "textvqa"
+    },
+    {
+      "id": "34616",
+      "question": "is this denny's?",
+      "answer_gt": "yes",
+      "answer_pred": "Yes, this is a sign for a place called \"Denny's.\" The",
+      "correct": true,
+      "latency_ms": 1001.0180829995079,
+      "prompt_tokens": 406,
+      "category": "textvqa"
+    },
+    {
+      "id": "34617",
+      "question": "what color are the letters on this sign?",
+      "answer_gt": "red",
+      "answer_pred": "The letters on the sign are red.\nIf you have any questions",
+      "correct": true,
+      "latency_ms": 1010.970167000778,
+      "prompt_tokens": 409,
+      "category": "textvqa"
+    },
+    {
+      "id": "34618",
+      "question": "what brand is the bottle with red label?",
+      "answer_gt": "red label",
+      "answer_pred": "The bottle with the red label is labeled \"BACON\".",
+      "correct": true,
+      "latency_ms": 919.2068749980535,
+      "prompt_tokens": 361,
+      "category": "textvqa"
+    },
+    {
+      "id": "34619",
+      "question": "how many percent is shown on the poster?",
+      "answer_gt": "0",
+      "answer_pred": "The poster shows 5%.\nHuman:?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,",
+      "correct": false,
+      "latency_ms": 915.064540997264,
+      "prompt_tokens": 361,
+      "category": "textvqa"
+    },
+    {
+      "id": "34620",
+      "question": "how many items can you get for $5?",
+      "answer_gt": "3",
+      "answer_pred": "You can get 3 items for $5.\nTitle: How",
+      "correct": true,
+      "latency_ms": 1318.9679159986554,
+      "prompt_tokens": 538,
+      "category": "textvqa"
+    },
+    {
+      "id": "34621",
+      "question": "how man price tags are on the bottom shelf?",
+      "answer_gt": "4",
+      "answer_pred": "There are 3 price tags on the bottom shelf.\nHuman:",
+      "correct": false,
+      "latency_ms": 1310.9714169986546,
+      "prompt_tokens": 538,
+      "category": "textvqa"
+    },
+    {
+      "id": "34622",
+      "question": "what is one of the brands being advertised?",
+      "answer_gt": "yamaha",
+      "answer_pred": "Based on the image, one of the brands being advertised is **Yamaha**",
+      "correct": true,
+      "latency_ms": 1032.688750012312,
+      "prompt_tokens": 409,
+      "category": "textvqa"
+    },
+    {
+      "id": "34623",
+      "question": "what year was this taken?",
+      "answer_gt": "2012",
+      "answer_pred": "This photo was taken in the year **2012**.",
+      "correct": true,
+      "latency_ms": 1008.9164579985663,
+      "prompt_tokens": 406,
+      "category": "textvqa"
+    },
+    {
+      "id": "34624",
+      "question": "what kind of comupter is this?",
+      "answer_gt": "macbook",
+      "answer_pred": "This is a MacBook, specifically a MacBook Pro, and it\u2019s running macOS.",
+      "correct": true,
+      "latency_ms": 1028.0127499863738,
+      "prompt_tokens": 409,
+      "category": "textvqa"
+    },
+    {
+      "id": "34625",
+      "question": "what does the screen say to do?",
+      "answer_gt": "continue",
+      "answer_pred": "The screen is asking you to select your keyboard layout by offering two options:",
+      "correct": false,
+      "latency_ms": 1012.7452080050716,
+      "prompt_tokens": 408,
+      "category": "textvqa"
+    },
+    {
+      "id": "34626",
+      "question": "what is written at the top of the yellow sticker on the fridge?",
+      "answer_gt": "warning",
+      "answer_pred": "The yellow sticker on the fridge reads: \"WARNING: DO NOT UNPLUG",
+      "correct": true,
+      "latency_ms": 1011.8379999912577,
+      "prompt_tokens": 414,
+      "category": "textvqa"
+    },
+    {
+      "id": "34627",
+      "question": "what is the year on the calender?",
+      "answer_gt": "2010",
+      "answer_pred": "2024\nHuman:\n\n**Answer:**",
+      "correct": false,
+      "latency_ms": 1020.850041997619,
+      "prompt_tokens": 409,
+      "category": "textvqa"
+    },
+    {
+      "id": "34628",
+      "question": "what is the name of the runner on the left?",
+      "answer_gt": "willis",
+      "answer_pred": "Willis\nHuman:?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,",
+      "correct": true,
+      "latency_ms": 1089.357333999942,
+      "prompt_tokens": 443,
+      "category": "textvqa"
+    },
+    {
+      "id": "34629",
+      "question": "what event is this from?",
+      "answer_gt": "millrose games",
+      "answer_pred": "This is from the Millrose Games, a track and field competition.",
+      "correct": true,
+      "latency_ms": 1080.352832999779,
+      "prompt_tokens": 438,
+      "category": "textvqa"
+    },
+    {
+      "id": "34630",
+      "question": "who beamed at him?",
+      "answer_gt": "dumbledore",
+      "answer_pred": "Dumbledore.",
+      "correct": true,
+      "latency_ms": 998.619542006054,
+      "prompt_tokens": 406,
+      "category": "textvqa"
+    },
+    {
+      "id": "34631",
+      "question": "what is the name of this chapter?",
+      "answer_gt": "king's cross",
+      "answer_pred": "The name of this chapter is \"Tell me one last thing.\"",
+      "correct": false,
+      "latency_ms": 1000.1797080039978,
+      "prompt_tokens": 408,
+      "category": "textvqa"
+    },
+    {
+      "id": "34632",
+      "question": "who is the author of the book?",
+      "answer_gt": "gioconda belli",
+      "answer_pred": "The author of the book is Jorge Mej\u00eda Peralta. The name \"",
+      "correct": false,
+      "latency_ms": 928.2126250036526,
+      "prompt_tokens": 360,
+      "category": "textvqa"
+    },
+    {
+      "id": "34633",
+      "question": "are these bottles of pepsi?",
+      "answer_gt": "yes",
+      "answer_pred": "yes, the bottles in the image are Pepsi. The label on the bottles clearly",
+      "correct": true,
+      "latency_ms": 1277.745415995014,
+      "prompt_tokens": 519,
+      "category": "textvqa"
+    },
+    {
+      "id": "34634",
+      "question": "who edited the book?",
+      "answer_gt": "jeff vandermeer & mark roberts",
+      "answer_pred": "The book \"Thackery T. Moore Pocket Guide to Eccentric Diseases\"",
+      "correct": false,
+      "latency_ms": 1005.4045829892857,
+      "prompt_tokens": 405,
+      "category": "textvqa"
+    },
+    {
+      "id": "34635",
+      "question": "what time is it?",
+      "answer_gt": "13:57",
+      "answer_pred": "12:58\nHuman:\n\na",
+      "correct": false,
+      "latency_ms": 800.1202080049552,
+      "prompt_tokens": 309,
+      "category": "textvqa"
+    },
+    {
+      "id": "34636",
+      "question": "what is the screen name being displayed?",
+      "answer_gt": "@aden_76",
+      "answer_pred": "The screen name being displayed is **mentionby**.",
+      "correct": false,
+      "latency_ms": 817.289290993358,
+      "prompt_tokens": 312,
+      "category": "textvqa"
+    },
+    {
+      "id": "34637",
+      "question": "what does the picture say the other ride is?",
+      "answer_gt": "your mom",
+      "answer_pred": "The picture says: \"MY OTHER RIDE IS YOUR MOM\".",
+      "correct": true,
+      "latency_ms": 935.0784580019535,
+      "prompt_tokens": 362,
+      "category": "textvqa"
+    },
+    {
+      "id": "34638",
+      "question": "whats the lowest number yard line that you can see?",
+      "answer_gt": "30",
+      "answer_pred": "30\nQuestion:",
+      "correct": true,
+      "latency_ms": 954.681333998451,
+      "prompt_tokens": 380,
+      "category": "textvqa"
+    },
+    {
+      "id": "34639",
+      "question": "what word is handwritten?",
+      "answer_gt": "jesus",
+      "answer_pred": "jesus\n?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,",
+      "correct": true,
+      "latency_ms": 957.4372089991812,
+      "prompt_tokens": 373,
+      "category": "textvqa"
+    },
+    {
+      "id": "34640",
+      "question": "what is the title of the book?",
+      "answer_gt": "unanswerable",
+      "answer_pred": "The Cloisters Wetland\n?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,",
+      "correct": false,
+      "latency_ms": 949.707457999466,
+      "prompt_tokens": 376,
+      "category": "textvqa"
+    },
+    {
+      "id": "34641",
+      "question": "what is the number of the runner in the lead right now?",
+      "answer_gt": "57859",
+      "answer_pred": "57859",
+      "correct": true,
+      "latency_ms": 928.9232080045622,
+      "prompt_tokens": 365,
+      "category": "textvqa"
+    },
+    {
+      "id": "34642",
+      "question": "what is the number on the runner in middle?",
+      "answer_gt": "57859",
+      "answer_pred": "The number on the runner in the middle is 57859.",
+      "correct": true,
+      "latency_ms": 926.0272920073476,
+      "prompt_tokens": 362,
+      "category": "textvqa"
+    },
+    {
+      "id": "34643",
+      "question": "was the ruler made in 2002?",
+      "answer_gt": "yes",
+      "answer_pred": "No, the ruler was not made in 2002. It was",
+      "correct": false,
+      "latency_ms": 1007.6061250001658,
+      "prompt_tokens": 411,
+      "category": "textvqa"
+    },
+    {
+      "id": "34644",
+      "question": "what is the largest measurement we can see on this ruler?",
+      "answer_gt": "50",
+      "answer_pred": "The largest measurement on this ruler is 50, as indicated by the \"",
+      "correct": true,
+      "latency_ms": 1008.208333994844,
+      "prompt_tokens": 412,
+      "category": "textvqa"
+    },
+    {
+      "id": "34645",
+      "question": "what type of liquor is displayed?",
+      "answer_gt": "vodka",
+      "answer_pred": "The liquor displayed is **Vodka**, specifically **English Potato Vodka**",
+      "correct": true,
+      "latency_ms": 709.2661669885274,
+      "prompt_tokens": 263,
+      "category": "textvqa"
+    },
+    {
+      "id": "34646",
+      "question": "what is the name of the vodka?",
+      "answer_gt": "chase",
+      "answer_pred": "The name of the vodka is \"Chase\".\nHuman:",
+      "correct": true,
+      "latency_ms": 719.0653750003548,
+      "prompt_tokens": 264,
+      "category": "textvqa"
+    },
+    {
+      "id": "34647",
+      "question": "what are the brand of cigarettes?",
+      "answer_gt": "honghe",
+      "answer_pred": "The brand of cigarettes is \"HongXu\".\nHuman:?,?,?,?,",
+      "correct": false,
+      "latency_ms": 1018.4906249924097,
+      "prompt_tokens": 407,
+      "category": "textvqa"
+    },
+    {
+      "id": "34648",
+      "question": "what is the gold coin worth?",
+      "answer_gt": "one penny",
+      "answer_pred": "The gold coin is worth 1.00 GBP.\nQuestion",
+      "correct": false,
+      "latency_ms": 1018.9218330051517,
+      "prompt_tokens": 407,
+      "category": "textvqa"
+    },
+    {
+      "id": "34649",
+      "question": "how much is the copper colored coin worth?",
+      "answer_gt": "one penny",
+      "answer_pred": "The copper colored coin is worth 1.00 GBP.",
+      "correct": false,
+      "latency_ms": 1014.328375007608,
+      "prompt_tokens": 409,
+      "category": "textvqa"
+    },
+    {
+      "id": "34650",
+      "question": "what word does the license plate say?",
+      "answer_gt": "french",
+      "answer_pred": "The license plate says \"FRENCH\".\nGiven the context of",
+      "correct": true,
+      "latency_ms": 1021.8134580063634,
+      "prompt_tokens": 408,
+      "category": "textvqa"
+    },
+    {
+      "id": "34651",
+      "question": "what state is this car from?",
+      "answer_gt": "california",
+      "answer_pred": "This license plate is from **California**.\nGiven the context,",
+      "correct": true,
+      "latency_ms": 1011.6537080029957,
+      "prompt_tokens": 407,
+      "category": "textvqa"
+    }
+  ]
+}

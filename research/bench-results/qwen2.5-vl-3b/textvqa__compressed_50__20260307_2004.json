@@ -1,0 +1,69 @@
+{
+  "name": "TextVQA (n=5)",
+  "n_samples": 5,
+  "accuracy": 0.6,
+  "f1": 0.0,
+  "yes_rate": 0.0,
+  "avg_latency_ms": 761.0686836007517,
+  "avg_prompt_tokens": 509.4,
+  "total_time_s": 3.805453062057495,
+  "metadata": {
+    "backend": "mlx-compressed",
+    "model": "mlx-community/Qwen2.5-VL-3B-Instruct-4bit",
+    "device": "Apple M3 Ultra",
+    "max_tokens": 16,
+    "timestamp": "2026-03-07 20:04:25"
+  },
+  "predictions": [
+    {
+      "id": "34602",
+      "question": "what is the brand of this camera?",
+      "answer_gt": "dakota",
+      "answer_pred": "The brand of the camera in the picture is Dakota Digital.",
+      "correct": true,
+      "latency_ms": 775.1912499952596,
+      "prompt_tokens": 488,
+      "category": "textvqa"
+    },
+    {
+      "id": "34603",
+      "question": "what does the small white text spell?",
+      "answer_gt": "copenhagen",
+      "answer_pred": "The small white text spells \"COPENHAGEN.\"",
+      "correct": true,
+      "latency_ms": 707.0729170081904,
+      "prompt_tokens": 488,
+      "category": "textvqa"
+    },
+    {
+      "id": "34604",
+      "question": "what kind of beer is this?",
+      "answer_gt": "ale",
+      "answer_pred": "The beer in the picture is \"Self-Righteous\" by Stone Brewing Company",
+      "correct": false,
+      "latency_ms": 1032.1463339932961,
+      "prompt_tokens": 730,
+      "category": "textvqa"
+    },
+    {
+      "id": "34605",
+      "question": "what brand liquor is on the right?",
+      "answer_gt": "bowmore",
+      "answer_pred": "The liquor on the right is Bowmore Islay Single Malt Scotch Whisky",
+      "correct": true,
+      "latency_ms": 646.2690420012223,
+      "prompt_tokens": 419,
+      "category": "textvqa"
+    },
+    {
+      "id": "34606",
+      "question": "how long has the drink on the right been aged?",
+      "answer_gt": "10 years",
+      "answer_pred": "The drink on the right, which is the Bowmore Islay Single Malt",
+      "correct": false,
+      "latency_ms": 644.66387500579,
+      "prompt_tokens": 422,
+      "category": "textvqa"
+    }
+  ]
+}

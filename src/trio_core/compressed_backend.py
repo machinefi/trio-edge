@@ -99,13 +99,46 @@ class CompressedMLXBackend(MLXBackend):
         n_video = mx.sum(input_ids == video_token_id).item()
         visual_token_id = video_token_id if n_video > 0 else image_token_id
 
+        # For MRoPE models, compute compressed grid first so we know the exact
+        # token count the grid produces (may differ from compressed_count by ±1
+        # due to integer rounding). Use grid_token_count for input_ids to ensure
+        # position_ids and input_ids have matching lengths.
+        effective_count = compressed_count
+        compressed_grid = None
+        if adapter.uses_mrope:
+            compressed_grid = self._compute_compressed_grid(
+                grid_thw, original_count, compressed_count,
+                spatial_merge_size=adapter.spatial_merge_size,
+            )
+            # Compute actual tokens this grid produces
+            grid_token_count = 0
+            for i in range(compressed_grid.shape[0]):
+                t_g, h_g, w_g = [x.item() for x in compressed_grid[i]]
+                grid_token_count += t_g * (h_g // adapter.spatial_merge_size) * (w_g // adapter.spatial_merge_size)
+            if grid_token_count != compressed_count:
+                logger.debug(
+                    "Grid adjustment: compressed_count=%d → grid_token_count=%d",
+                    compressed_count, grid_token_count,
+                )
+                effective_count = grid_token_count
+                # Also trim/pad compressed_hidden to match
+                if grid_token_count < compressed_count:
+                    compressed_hidden = compressed_hidden[:grid_token_count]
+                elif grid_token_count > compressed_count:
+                    # Pad by repeating last token
+                    pad = mx.broadcast_to(
+                        compressed_hidden[-1:],
+                        (grid_token_count - compressed_count, compressed_hidden.shape[1]),
+                    )
+                    compressed_hidden = mx.concatenate([compressed_hidden, pad], axis=0)
+
         ids_list = input_ids[0].tolist()
         new_ids = []
         vis_count = 0
         for tid in ids_list:
             if tid == visual_token_id:
                 vis_count += 1
-                if vis_count <= compressed_count:
+                if vis_count <= effective_count:
                     new_ids.append(tid)
             else:
                 new_ids.append(tid)
@@ -119,11 +152,7 @@ class CompressedMLXBackend(MLXBackend):
         )
         final_embeds = merge_result.embeds
 
-        if adapter.uses_mrope:
-            compressed_grid = self._compute_compressed_grid(
-                grid_thw, original_count, compressed_count,
-                spatial_merge_size=adapter.spatial_merge_size,
-            )
+        if compressed_grid is not None:
             kw_grid = {}
             if n_video > 0:
                 kw_grid["video_grid_thw"] = compressed_grid

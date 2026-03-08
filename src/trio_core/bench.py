@@ -92,8 +92,8 @@ MODEL_REGISTRY: dict[str, ModelEntry] = {
     # FastVLM — CoreML blocker, Tier 2
     "fastvlm-0.5b": _entry("fastvlm-0.5b", "InsightKeeper/FastVLM-0.5B-MLX-4bit", tier=2, supports_fastv=False),
     "fastvlm-1.5b": _entry("fastvlm-1.5b", "InsightKeeper/FastVLM-1.5B-MLX-4bit", tier=2, supports_fastv=False),
-    # nanoLLaVA
-    "nanollava-1.5": _entry("nanollava-1.5", "mlx-community/nanoLLaVA-1.5-4bit"),
+    # nanoLLaVA — demoted to T2 (upstream mlx_vlm issues, 0% POPE accuracy)
+    "nanollava-1.5": _entry("nanollava-1.5", "mlx-community/nanoLLaVA-1.5-4bit", tier=2),
 }
 
 
