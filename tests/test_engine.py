@@ -3,8 +3,9 @@
 from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
+import pytest_asyncio
 
-from trio_core.backends import GenerationResult
+from trio_core.backends import GenerationResult, StreamChunk
 from trio_core.config import EngineConfig
 from trio_core.engine import TrioCore, VideoResult, InferenceMetrics
 
@@ -137,3 +138,347 @@ class TestAnalyzeVideo:
         assert "dedup" in events_fired
         assert "vlm_start" in events_fired
         assert "vlm_end" in events_fired
+
+
+class TestLoadIdempotency:
+    """load() called twice — second call returns early (lines 131-132)."""
+
+    @patch("trio_core.engine.auto_backend")
+    def test_load_twice_is_idempotent(self, mock_auto):
+        mock_backend = MagicMock()
+        mock_backend.backend_name = "mlx"
+        mock_backend.device_info.device_name = "Apple M3"
+        mock_auto.return_value = mock_backend
+
+        engine = TrioCore()
+        engine.load()
+        engine.load()  # second call — should short-circuit
+
+        # auto_backend only called once
+        mock_auto.assert_called_once()
+        # backend.load() only called once
+        mock_backend.load.assert_called_once()
+
+
+class TestBackendSwap:
+    """Backend swap logic: ToMe-only vs FastV+ToMe (lines 142-166)."""
+
+    @patch("trio_core.engine.auto_backend")
+    @patch("trio_core.tome_backend.ToMeMLXBackend", create=True)
+    def test_tome_only_swaps_to_tome_backend(self, mock_tome_cls, mock_auto):
+        """tome_enabled=True, fastv_enabled=False → ToMeMLXBackend (lines 164-166)."""
+        base_backend = MagicMock()
+        base_backend.backend_name = "mlx"
+        base_backend.device_info.device_name = "Apple M3"
+        mock_auto.return_value = base_backend
+
+        mock_tome_instance = MagicMock()
+        mock_tome_instance.backend_name = "tome_mlx"
+
+        with patch("trio_core.engine.ToMeMLXBackend", create=True) as patched:
+            # We need to patch inside engine module's import
+            pass
+
+        config = EngineConfig(tome_enabled=True, tome_r=4)
+        engine = TrioCore(config)
+
+        with patch("trio_core.tome_backend.ToMeMLXBackend") as mock_tb:
+            mock_tb.return_value = mock_tome_instance
+            # Patch at the import location inside engine.load()
+            with patch.dict("sys.modules", {"trio_core.tome_backend": MagicMock(ToMeMLXBackend=mock_tb)}):
+                engine.load()
+
+        # The backend should have been swapped
+        assert engine._backend is not base_backend
+
+    @patch("trio_core.engine.auto_backend")
+    def test_fastv_plus_tome_compound(self, mock_auto):
+        """fastv_enabled=True + tome_enabled=True → FastVMLXBackend compound (lines 142-154)."""
+        base_backend = MagicMock()
+        base_backend.backend_name = "mlx"
+        base_backend.device_info.device_name = "Apple M3"
+        mock_auto.return_value = base_backend
+
+        mock_fastv_instance = MagicMock()
+        mock_fastv_instance.backend_name = "fastv_mlx"
+
+        config = EngineConfig(
+            fastv_enabled=True, fastv_ratio=0.5, fastv_layer=2,
+            tome_enabled=True, tome_r=4, tome_metric="hidden",
+        )
+        engine = TrioCore(config)
+
+        mock_fastv_cls = MagicMock(return_value=mock_fastv_instance)
+        with patch.dict("sys.modules", {"trio_core.fastv_backend": MagicMock(FastVMLXBackend=mock_fastv_cls)}):
+            engine.load()
+
+        mock_fastv_cls.assert_called_once()
+        call_kwargs = mock_fastv_cls.call_args
+        # Should pass tome kwargs in compound mode
+        assert call_kwargs.kwargs.get("tome_r") == 4 or call_kwargs[1].get("tome_r") == 4
+
+    @patch("trio_core.engine.auto_backend")
+    def test_fastv_without_tome(self, mock_auto):
+        """fastv_enabled=True, tome_enabled=False → FastVMLXBackend without tome kwargs."""
+        base_backend = MagicMock()
+        base_backend.backend_name = "mlx"
+        base_backend.device_info.device_name = "Apple M3"
+        mock_auto.return_value = base_backend
+
+        mock_fastv_instance = MagicMock()
+        mock_fastv_instance.backend_name = "fastv_mlx"
+
+        config = EngineConfig(fastv_enabled=True, fastv_ratio=0.5, fastv_layer=2)
+        engine = TrioCore(config)
+
+        mock_fastv_cls = MagicMock(return_value=mock_fastv_instance)
+        with patch.dict("sys.modules", {"trio_core.fastv_backend": MagicMock(FastVMLXBackend=mock_fastv_cls)}):
+            engine.load()
+
+        mock_fastv_cls.assert_called_once()
+        call_kwargs = mock_fastv_cls.call_args
+        # tome_r should NOT be in kwargs
+        assert "tome_r" not in (call_kwargs.kwargs or {})
+
+
+class TestFeatureFlagMethods:
+    """Feature flags: early_stop, visual_similarity, streaming_memory (lines 181, 185, 189)."""
+
+    @patch("trio_core.engine.auto_backend")
+    def test_early_stop_flag(self, mock_auto):
+        """early_stop=True calls backend.set_early_stop (line 181)."""
+        mock_backend = MagicMock()
+        mock_backend.backend_name = "mlx"
+        mock_backend.device_info.device_name = "Apple M3"
+        mock_backend.set_early_stop = MagicMock()
+        mock_auto.return_value = mock_backend
+
+        config = EngineConfig(early_stop=True, early_stop_threshold=0.9)
+        engine = TrioCore(config)
+        engine.load()
+
+        mock_backend.set_early_stop.assert_called_once_with(True, 0.9)
+
+    @patch("trio_core.engine.auto_backend")
+    def test_visual_similarity_flag(self, mock_auto):
+        """visual_similarity_threshold > 0 calls backend.set_visual_similarity (line 185)."""
+        mock_backend = MagicMock()
+        mock_backend.backend_name = "mlx"
+        mock_backend.device_info.device_name = "Apple M3"
+        mock_backend.set_visual_similarity = MagicMock()
+        mock_auto.return_value = mock_backend
+
+        config = EngineConfig(visual_similarity_threshold=0.95)
+        engine = TrioCore(config)
+        engine.load()
+
+        mock_backend.set_visual_similarity.assert_called_once_with(0.95)
+
+    @patch("trio_core.engine.auto_backend")
+    def test_streaming_memory_flag(self, mock_auto):
+        """streaming_memory_enabled calls backend.set_streaming_memory (line 189)."""
+        mock_backend = MagicMock()
+        mock_backend.backend_name = "mlx"
+        mock_backend.device_info.device_name = "Apple M3"
+        mock_backend.set_streaming_memory = MagicMock()
+        mock_auto.return_value = mock_backend
+
+        config = EngineConfig(
+            streaming_memory_enabled=True,
+            streaming_memory_budget=8000,
+            streaming_memory_prototype_ratio=0.2,
+            streaming_memory_sink_tokens=8,
+        )
+        engine = TrioCore(config)
+        engine.load()
+
+        mock_backend.set_streaming_memory.assert_called_once_with(True, 8000, 0.2, 8)
+
+    @patch("trio_core.engine.auto_backend")
+    def test_feature_flags_skip_when_backend_lacks_method(self, mock_auto):
+        """Feature flags are skipped if backend doesn't have the method."""
+        mock_backend = MagicMock(spec=["backend_name", "device_info", "load", "health"])
+        mock_backend.backend_name = "mlx"
+        mock_backend.device_info.device_name = "Apple M3"
+        mock_auto.return_value = mock_backend
+
+        config = EngineConfig(
+            early_stop=True,
+            visual_similarity_threshold=0.95,
+            streaming_memory_enabled=True,
+        )
+        engine = TrioCore(config)
+        # Should not raise even though backend lacks these methods
+        engine.load()
+        assert engine._loaded
+
+
+class TestMotionGate:
+    """Motion gate path in analyze_video (lines 255, 259-267)."""
+
+    def test_dedup_disabled_still_sets_frames_after_dedup(self):
+        """dedup_enabled=False → metrics.frames_after_dedup = input count (line 255)."""
+        config = EngineConfig(dedup_enabled=False)
+        engine = TrioCore(config)
+        mock_backend = MagicMock()
+        mock_backend.backend_name = "mock"
+        mock_backend.generate.return_value = GenerationResult(
+            text="ok", prompt_tokens=10, completion_tokens=5,
+            generation_tps=50.0, peak_memory=1.0,
+        )
+        engine._backend = mock_backend
+        engine._loaded = True
+
+        frames = np.random.rand(4, 3, 64, 64).astype(np.float32)
+        result = engine.analyze_video(frames, "test")
+        assert result.metrics.frames_after_dedup == 4
+
+    def test_motion_gate_no_motion_skips(self):
+        """motion_enabled=True + no motion → returns early with skip text (lines 259-267)."""
+        config = EngineConfig(motion_enabled=True, motion_threshold=100.0)
+        engine = TrioCore(config)
+        mock_backend = MagicMock()
+        mock_backend.backend_name = "mock"
+        engine._backend = mock_backend
+        engine._loaded = True
+
+        # Use identical frames so motion gate sees no motion
+        frame = np.zeros((64, 64, 3), dtype=np.float32)
+        frames = np.stack([frame] * 4)  # (4, 64, 64, 3) — identical
+        # Patch the motion gate to always return False
+        engine._motion_gate = MagicMock()
+        engine._motion_gate.has_motion.return_value = False
+
+        result = engine.analyze_video(frames, "describe")
+        assert result.metrics.motion_skipped is True
+        assert "[NO MOTION]" in result.text
+        # Backend.generate should NOT have been called
+        mock_backend.generate.assert_not_called()
+
+    def test_motion_gate_with_motion_proceeds(self):
+        """motion_enabled=True + motion detected → proceeds to inference."""
+        config = EngineConfig(motion_enabled=True, motion_threshold=0.001)
+        engine = TrioCore(config)
+        mock_backend = MagicMock()
+        mock_backend.backend_name = "mock"
+        mock_backend.generate.return_value = GenerationResult(
+            text="motion detected", prompt_tokens=10, completion_tokens=5,
+            generation_tps=50.0, peak_memory=1.0,
+        )
+        engine._backend = mock_backend
+        engine._loaded = True
+
+        engine._motion_gate = MagicMock()
+        engine._motion_gate.has_motion.return_value = True
+
+        frames = np.random.rand(4, 3, 64, 64).astype(np.float32)
+        result = engine.analyze_video(frames, "describe")
+        assert result.metrics.motion_skipped is False
+        assert result.text == "motion detected"
+        mock_backend.generate.assert_called_once()
+
+
+class TestPrefillTiming:
+    """Prefill timing derived from prompt_tps (line 290)."""
+
+    def test_prefill_ms_derived_from_prompt_tps(self):
+        """prompt_tps > 0 → prefill_ms = (prompt_tokens / prompt_tps) * 1000."""
+        engine = _mock_engine()
+        engine._backend.generate.return_value = GenerationResult(
+            text="result",
+            prompt_tokens=100,
+            completion_tokens=10,
+            prompt_tps=500.0,      # 500 tok/sec → 200ms for 100 tokens
+            generation_tps=50.0,
+            peak_memory=1.0,
+        )
+        frames = np.random.rand(4, 3, 64, 64).astype(np.float32)
+        result = engine.analyze_video(frames, "test")
+
+        assert result.metrics.prefill_ms == pytest.approx(200.0, rel=1e-3)
+        assert result.metrics.decode_ms == pytest.approx(200.0, rel=1e-3)
+
+    def test_prefill_ms_zero_when_prompt_tps_zero(self):
+        """prompt_tps == 0 → prefill_ms stays 0 (no division)."""
+        engine = _mock_engine()
+        engine._backend.generate.return_value = GenerationResult(
+            text="result",
+            prompt_tokens=100,
+            completion_tokens=10,
+            prompt_tps=0.0,
+            generation_tps=50.0,
+            peak_memory=1.0,
+        )
+        frames = np.random.rand(4, 3, 64, 64).astype(np.float32)
+        result = engine.analyze_video(frames, "test")
+
+        assert result.metrics.prefill_ms == 0.0
+
+
+class TestStreamAnalyze:
+    """stream_analyze() async generator (lines 313-351)."""
+
+    @pytest.mark.asyncio
+    async def test_stream_analyze_yields_chunks_and_final(self):
+        """Iterate stream_analyze — gets text chunks then final with metrics."""
+        engine = _mock_engine()
+
+        # Mock stream_generate to yield 3 chunks
+        chunks = [
+            StreamChunk(text="Hello"),
+            StreamChunk(text=" world"),
+            StreamChunk(text="!"),
+        ]
+        engine._backend.stream_generate.return_value = iter(chunks)
+
+        frames = np.random.rand(4, 3, 64, 64).astype(np.float32)
+        results = []
+        async for item in engine.stream_analyze(frames, "test"):
+            results.append(item)
+
+        # Should have 3 text chunks + 1 final
+        assert len(results) == 4
+
+        # First 3 are text chunks
+        for i, chunk in enumerate(results[:3]):
+            assert chunk["finished"] is False
+            assert chunk["metrics"] is None
+        assert results[0]["text"] == "Hello"
+        assert results[1]["text"] == " world"
+        assert results[2]["text"] == "!"
+
+        # Last is the final with metrics
+        final = results[-1]
+        assert final["finished"] is True
+        assert final["metrics"] is not None
+        assert isinstance(final["metrics"], InferenceMetrics)
+        assert final["metrics"].latency_ms > 0
+
+    @pytest.mark.asyncio
+    async def test_stream_analyze_not_loaded_raises(self):
+        """stream_analyze raises RuntimeError if not loaded."""
+        engine = TrioCore()
+        frames = np.random.rand(4, 3, 64, 64).astype(np.float32)
+        with pytest.raises(RuntimeError, match="not loaded"):
+            async for _ in engine.stream_analyze(frames, "test"):
+                pass
+
+    @pytest.mark.asyncio
+    async def test_stream_analyze_dedup_disabled(self):
+        """stream_analyze with dedup_enabled=False still sets frames_after_dedup."""
+        config = EngineConfig(dedup_enabled=False)
+        engine = TrioCore(config)
+        mock_backend = MagicMock()
+        mock_backend.backend_name = "mock"
+        mock_backend.stream_generate.return_value = iter([StreamChunk(text="ok")])
+        engine._backend = mock_backend
+        engine._loaded = True
+
+        frames = np.random.rand(4, 3, 64, 64).astype(np.float32)
+        results = []
+        async for item in engine.stream_analyze(frames, "test"):
+            results.append(item)
+
+        final = results[-1]
+        assert final["finished"] is True
+        assert final["metrics"].frames_after_dedup == 4

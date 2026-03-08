@@ -10,7 +10,6 @@ This is the core innovation from:
 
 from __future__ import annotations
 
-import functools
 import logging
 import time
 from typing import Generator
@@ -52,11 +51,24 @@ class CompressedMLXBackend(MLXBackend):
         self, frames: np.ndarray, prompt: str, *,
         max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
     ) -> GenerationResult:
+        tic = time.perf_counter()
+        y, prompt_cache, prompt_token_count = self._custom_prefill(
+            frames, prompt, temperature, top_p,
+        )
+        prompt_tps = prompt_token_count / max(time.perf_counter() - tic, 1e-9)
+
+        return self._run_ar_decode(
+            y, prompt_cache,
+            max_tokens=max_tokens, temperature=temperature, top_p=top_p,
+            prompt_token_count=prompt_token_count, prompt_tps=prompt_tps,
+        )
+
+    def _custom_prefill(self, frames, prompt, temperature, top_p):
+        """Run compressed prefill, return (first_token, prompt_cache, prompt_token_count)."""
         import mlx.core as mx
-        from trio_core.generate import make_prompt_cache, make_sampler, maybe_quantize_kv_cache
+        from trio_core.generate import make_prompt_cache, make_sampler
 
         formatted, kwargs = self._prepare(frames, prompt)
-
         input_ids = kwargs.pop("input_ids")
         pixel_values = kwargs.pop("pixel_values")
         kwargs.pop("mask")
@@ -68,12 +80,10 @@ class CompressedMLXBackend(MLXBackend):
         model = self._model
         adapter = self._adapter
 
-        # ── Step 1: Run vision encoder ─────────────────────────────────
         vision_out = adapter.run_vision_encoder(pixel_values, grid_thw)
         hidden_states = vision_out.hidden_states
         original_count = hidden_states.shape[0]
 
-        # ── Step 2: Compress visual tokens ─────────────────────────────
         comp_result = self.compressor.compress(hidden_states, grid_thw)
         self.last_compression = comp_result
         compressed_hidden = comp_result.compressed
@@ -85,13 +95,10 @@ class CompressedMLXBackend(MLXBackend):
             (1 - comp_result.ratio) * 100,
         )
 
-        # ── Step 3: Build compressed input sequence ────────────────────
         video_token_id, image_token_id = adapter.get_visual_token_ids()
-
         n_video = mx.sum(input_ids == video_token_id).item()
         visual_token_id = video_token_id if n_video > 0 else image_token_id
 
-        # Remove excess visual placeholder tokens from input_ids
         ids_list = input_ids[0].tolist()
         new_ids = []
         vis_count = 0
@@ -106,16 +113,12 @@ class CompressedMLXBackend(MLXBackend):
         new_input_ids = mx.array([new_ids], dtype=input_ids.dtype)
         new_mask = mx.ones(new_input_ids.shape, dtype=mx.int32)
 
-        # Embed text tokens
         text_embeds = model.language_model.model.embed_tokens(new_input_ids)
-
-        # Merge compressed visual tokens at placeholder positions
         merge_result = adapter.merge_visual_features(
             compressed_hidden, text_embeds, new_input_ids,
         )
         final_embeds = merge_result.embeds
 
-        # Compute position IDs for compressed sequence (MRoPE models only)
         if adapter.uses_mrope:
             compressed_grid = self._compute_compressed_grid(
                 grid_thw, original_count, compressed_count,
@@ -126,119 +129,37 @@ class CompressedMLXBackend(MLXBackend):
                 kw_grid["video_grid_thw"] = compressed_grid
             else:
                 kw_grid["image_grid_thw"] = compressed_grid
-
             position_ids, rope_deltas = adapter.compute_position_ids(
                 new_input_ids, attention_mask=new_mask, **kw_grid,
             )
             model.language_model._position_ids = position_ids
             model.language_model._rope_deltas = rope_deltas
 
-        # ── Step 4: Own generate loop ──────────────────────────────────
         prompt_cache = make_prompt_cache(model.language_model)
-
-        sampler = make_sampler(temperature, top_p)
-        quantize_cache_fn = functools.partial(
-            maybe_quantize_kv_cache,
-            quantized_kv_start=5000,
-            kv_group_size=64,
-            kv_bits=None,
-        )
-
-        tokenizer = self._processor.tokenizer if hasattr(self._processor, "tokenizer") else self._processor
-        if hasattr(tokenizer, "stopping_criteria"):
-            tokenizer.stopping_criteria.reset(model.config.eos_token_id)
-        eos_token_id = getattr(model.config, "eos_token_id", None)
-
-        has_detokenizer = hasattr(self._processor, "detokenizer")
-        if has_detokenizer:
-            detokenizer = self._processor.detokenizer
-            detokenizer.reset()
-
-        # Prefill with compressed embeddings
-        tic = time.perf_counter()
         outputs = model.language_model(
-            new_input_ids,
-            inputs_embeds=final_embeds,
-            cache=prompt_cache,
+            new_input_ids, inputs_embeds=final_embeds, cache=prompt_cache,
         )
         logits = outputs.logits[:, -1, :]
-        quantize_cache_fn(prompt_cache)
 
+        sampler = make_sampler(temperature, top_p)
         logprobs = logits - mx.logsumexp(logits)
         y = sampler(logprobs)
         mx.eval(y)
 
-        prompt_time = time.perf_counter() - tic
-        prompt_token_count = new_input_ids.size
-        prompt_tps = prompt_token_count / max(prompt_time, 1e-9)
-
-        # Decode loop
-        tic = time.perf_counter()
-        text = ""
-        token_ids = []
-        n_generated = 0
-
-        for n_generated in range(max_tokens):
-            token_val = y.item()
-            if hasattr(tokenizer, "stopping_criteria") and tokenizer.stopping_criteria(token_val):
-                break
-            if eos_token_id is not None:
-                if isinstance(eos_token_id, list) and token_val in eos_token_id:
-                    break
-                elif token_val == eos_token_id:
-                    break
-
-            if has_detokenizer:
-                detokenizer.add_token(token_val)
-                text += detokenizer.last_segment
-            else:
-                token_ids.append(token_val)
-
-            # Next step
-            outputs = model.language_model(
-                y[None],
-                cache=prompt_cache,
-            )
-            logits = outputs.logits[:, -1, :]
-            quantize_cache_fn(prompt_cache)
-            logprobs = logits - mx.logsumexp(logits)
-            y = sampler(logprobs)
-            mx.eval(y)
-
-            if n_generated % 256 == 0:
-                mx.clear_cache()
-
-        if has_detokenizer:
-            detokenizer.finalize()
-            text += detokenizer.last_segment
-        else:
-            text = tokenizer.decode(token_ids)
-
-        n_generated = max(n_generated, 1)
-        decode_time = time.perf_counter() - tic
-        generation_tps = n_generated / max(decode_time, 1e-9)
-
-        mx.clear_cache()
-
-        return GenerationResult(
-            text=text.strip(),
-            prompt_tokens=prompt_token_count,
-            completion_tokens=n_generated,
-            prompt_tps=prompt_tps,
-            generation_tps=generation_tps,
-            peak_memory=mx.get_peak_memory() / 1e9,
-        )
+        return y, prompt_cache, new_input_ids.size
 
     def stream_generate(
         self, frames: np.ndarray, prompt: str, *,
         max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
     ) -> Generator[StreamChunk, None, None]:
-        result = self.generate(frames, prompt, max_tokens=max_tokens,
-                               temperature=temperature, top_p=top_p)
-        yield StreamChunk(
-            text=result.text, finished=True,
-            prompt_tokens=result.prompt_tokens,
-            completion_tokens=result.completion_tokens,
+        """Real token-by-token streaming with compressed prefill."""
+        y, prompt_cache, prompt_token_count = self._custom_prefill(
+            frames, prompt, temperature, top_p,
+        )
+        yield from self._run_ar_stream_decode(
+            y, prompt_cache,
+            max_tokens=max_tokens, temperature=temperature, top_p=top_p,
+            prompt_token_count=prompt_token_count,
         )
 
     @staticmethod

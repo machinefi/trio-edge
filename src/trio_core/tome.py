@@ -94,18 +94,37 @@ def merge_tokens(
     merged = x[dst_idx]
     new_size = size[dst_idx]
 
-    for i in range(src_dst_map.shape[0]):
-        src_i = src_dst_map[i, 0].item()
-        dst_i = src_dst_map[i, 1].item()
+    src_indices = src_dst_map[:, 0]  # (r,)
+    dst_values = src_dst_map[:, 1]   # (r,)
 
-        dst_pos = mx.argmin(mx.abs(dst_idx - dst_i)).item()
+    # Find position of each dst_value in dst_idx via broadcast argmin
+    # dst_values: (r,) → (r, 1), dst_idx: (N-r,) → (1, N-r)
+    diffs = mx.abs(dst_values[:, None] - dst_idx[None, :])  # (r, N-r)
+    dst_positions = mx.argmin(diffs, axis=1)  # (r,)
 
-        s_src = size[src_i]
-        s_dst = new_size[dst_pos]
-        total = s_src + s_dst
+    # Check for duplicate destinations (multiple sources → same dst)
+    pos_list = dst_positions.tolist()
+    has_duplicates = len(set(pos_list)) < len(pos_list)
 
-        merged[dst_pos] = (merged[dst_pos] * s_dst + x[src_i] * s_src) / total
-        new_size[dst_pos] = total
+    if not has_duplicates:
+        # No conflicts — fully vectorized
+        s_src = size[src_indices]              # (r, 1)
+        s_dst = new_size[dst_positions]        # (r, 1)
+        total = s_src + s_dst                  # (r, 1)
+        src_features = x[src_indices]          # (r, D)
+        dst_features = merged[dst_positions]   # (r, D)
+        new_values = (dst_features * s_dst + src_features * s_src) / total
+        merged[dst_positions] = new_values
+        new_size[dst_positions] = total
+    else:
+        # Rare: multiple sources → same dest, fall back to sequential
+        for i in range(src_dst_map.shape[0]):
+            pos = pos_list[i]
+            s_src = size[src_indices[i]]
+            s_dst = new_size[pos]
+            total = s_src + s_dst
+            merged[pos] = (merged[pos] * s_dst + x[src_indices[i]] * s_src) / total
+            new_size[pos] = total
 
     return merged, new_size
 

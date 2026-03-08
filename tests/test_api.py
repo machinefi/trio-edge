@@ -295,3 +295,283 @@ class TestChatCompletions:
             }],
         })
         assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Additional coverage tests
+# ---------------------------------------------------------------------------
+
+import json
+from fastapi import HTTPException
+
+
+class TestGetEngineNotLoaded:
+    """Test get_engine raises 503 when _engine is None (line 46)."""
+
+    def test_get_engine_raises_503_none(self):
+        import trio_core.api.server as server_mod
+        from trio_core.api.server import get_engine
+
+        saved = server_mod._engine
+        try:
+            server_mod._engine = None
+            with pytest.raises(HTTPException) as exc_info:
+                get_engine()
+            assert exc_info.value.status_code == 503
+        finally:
+            server_mod._engine = saved
+
+    def test_get_engine_raises_503_not_loaded(self):
+        import trio_core.api.server as server_mod
+        from trio_core.api.server import get_engine
+
+        saved = server_mod._engine
+        try:
+            mock = MagicMock()
+            mock._loaded = False
+            server_mod._engine = mock
+            with pytest.raises(HTTPException) as exc_info:
+                get_engine()
+            assert exc_info.value.status_code == 503
+        finally:
+            server_mod._engine = saved
+
+
+class TestHealthNotLoaded:
+    """Test /health and /healthz when engine is None (lines 90, 97)."""
+
+    def test_health_not_loaded(self):
+        from trio_core.api.server import create_app
+        import trio_core.api.server as server_mod
+
+        app = create_app()
+        app.router.lifespan_context = _noop_lifespan
+        saved = server_mod._engine
+        try:
+            server_mod._engine = None
+            with TestClient(app) as c:
+                resp = c.get("/health")
+                assert resp.status_code == 200
+                data = resp.json()
+                assert data["status"] == "not_loaded"
+                assert data["loaded"] is False
+        finally:
+            server_mod._engine = saved
+
+    def test_healthz_not_loaded(self):
+        from trio_core.api.server import create_app
+        import trio_core.api.server as server_mod
+
+        app = create_app()
+        app.router.lifespan_context = _noop_lifespan
+        saved = server_mod._engine
+        try:
+            server_mod._engine = None
+            with TestClient(app) as c:
+                resp = c.get("/healthz")
+                assert resp.status_code == 503
+        finally:
+            server_mod._engine = saved
+
+
+class TestDetectTriggered:
+    """Test _detect_triggered with positive patterns and None (lines 293, 296)."""
+
+    def test_positive_there_is_a(self):
+        from trio_core.api.server import _detect_triggered
+        assert _detect_triggered("There is a person at the door.") is True
+
+    def test_positive_i_can_see(self):
+        from trio_core.api.server import _detect_triggered
+        assert _detect_triggered("I can see someone approaching.") is True
+
+    def test_positive_someone(self):
+        from trio_core.api.server import _detect_triggered
+        assert _detect_triggered("Someone is standing there.") is True
+
+    def test_positive_a_package(self):
+        from trio_core.api.server import _detect_triggered
+        assert _detect_triggered("A package is on the porch.") is True
+
+    def test_negative_there_is_no(self):
+        from trio_core.api.server import _detect_triggered
+        assert _detect_triggered("There is no one at the door.") is False
+
+    def test_negative_cannot_see(self):
+        from trio_core.api.server import _detect_triggered
+        assert _detect_triggered("I cannot see anything.") is False
+
+    def test_none_for_ambiguous(self):
+        from trio_core.api.server import _detect_triggered
+        assert _detect_triggered("The image shows a red square on a white background.") is None
+
+
+class TestResolveMedia:
+    """Test _resolve_media with invalid data URI (line 342)."""
+
+    def test_invalid_data_uri_no_comma(self):
+        from trio_core.api.server import _resolve_media
+        with pytest.raises(HTTPException) as exc_info:
+            _resolve_media("data:image/jpeg;base64nocomma")
+        assert exc_info.value.status_code == 400
+        assert "missing comma" in exc_info.value.detail
+
+    def test_plain_path_passthrough(self):
+        from trio_core.api.server import _resolve_media
+        path, temp = _resolve_media("/tmp/test.mp4")
+        assert path == "/tmp/test.mp4"
+        assert temp is None
+
+
+class TestStreamVideoAnalyze:
+    """Test streaming for /v1/video/analyze (lines 157, 367-378)."""
+
+    def test_stream_video_analyze(self, client):
+        import trio_core.api.server as server_mod
+
+        metrics = InferenceMetrics(
+            frames_input=5, prompt_tokens=50, completion_tokens=20, latency_ms=200.0
+        )
+
+        async def mock_stream_analyze(**kwargs):
+            yield {"text": "hello ", "finished": False}
+            yield {"text": "world", "finished": False}
+            yield {"text": "", "finished": True, "metrics": metrics}
+
+        server_mod._engine.stream_analyze = mock_stream_analyze
+
+        resp = client.post(
+            "/v1/video/analyze",
+            json={"video": "/tmp/test.mp4", "prompt": "describe", "stream": True},
+        )
+        assert resp.status_code == 200
+        assert "text/event-stream" in resp.headers["content-type"]
+
+        lines = [l for l in resp.text.strip().split("\n") if l.startswith("data: ")]
+        assert len(lines) >= 3  # 2 content + 1 metrics + DONE
+        # Check first chunk
+        first = json.loads(lines[0].removeprefix("data: "))
+        assert first["text"] == "hello "
+        assert first["finished"] is False
+        # Check final metrics chunk
+        metrics_line = json.loads(lines[2].removeprefix("data: "))
+        assert metrics_line["finished"] is True
+        assert "metrics" in metrics_line
+        # Check DONE sentinel
+        assert lines[-1] == "data: [DONE]"
+
+
+class TestStreamFramesAnalyze:
+    """Test streaming for /v1/frames/analyze (lines 205, 389-400)."""
+
+    def test_stream_frames_analyze(self, client):
+        import io
+        import trio_core.api.server as server_mod
+        from PIL import Image
+
+        metrics = InferenceMetrics(latency_ms=100.0)
+
+        async def mock_stream_analyze(**kwargs):
+            yield {"text": "a frame", "finished": False}
+            yield {"text": "", "finished": True, "metrics": metrics}
+
+        server_mod._engine.stream_analyze = mock_stream_analyze
+
+        img = Image.new("RGB", (4, 4), (128, 128, 128))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG")
+        buf.seek(0)
+
+        resp = client.post(
+            "/v1/frames/analyze",
+            data={"prompt": "describe", "stream": "true"},
+            files=[("frames", ("f.jpg", buf, "image/jpeg"))],
+        )
+        assert resp.status_code == 200
+        assert "text/event-stream" in resp.headers["content-type"]
+
+        lines = [l for l in resp.text.strip().split("\n") if l.startswith("data: ")]
+        assert len(lines) >= 2
+        assert lines[-1] == "data: [DONE]"
+
+
+class TestStreamChatCompletions:
+    """Test streaming for /v1/chat/completions (lines 244, 412-451)."""
+
+    def test_stream_chat_completions(self, client):
+        import trio_core.api.server as server_mod
+
+        metrics = InferenceMetrics(
+            prompt_tokens=50, completion_tokens=10, latency_ms=150.0
+        )
+
+        async def mock_stream_analyze(**kwargs):
+            yield {"text": "The video ", "finished": False}
+            yield {"text": "shows a cat.", "finished": False}
+            yield {"text": "", "finished": True, "metrics": metrics}
+
+        server_mod._engine.stream_analyze = mock_stream_analyze
+
+        resp = client.post(
+            "/v1/chat/completions",
+            json={
+                "stream": True,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "video", "video": "/tmp/test.mp4"},
+                            {"type": "text", "text": "What is this?"},
+                        ],
+                    }
+                ],
+            },
+        )
+        assert resp.status_code == 200
+        assert "text/event-stream" in resp.headers["content-type"]
+
+        lines = [l for l in resp.text.strip().split("\n") if l.startswith("data: ")]
+        # First line should be role chunk
+        first = json.loads(lines[0].removeprefix("data: "))
+        assert first["choices"][0]["delta"]["role"] == "assistant"
+        # Content chunks
+        second = json.loads(lines[1].removeprefix("data: "))
+        assert second["choices"][0]["delta"]["content"] == "The video "
+        # Last data line should be [DONE]
+        assert lines[-1] == "data: [DONE]"
+        # There should be a finish_reason="stop" chunk
+        all_chunks = [json.loads(l.removeprefix("data: ")) for l in lines if l != "data: [DONE]"]
+        finish_chunks = [c for c in all_chunks if c.get("choices", [{}])[0].get("finish_reason") == "stop"]
+        assert len(finish_chunks) == 1
+
+
+class TestLifespan:
+    """Test app lifespan loads engine (lines 53-60)."""
+
+    @pytest.mark.asyncio
+    async def test_lifespan_loads_engine(self):
+        import trio_core.api.server as server_mod
+        from trio_core.api.server import lifespan, create_app
+
+        app = create_app()
+        saved = server_mod._engine
+        try:
+            server_mod._engine = None
+            with patch("trio_core.api.server.TrioCore") as MockTrioCore:
+                mock_instance = MagicMock()
+                mock_instance._loaded = True
+                mock_instance._backend.backend_name = "mock"
+                mock_instance.health.return_value = {
+                    "status": "ok", "model": "test", "loaded": True, "config": {},
+                }
+                MockTrioCore.return_value = mock_instance
+
+                # Directly invoke the lifespan context manager
+                async with lifespan(app):
+                    # Engine should now be loaded
+                    assert server_mod._engine is mock_instance
+
+                MockTrioCore.assert_called_once()
+                mock_instance.load.assert_called_once()
+        finally:
+            server_mod._engine = saved

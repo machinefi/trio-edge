@@ -112,10 +112,24 @@ class FastVMLXBackend(MLXBackend):
         self, frames: np.ndarray, prompt: str, *,
         max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
     ) -> GenerationResult:
-        """Run inference with mid-stream FastV visual token pruning.
+        """Run inference with mid-stream FastV visual token pruning."""
+        tic = time.perf_counter()
+        y, prompt_cache, prompt_token_count = self._custom_prefill(
+            frames, prompt, temperature, top_p,
+        )
+        prompt_tps = prompt_token_count / max(time.perf_counter() - tic, 1e-9)
 
-        Single-pass: layers 0→N build KV cache, importance extracted at layer N,
-        cache pruned in-place, layers N+1→end continue on shorter sequence.
+        return self._run_ar_decode(
+            y, prompt_cache,
+            max_tokens=max_tokens, temperature=temperature, top_p=top_p,
+            prompt_token_count=prompt_token_count, prompt_tps=prompt_tps,
+        )
+
+    def _custom_prefill(self, frames, prompt, temperature, top_p):
+        """Run FastV mid-stream prefill: vision + prune + remaining layers.
+
+        Returns:
+            (first_token, prompt_cache, prompt_token_count)
         """
         import mlx.core as mx
         from trio_core.generate import make_prompt_cache, make_sampler, maybe_quantize_kv_cache
@@ -141,7 +155,6 @@ class FastVMLXBackend(MLXBackend):
         if grid_thw is not None:
             original_count = adapter.original_token_count(grid_thw)
         else:
-            # Single-image models (InternVL, nanoLLaVA) don't produce grid_thw
             original_count = hidden_states.shape[0]
         compressed_count = hidden_states.shape[0]
 
@@ -151,8 +164,7 @@ class FastVMLXBackend(MLXBackend):
         n_video = mx.sum(input_ids == video_token_id).item()
         visual_token_id = video_token_id if n_video > 0 else image_token_id
 
-        # If ToMe compressed tokens, trim input_ids to match
-        original_input_ids = input_ids  # keep for grid alignment rebuild
+        original_input_ids = input_ids
         if self._tome_wrapper is not None and compressed_count < original_count:
             from trio_core.compressed_backend import CompressedMLXBackend
 
@@ -162,12 +174,10 @@ class FastVMLXBackend(MLXBackend):
                 (1 - compressed_count / max(original_count, 1)) * 100,
             )
 
-            # Compute compressed grid for position IDs
             grid_thw = CompressedMLXBackend._compute_compressed_grid(
                 grid_thw, original_count, compressed_count,
                 spatial_merge_size=adapter.spatial_merge_size,
             )
-            # Align to grid (rounding may change count)
             grid_count = self._original_token_count(grid_thw)
             if grid_count != compressed_count:
                 if grid_count > compressed_count:
@@ -177,9 +187,6 @@ class FastVMLXBackend(MLXBackend):
                     hidden_states = hidden_states[:grid_count]
                 compressed_count = grid_count
 
-            # Trim visual placeholder tokens in input_ids to match final count
-            # Use original_input_ids (has all visual placeholders) so we can
-            # both shrink and grow relative to compressed_count
             ids_list = original_input_ids[0].tolist()
             new_ids = []
             vis_count = 0
@@ -193,16 +200,12 @@ class FastVMLXBackend(MLXBackend):
             input_ids = mx.array([new_ids], dtype=input_ids.dtype)
 
         text_embeds = model.language_model.model.embed_tokens(input_ids)
-
         merge_result = adapter.merge_visual_features(hidden_states, text_embeds, input_ids)
         final_embeds = merge_result.embeds
-
-        # Build visual_mask: True for visual token positions
         visual_mask = (input_ids[0] == visual_token_id)
 
-        # Step 3: Compute position IDs for sequence (uses compressed grid if ToMe active)
+        # Step 3: Compute position IDs
         position_ids = None
-        rope_deltas = None
         if adapter.uses_mrope:
             new_mask = mx.ones(input_ids.shape, dtype=mx.int32)
             kw_grid = {}
@@ -210,12 +213,11 @@ class FastVMLXBackend(MLXBackend):
                 kw_grid["video_grid_thw"] = grid_thw
             else:
                 kw_grid["image_grid_thw"] = grid_thw
-
             position_ids, rope_deltas = adapter.compute_position_ids(
                 input_ids, attention_mask=new_mask, **kw_grid,
             )
 
-        # Warn if Qwen3 deepstack is present — mid-stream doesn't support it yet
+        # Warn if Qwen3 deepstack is present
         if adapter.has_deepstack and deepstack_embeds is not None:
             logger.warning(
                 "[FastV] Qwen3 deepstack_visual_embeds detected but not supported "
@@ -223,7 +225,6 @@ class FastVMLXBackend(MLXBackend):
             )
 
         # Step 4: Create cache and run layers 0→target_layer WITH cache
-        tic = time.perf_counter()
         prompt_cache = make_prompt_cache(model.language_model)
         h, importance = self._run_layers_with_cache(
             model.language_model, final_embeds, visual_mask, prompt_cache,
@@ -235,9 +236,8 @@ class FastVMLXBackend(MLXBackend):
         n_keep = max(4, int(n_visual * (1 - self.prune_ratio)))
 
         keep_visual_indices = mx.argsort(importance)[::-1][:n_keep]
-        keep_visual_indices = mx.sort(keep_visual_indices)  # preserve order
+        keep_visual_indices = mx.sort(keep_visual_indices)
 
-        # Step 6: Build pruned index (all text + kept visual positions)
         _, pruned_ids, all_keep = self._prune_visual_tokens(
             final_embeds, input_ids, visual_mask, keep_visual_indices,
         )
@@ -253,14 +253,12 @@ class FastVMLXBackend(MLXBackend):
             n_visual, n_keep, self._last_prune_log["reduction_pct"],
         )
 
-        # Step 7: Prune KV cache in-place (layers 0..target_layer)
+        # Step 6: Prune KV cache + hidden state
         target_layer = min(self.prune_after_layer, len(model.language_model.model.layers) - 1)
         self._prune_kv_cache(prompt_cache, all_keep, target_layer + 1)
-
-        # Step 8: Prune hidden state to match
         h = h[:, all_keep, :]
 
-        # Step 9: Set position info for AR decode (MRoPE models only)
+        # Step 7: Set position info for AR decode (MRoPE models only)
         if adapter.uses_mrope and position_ids is not None:
             position_ids = position_ids[:, :, all_keep]
             max_pos = position_ids.max()
@@ -268,13 +266,13 @@ class FastVMLXBackend(MLXBackend):
             model.language_model._position_ids = position_ids
             model.language_model._rope_deltas = rope_deltas
 
-        # Step 10: Run remaining layers (target_layer+1 → end) with pruned cache + h
+        # Step 8: Run remaining layers
         start_layer = target_layer + 1
         normed = self._run_remaining_layers(
             model.language_model, h, prompt_cache, start_layer, position_ids,
         )
 
-        # Step 11: Compute logits from normed output
+        # Step 9: Compute logits and sample first token
         lm = model.language_model
         if lm.args.tie_word_embeddings:
             logits_all = lm.model.embed_tokens.as_linear(normed)
@@ -284,9 +282,7 @@ class FastVMLXBackend(MLXBackend):
 
         quantize_cache_fn = functools.partial(
             maybe_quantize_kv_cache,
-            quantized_kv_start=5000,
-            kv_group_size=64,
-            kv_bits=None,
+            quantized_kv_start=5000, kv_group_size=64, kv_bits=None,
         )
         quantize_cache_fn(prompt_cache)
 
@@ -295,72 +291,7 @@ class FastVMLXBackend(MLXBackend):
         y = sampler(logprobs)
         mx.eval(y)
 
-        prompt_time = time.perf_counter() - tic
-        prompt_token_count = pruned_ids.size
-        prompt_tps = prompt_token_count / max(prompt_time, 1e-9)
-
-        tokenizer = self._processor.tokenizer if hasattr(self._processor, "tokenizer") else self._processor
-        if hasattr(tokenizer, "stopping_criteria"):
-            tokenizer.stopping_criteria.reset(model.config.eos_token_id)
-        eos_token_id = getattr(model.config, "eos_token_id", None)
-
-        has_detokenizer = hasattr(self._processor, "detokenizer")
-        if has_detokenizer:
-            detokenizer = self._processor.detokenizer
-            detokenizer.reset()
-
-        # Decode loop
-        tic = time.perf_counter()
-        text = ""
-        token_ids = []
-        n_generated = 0
-
-        for n_generated in range(max_tokens):
-            token_val = y.item()
-            if hasattr(tokenizer, "stopping_criteria") and tokenizer.stopping_criteria(token_val):
-                break
-            if eos_token_id is not None:
-                if isinstance(eos_token_id, list) and token_val in eos_token_id:
-                    break
-                elif token_val == eos_token_id:
-                    break
-
-            if has_detokenizer:
-                detokenizer.add_token(token_val)
-                text += detokenizer.last_segment
-            else:
-                token_ids.append(token_val)
-
-            outputs = model.language_model(y[None], cache=prompt_cache)
-            logits = outputs.logits[:, -1, :]
-            quantize_cache_fn(prompt_cache)
-            logprobs = logits - mx.logsumexp(logits)
-            y = sampler(logprobs)
-            mx.eval(y)
-
-            if n_generated % 256 == 0:
-                mx.clear_cache()
-
-        if has_detokenizer:
-            detokenizer.finalize()
-            text += detokenizer.last_segment
-        else:
-            text = tokenizer.decode(token_ids)
-
-        n_generated = max(n_generated, 1)
-        decode_time = time.perf_counter() - tic
-        generation_tps = n_generated / max(decode_time, 1e-9)
-
-        mx.clear_cache()
-
-        return GenerationResult(
-            text=text.strip(),
-            prompt_tokens=prompt_token_count,
-            completion_tokens=n_generated,
-            prompt_tps=prompt_tps,
-            generation_tps=generation_tps,
-            peak_memory=mx.get_peak_memory() / 1e9,
-        )
+        return y, prompt_cache, pruned_ids.size
 
     # ── Mid-stream helpers ──────────────────────────────────────────────────
 
@@ -596,12 +527,14 @@ class FastVMLXBackend(MLXBackend):
         self, frames: np.ndarray, prompt: str, *,
         max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
     ) -> Generator[StreamChunk, None, None]:
-        result = self.generate(frames, prompt, max_tokens=max_tokens,
-                               temperature=temperature, top_p=top_p)
-        yield StreamChunk(
-            text=result.text, finished=True,
-            prompt_tokens=result.prompt_tokens,
-            completion_tokens=result.completion_tokens,
+        """Real token-by-token streaming with FastV prefill."""
+        y, prompt_cache, prompt_token_count = self._custom_prefill(
+            frames, prompt, temperature, top_p,
+        )
+        yield from self._run_ar_stream_decode(
+            y, prompt_cache,
+            max_tokens=max_tokens, temperature=temperature, top_p=top_p,
+            prompt_token_count=prompt_token_count,
         )
 
     @property

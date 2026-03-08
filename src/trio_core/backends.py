@@ -223,31 +223,30 @@ class MLXBackend(BaseBackend):
             budget, prototype_ratio, n_sink_tokens,
         )
 
-    def generate(
-        self, frames: np.ndarray, prompt: str, *,
+    # ── Unified decode loop (shared by all MLX backend subclasses) ───────
+
+    def _run_generate(
+        self, input_ids, pixel_values, mask, *,
         max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
+        inputs_embeds=None, **extra_kwargs,
     ) -> GenerationResult:
+        """Unified generate: tokenizer init + generate_step + detokenize + TPS.
+
+        Subclasses override generate() to prepare inputs, then call this.
+        """
         import mlx.core as mx
         from trio_core.generate import generate_step, _wired_limit
-
-        formatted, kwargs = self._prepare(frames, prompt)
-
-        input_ids = kwargs.pop("input_ids")
-        pixel_values = kwargs.pop("pixel_values")
-        mask = kwargs.pop("mask")
 
         tokenizer = (
             self._processor.tokenizer
             if hasattr(self._processor, "tokenizer")
             else self._processor
         )
-        # Detokenizer: mlx-vlm processor has .detokenizer, native uses tokenizer.decode
         has_detokenizer = hasattr(self._processor, "detokenizer")
         if has_detokenizer:
             detokenizer = self._processor.detokenizer
             detokenizer.reset()
 
-        # Reset stopping criteria
         if hasattr(tokenizer, "stopping_criteria"):
             tokenizer.stopping_criteria.reset(self._model.config.eos_token_id)
 
@@ -267,7 +266,8 @@ class MLXBackend(BaseBackend):
                     prompt_cache_manager=self._get_prompt_cache(),
                     early_stop=self._early_stop,
                     visual_similarity_threshold=self._visual_similarity_threshold,
-                    **kwargs,
+                    inputs_embeds=inputs_embeds,
+                    **extra_kwargs,
                 )
             ):
                 if n == 0:
@@ -278,7 +278,6 @@ class MLXBackend(BaseBackend):
                 if hasattr(tokenizer, "stopping_criteria") and tokenizer.stopping_criteria(token):
                     break
 
-                # Check EOS for native path
                 if eos_token_id is not None and not has_detokenizer:
                     if isinstance(eos_token_id, list):
                         if token in eos_token_id:
@@ -310,18 +309,17 @@ class MLXBackend(BaseBackend):
             peak_memory=mx.get_peak_memory() / 1e9 if hasattr(mx, "get_peak_memory") else 0.0,
         )
 
-    def stream_generate(
-        self, frames: np.ndarray, prompt: str, *,
+    def _run_stream_generate(
+        self, input_ids, pixel_values, mask, *,
         max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
+        inputs_embeds=None, **extra_kwargs,
     ) -> Generator[StreamChunk, None, None]:
+        """Unified streaming: tokenizer init + generate_step + yield chunks.
+
+        Subclasses override stream_generate() to prepare inputs, then call this.
+        """
         import mlx.core as mx
         from trio_core.generate import generate_step, _wired_limit
-
-        formatted, kwargs = self._prepare(frames, prompt)
-
-        input_ids = kwargs.pop("input_ids")
-        pixel_values = kwargs.pop("pixel_values")
-        mask = kwargs.pop("mask")
 
         tokenizer = (
             self._processor.tokenizer
@@ -338,6 +336,8 @@ class MLXBackend(BaseBackend):
 
         eos_token_id = getattr(self._model.config, "eos_token_id", None)
         token_ids = []
+        prev_text = ""
+        n = 0
 
         with _wired_limit(self._model):
             for n, (token, logprobs) in enumerate(
@@ -347,7 +347,8 @@ class MLXBackend(BaseBackend):
                     prompt_cache_manager=self._get_prompt_cache(),
                     early_stop=self._early_stop,
                     visual_similarity_threshold=self._visual_similarity_threshold,
-                    **kwargs,
+                    inputs_embeds=inputs_embeds,
+                    **extra_kwargs,
                 )
             ):
                 if hasattr(tokenizer, "stopping_criteria") and tokenizer.stopping_criteria(token):
@@ -369,9 +370,11 @@ class MLXBackend(BaseBackend):
                     )
                 else:
                     token_ids.append(token)
-                    text = tokenizer.decode(token_ids, skip_special_tokens=True)
+                    new_text = tokenizer.decode(token_ids, skip_special_tokens=True)
+                    delta = new_text[len(prev_text):]
+                    prev_text = new_text
                     yield StreamChunk(
-                        text=text,
+                        text=delta,
                         prompt_tokens=input_ids.size,
                         completion_tokens=n + 1,
                     )
@@ -387,6 +390,217 @@ class MLXBackend(BaseBackend):
                     )
 
             mx.clear_cache()
+
+    # ── AR decode loop (for backends with custom prefill) ─────────────
+
+    def _run_ar_decode(
+        self, first_token, prompt_cache, *,
+        max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
+        prompt_token_count: int = 0, prompt_tps: float = 0.0,
+    ) -> GenerationResult:
+        """Autoregressive decode loop for backends that do their own prefill.
+
+        Args:
+            first_token: The first sampled token (mx.array scalar).
+            prompt_cache: Populated KV cache from custom prefill.
+            prompt_token_count: Number of prompt tokens (for metrics).
+            prompt_tps: Prompt throughput (for metrics).
+        """
+        import functools
+        import mlx.core as mx
+        from trio_core.generate import make_sampler, maybe_quantize_kv_cache
+
+        tokenizer = (
+            self._processor.tokenizer
+            if hasattr(self._processor, "tokenizer")
+            else self._processor
+        )
+        has_detokenizer = hasattr(self._processor, "detokenizer")
+        if has_detokenizer:
+            detokenizer = self._processor.detokenizer
+            detokenizer.reset()
+
+        if hasattr(tokenizer, "stopping_criteria"):
+            tokenizer.stopping_criteria.reset(self._model.config.eos_token_id)
+
+        eos_token_id = getattr(self._model.config, "eos_token_id", None)
+        sampler = make_sampler(temperature, top_p)
+        quantize_cache_fn = functools.partial(
+            maybe_quantize_kv_cache,
+            quantized_kv_start=5000, kv_group_size=64, kv_bits=None,
+        )
+
+        token_ids = []
+        y = first_token
+        tic = time.perf_counter()
+        n_generated = 0
+
+        for n_generated in range(max_tokens):
+            tok = y.item()
+
+            if hasattr(tokenizer, "stopping_criteria") and tokenizer.stopping_criteria(tok):
+                break
+
+            if eos_token_id is not None and not has_detokenizer:
+                if isinstance(eos_token_id, list):
+                    if tok in eos_token_id:
+                        break
+                elif tok == eos_token_id:
+                    break
+
+            if has_detokenizer:
+                detokenizer.add_token(tok)
+            else:
+                token_ids.append(tok)
+
+            outputs = self._model.language_model(y[None], cache=prompt_cache)
+            logits = outputs.logits[:, -1, :]
+            quantize_cache_fn(prompt_cache)
+            logprobs = logits - mx.logsumexp(logits)
+            y = sampler(logprobs)
+            mx.eval(y)
+
+            if n_generated % 256 == 0:
+                mx.clear_cache()
+
+        if has_detokenizer:
+            detokenizer.finalize()
+            text = detokenizer.text
+        else:
+            text = tokenizer.decode(token_ids, skip_special_tokens=True)
+
+        n_generated = max(n_generated, 1)
+        decode_time = time.perf_counter() - tic
+        generation_tps = n_generated / max(decode_time, 1e-9)
+
+        mx.clear_cache()
+
+        return GenerationResult(
+            text=text.strip(),
+            prompt_tokens=prompt_token_count,
+            completion_tokens=n_generated,
+            prompt_tps=prompt_tps,
+            generation_tps=generation_tps,
+            peak_memory=mx.get_peak_memory() / 1e9 if hasattr(mx, "get_peak_memory") else 0.0,
+        )
+
+    def _run_ar_stream_decode(
+        self, first_token, prompt_cache, *,
+        max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
+        prompt_token_count: int = 0,
+    ) -> Generator[StreamChunk, None, None]:
+        """Streaming AR decode for backends with custom prefill."""
+        import functools
+        import mlx.core as mx
+        from trio_core.generate import make_sampler, maybe_quantize_kv_cache
+
+        tokenizer = (
+            self._processor.tokenizer
+            if hasattr(self._processor, "tokenizer")
+            else self._processor
+        )
+        has_detokenizer = hasattr(self._processor, "detokenizer")
+        if has_detokenizer:
+            detokenizer = self._processor.detokenizer
+            detokenizer.reset()
+
+        if hasattr(tokenizer, "stopping_criteria"):
+            tokenizer.stopping_criteria.reset(self._model.config.eos_token_id)
+
+        eos_token_id = getattr(self._model.config, "eos_token_id", None)
+        sampler = make_sampler(temperature, top_p)
+        quantize_cache_fn = functools.partial(
+            maybe_quantize_kv_cache,
+            quantized_kv_start=5000, kv_group_size=64, kv_bits=None,
+        )
+
+        token_ids = []
+        prev_text = ""
+        y = first_token
+        n_generated = 0
+
+        for n_generated in range(max_tokens):
+            tok = y.item()
+
+            if hasattr(tokenizer, "stopping_criteria") and tokenizer.stopping_criteria(tok):
+                break
+
+            if eos_token_id is not None and not has_detokenizer:
+                if isinstance(eos_token_id, list):
+                    if tok in eos_token_id:
+                        break
+                elif tok == eos_token_id:
+                    break
+
+            if has_detokenizer:
+                detokenizer.add_token(tok)
+                yield StreamChunk(
+                    text=detokenizer.last_segment,
+                    prompt_tokens=prompt_token_count,
+                    completion_tokens=n_generated + 1,
+                )
+            else:
+                token_ids.append(tok)
+                new_text = tokenizer.decode(token_ids, skip_special_tokens=True)
+                delta = new_text[len(prev_text):]
+                prev_text = new_text
+                yield StreamChunk(
+                    text=delta,
+                    prompt_tokens=prompt_token_count,
+                    completion_tokens=n_generated + 1,
+                )
+
+            outputs = self._model.language_model(y[None], cache=prompt_cache)
+            logits = outputs.logits[:, -1, :]
+            quantize_cache_fn(prompt_cache)
+            logprobs = logits - mx.logsumexp(logits)
+            y = sampler(logprobs)
+            mx.eval(y)
+
+            if n_generated % 256 == 0:
+                mx.clear_cache()
+
+        if has_detokenizer:
+            detokenizer.finalize()
+            if detokenizer.last_segment:
+                yield StreamChunk(
+                    text=detokenizer.last_segment,
+                    prompt_tokens=prompt_token_count,
+                    completion_tokens=n_generated + 1,
+                    finished=True,
+                )
+
+        mx.clear_cache()
+
+    # ── Public generate/stream_generate (thin wrappers) ───────────────
+
+    def generate(
+        self, frames: np.ndarray, prompt: str, *,
+        max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
+    ) -> GenerationResult:
+        formatted, kwargs = self._prepare(frames, prompt)
+        input_ids = kwargs.pop("input_ids")
+        pixel_values = kwargs.pop("pixel_values")
+        mask = kwargs.pop("mask")
+        return self._run_generate(
+            input_ids, pixel_values, mask,
+            max_tokens=max_tokens, temperature=temperature, top_p=top_p,
+            **kwargs,
+        )
+
+    def stream_generate(
+        self, frames: np.ndarray, prompt: str, *,
+        max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
+    ) -> Generator[StreamChunk, None, None]:
+        formatted, kwargs = self._prepare(frames, prompt)
+        input_ids = kwargs.pop("input_ids")
+        pixel_values = kwargs.pop("pixel_values")
+        mask = kwargs.pop("mask")
+        return self._run_stream_generate(
+            input_ids, pixel_values, mask,
+            max_tokens=max_tokens, temperature=temperature, top_p=top_p,
+            **kwargs,
+        )
 
     def _prepare(self, frames: np.ndarray, prompt: str) -> tuple[str, dict]:
         """Route to video or image preparation based on model capability."""

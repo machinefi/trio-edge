@@ -238,24 +238,33 @@ def _register_routes(app: FastAPI) -> None:
         temperature = request.temperature if request.temperature is not None else engine.config.temperature
 
         # Resolve media source: base64 data URI → temp file, or path/URL as-is
-        source = _resolve_media(media[0])
+        source, temp_path = _resolve_media(media[0])
 
         if request.stream:
+            async def _stream_with_cleanup():
+                try:
+                    async for chunk in _stream_chat_completion(engine, source, prompt, request, max_tokens, temperature):
+                        yield chunk
+                finally:
+                    _cleanup_temp(temp_path)
             return StreamingResponse(
-                _stream_chat_completion(engine, source, prompt, request, max_tokens, temperature),
+                _stream_with_cleanup(),
                 media_type="text/event-stream",
             )
 
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            None,
-            lambda: engine.analyze_video(
-                video=source,
-                prompt=prompt,
-                max_tokens=max_tokens,
-                temperature=temperature,
-            ),
-        )
+        try:
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None,
+                lambda: engine.analyze_video(
+                    video=source,
+                    prompt=prompt,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                ),
+            )
+        finally:
+            _cleanup_temp(temp_path)
 
         return ChatCompletionResponse(
             model=engine.config.model,
@@ -327,12 +336,16 @@ def _extract_from_messages(messages: list[ChatMessage]) -> tuple[list[str], str]
     return media, " ".join(texts) if texts else "Describe this video."
 
 
-def _resolve_media(source: str) -> str:
+def _resolve_media(source: str) -> tuple[str, str | None]:
     """Resolve media source to a file path.
 
     Handles:
     - base64 data URI (data:image/jpeg;base64,...) → temp file
     - file path or URL → returned as-is
+
+    Returns:
+        (path, temp_path) — temp_path is set if a temp file was created,
+        caller should clean it up after use.
     """
     if source.startswith("data:"):
         import base64
@@ -351,13 +364,20 @@ def _resolve_media(source: str) -> str:
         tmp.write(base64.b64decode(data))
         tmp.close()
 
-        # Register for cleanup
-        from trio_core.video import _TEMP_FILES
-        _TEMP_FILES.append(tmp.name)
+        return tmp.name, tmp.name
 
-        return tmp.name
+    return source, None
 
-    return source
+
+def _cleanup_temp(temp_path: str | None) -> None:
+    """Remove a temp file if it exists."""
+    if temp_path is None:
+        return
+    import os
+    try:
+        os.unlink(temp_path)
+    except OSError:
+        pass
 
 
 async def _stream_video_analyze(

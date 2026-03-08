@@ -8,7 +8,6 @@ early stopping, and other features.
 from __future__ import annotations
 
 import logging
-import time
 from typing import Generator
 
 import numpy as np
@@ -213,100 +212,27 @@ class ToMeMLXBackend(MLXBackend):
         max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
     ) -> GenerationResult:
         """Run inference with ToMe-compressed vision tokens."""
-        import mlx.core as mx
-        from trio_core.generate import generate_step, _wired_limit
-
         formatted, kwargs = self._prepare(frames, prompt)
 
         input_ids = kwargs.pop("input_ids")
         pixel_values = kwargs.pop("pixel_values")
         mask = kwargs.pop("mask")
 
-        # Steps 1-2: ToMe vision encoding + compressed embedding
         final_embeds, new_input_ids, extra_kwargs = self._prepare_tome_embeds(
             input_ids, pixel_values, kwargs,
         )
         kwargs.update(extra_kwargs)
 
-        # Step 3: Delegate to generate_step for prefill + decode
-        tokenizer = (
-            self._processor.tokenizer
-            if hasattr(self._processor, "tokenizer")
-            else self._processor
-        )
-        has_detokenizer = hasattr(self._processor, "detokenizer")
-        if has_detokenizer:
-            detokenizer = self._processor.detokenizer
-            detokenizer.reset()
-
-        if hasattr(tokenizer, "stopping_criteria"):
-            tokenizer.stopping_criteria.reset(self._model.config.eos_token_id)
-
-        text = ""
-        prompt_tps = 0.0
-        generation_tps = 0.0
-        n_tokens = 0
-        token_ids = []
-        eos_token_id = getattr(self._model.config, "eos_token_id", None)
-
-        with _wired_limit(self._model):
-            tic = time.perf_counter()
-            for n, (token, logprobs) in enumerate(
-                generate_step(
-                    new_input_ids, self._model, pixel_values, mask,
-                    inputs_embeds=final_embeds,
-                    max_tokens=max_tokens, temperature=temperature, top_p=top_p,
-                    prompt_cache_manager=self._get_prompt_cache(),
-                    early_stop=self._early_stop,
-                    visual_similarity_threshold=self._visual_similarity_threshold,
-                    **kwargs,
-                )
-            ):
-                if n == 0:
-                    prompt_time = time.perf_counter() - tic
-                    prompt_tps = new_input_ids.size / max(prompt_time, 1e-9)
-                    tic = time.perf_counter()
-
-                if hasattr(tokenizer, "stopping_criteria") and tokenizer.stopping_criteria(token):
-                    break
-
-                if eos_token_id is not None and not has_detokenizer:
-                    if isinstance(eos_token_id, list):
-                        if token in eos_token_id:
-                            break
-                    elif token == eos_token_id:
-                        break
-
-                if has_detokenizer:
-                    detokenizer.add_token(token)
-                else:
-                    token_ids.append(token)
-                n_tokens = n + 1
-
-            if has_detokenizer:
-                detokenizer.finalize()
-                text = detokenizer.text
-            else:
-                text = tokenizer.decode(token_ids, skip_special_tokens=True)
-
-            if n_tokens > 0:
-                generation_tps = n_tokens / max(time.perf_counter() - tic, 1e-9)
-
-        return GenerationResult(
-            text=text,
-            prompt_tokens=new_input_ids.size,
-            completion_tokens=n_tokens,
-            prompt_tps=prompt_tps,
-            generation_tps=generation_tps,
-            peak_memory=mx.get_peak_memory() / 1e9 if hasattr(mx, "get_peak_memory") else 0.0,
+        return self._run_generate(
+            new_input_ids, pixel_values, mask,
+            max_tokens=max_tokens, temperature=temperature, top_p=top_p,
+            inputs_embeds=final_embeds, **kwargs,
         )
 
     def stream_generate(
         self, frames: np.ndarray, prompt: str, *,
         max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
     ) -> Generator:
-        from trio_core.generate import generate_step, _wired_limit
-
         formatted, kwargs = self._prepare(frames, prompt)
 
         input_ids = kwargs.pop("input_ids")
@@ -318,49 +244,11 @@ class ToMeMLXBackend(MLXBackend):
         )
         kwargs.update(extra_kwargs)
 
-        tokenizer = (
-            self._processor.tokenizer
-            if hasattr(self._processor, "tokenizer")
-            else self._processor
+        yield from self._run_stream_generate(
+            new_input_ids, pixel_values, mask,
+            max_tokens=max_tokens, temperature=temperature, top_p=top_p,
+            inputs_embeds=final_embeds, **kwargs,
         )
-        detokenizer = self._processor.detokenizer
-        detokenizer.reset()
-
-        if hasattr(tokenizer, "stopping_criteria"):
-            tokenizer.stopping_criteria.reset(self._model.config.eos_token_id)
-
-        n_tokens = 0
-        with _wired_limit(self._model):
-            for n, (token, logprobs) in enumerate(
-                generate_step(
-                    new_input_ids, self._model, pixel_values, mask,
-                    inputs_embeds=final_embeds,
-                    max_tokens=max_tokens, temperature=temperature, top_p=top_p,
-                    prompt_cache_manager=self._get_prompt_cache(),
-                    early_stop=self._early_stop,
-                    visual_similarity_threshold=self._visual_similarity_threshold,
-                    **kwargs,
-                )
-            ):
-                if hasattr(tokenizer, "stopping_criteria") and tokenizer.stopping_criteria(token):
-                    break
-
-                detokenizer.add_token(token)
-                n_tokens = n + 1
-                yield StreamChunk(
-                    text=detokenizer.last_segment,
-                    prompt_tokens=new_input_ids.size,
-                    completion_tokens=n_tokens,
-                )
-
-            detokenizer.finalize()
-            if detokenizer.last_segment:
-                yield StreamChunk(
-                    text=detokenizer.last_segment,
-                    finished=True,
-                    prompt_tokens=new_input_ids.size,
-                    completion_tokens=n_tokens,
-                )
 
     def _original_token_count(self, grid_thw) -> int:
         """Compute expected token count without ToMe (after PatchMerger)."""
