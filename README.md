@@ -54,7 +54,18 @@ print(result.text)  # "A person is walking through the parking lot..."
 print(f"{result.metrics.latency_ms:.0f}ms, {result.metrics.tokens_per_sec:.0f} tok/s")
 ```
 
-### With optimizations
+### Auto-optimize (default)
+
+TrioCore automatically applies benchmark-proven optimizations based on the loaded model. No configuration needed — just load and go.
+
+```python
+engine = TrioCore()
+engine.load()  # auto-applies optimal compression for your model
+```
+
+To disable: `EngineConfig(auto_optimize=False)`
+
+### Manual optimizations
 
 ```python
 from trio_core import TrioCore, EngineConfig

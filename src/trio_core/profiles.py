@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +61,11 @@ class ModelProfile:
 
     # Optimization support
     supports_tome: bool = True  # Whether in-ViT ToMe is applicable
+
+    # Benchmark-proven recommended optimizations (auto-applied when auto_optimize=True).
+    # Keys are EngineConfig field names, values are benchmark-optimal settings.
+    # Example: {"tome_enabled": True, "tome_r": 4} for models where ToMe is best.
+    recommended_optims: dict = field(default_factory=dict)
 
     def compute_visual_tokens(self, frames: int, height: int, width: int) -> int:
         """Compute the number of visual tokens for given video dimensions.
@@ -144,6 +149,8 @@ PROFILES: dict[str, ModelProfile] = {
         kv_heads=2,
         model_size_gb=0.5,
         inference_memory_gb=0.8,
+        # POPE: 93% baseline → 93% compressed_50 (0% drop, 1.09x speedup)
+        recommended_optims={"compress_enabled": True, "compress_ratio": 0.5},
     ),
     "qwen3.5-2b": ModelProfile(
         family="qwen3.5",
@@ -163,6 +170,8 @@ PROFILES: dict[str, ModelProfile] = {
         kv_heads=2,
         model_size_gb=1.5,
         inference_memory_gb=2.0,
+        # POPE: 94% baseline → 93% compressed_50 (-1%, 1.14x speedup)
+        recommended_optims={"compress_enabled": True, "compress_ratio": 0.5},
     ),
     "qwen3.5-4b": ModelProfile(
         family="qwen3.5",
@@ -182,6 +191,8 @@ PROFILES: dict[str, ModelProfile] = {
         kv_heads=4,
         model_size_gb=2.5,
         inference_memory_gb=3.5,
+        # POPE: 90% baseline → 89% compressed_50 (-1%, 1.20x speedup)
+        recommended_optims={"compress_enabled": True, "compress_ratio": 0.5},
     ),
     "qwen3.5-9b": ModelProfile(
         family="qwen3.5",
@@ -201,6 +212,8 @@ PROFILES: dict[str, ModelProfile] = {
         kv_heads=4,
         model_size_gb=5.0,
         inference_memory_gb=7.0,
+        # POPE: 92% baseline → 90% compressed_50 (-2%, 1.25x speedup)
+        recommended_optims={"compress_enabled": True, "compress_ratio": 0.5},
     ),
     "qwen2.5-vl-3b": ModelProfile(
         family="qwen2.5-vl",
@@ -239,6 +252,8 @@ PROFILES: dict[str, ModelProfile] = {
         kv_heads=4,
         model_size_gb=4.5,
         inference_memory_gb=6.0,
+        # POPE: 90% baseline → 92% compressed_40 (+2%!, 1.36x speedup)
+        recommended_optims={"compress_enabled": True, "compress_ratio": 0.4},
     ),
     "qwen3-vl-2b": ModelProfile(
         family="qwen3-vl",
@@ -259,6 +274,8 @@ PROFILES: dict[str, ModelProfile] = {
         model_size_gb=1.5,
         inference_memory_gb=2.0,
         supports_tome=False,    # deepstack re-adds visual embeds, breaks after ToMe merge
+        # POPE: 92% baseline → 92% compressed_50 (0% drop, 1.23x speedup)
+        recommended_optims={"compress_enabled": True, "compress_ratio": 0.5},
     ),
     "qwen3-vl-4b": ModelProfile(
         family="qwen3-vl",
@@ -279,6 +296,8 @@ PROFILES: dict[str, ModelProfile] = {
         model_size_gb=2.5,
         inference_memory_gb=3.5,
         supports_tome=False,    # deepstack re-adds visual embeds, breaks after ToMe merge
+        # POPE: 91% baseline → 88% compressed_50 (-3%, 1.24x speedup)
+        recommended_optims={"compress_enabled": True, "compress_ratio": 0.5},
     ),
     "qwen3-vl-8b": ModelProfile(
         family="qwen3-vl",
@@ -299,6 +318,8 @@ PROFILES: dict[str, ModelProfile] = {
         model_size_gb=5.0,
         inference_memory_gb=7.0,
         supports_tome=False,    # deepstack re-adds visual embeds, breaks after ToMe merge
+        # POPE: 91% baseline → 93% compressed_50 (+2%!, 1.26x speedup)
+        recommended_optims={"compress_enabled": True, "compress_ratio": 0.5},
     ),
     # ── Gemma 3n (edge-first, MatFormer nested architecture) ────────────
     "gemma3n-e2b": ModelProfile(
@@ -481,6 +502,8 @@ PROFILES: dict[str, ModelProfile] = {
         supports_tome=False,    # pixel_shuffle disrupts spatial structure
         model_size_gb=0.6,
         inference_memory_gb=1.0,
+        # POPE: 93% baseline → 94% compressed_50 (+1%!, 1.17x speedup)
+        recommended_optims={"compress_enabled": True, "compress_ratio": 0.5},
     ),
     "internvl3-2b": ModelProfile(
         family="internvl",
@@ -501,6 +524,8 @@ PROFILES: dict[str, ModelProfile] = {
         supports_tome=False,    # pixel_shuffle disrupts spatial structure
         model_size_gb=1.0,
         inference_memory_gb=1.6,
+        # POPE: 95% baseline → 96% compressed_40 (+1%!, 1.31x speedup)
+        recommended_optims={"compress_enabled": True, "compress_ratio": 0.4},
     ),
     # ── FastVLM (Apple: FastViTHD + MLP + Qwen2 LLM) ──────────────────
     "fastvlm-0.5b": ModelProfile(

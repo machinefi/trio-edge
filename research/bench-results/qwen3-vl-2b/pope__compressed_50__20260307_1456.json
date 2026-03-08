@@ -1,0 +1,1019 @@
+{
+  "name": "POPE-random (n=100)",
+  "n_samples": 100,
+  "accuracy": 0.92,
+  "f1": 0.9130434782608696,
+  "yes_rate": 0.42,
+  "avg_latency_ms": 223.46653959015384,
+  "avg_prompt_tokens": 159.77,
+  "total_time_s": 22.348639011383057,
+  "metadata": {
+    "backend": "mlx-compressed",
+    "model": "mlx-community/Qwen3-VL-2B-Instruct-4bit",
+    "device": "Apple M3 Ultra",
+    "max_tokens": 16,
+    "timestamp": "2026-03-07 14:56:29"
+  },
+  "predictions": [
+    {
+      "id": "1",
+      "question": "Is there a snowboard in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|im_start|>0.0",
+      "correct": true,
+      "latency_ms": 294.6872920001624,
+      "prompt_tokens": 165,
+      "category": "random"
+    },
+    {
+      "id": "2",
+      "question": "Is there a car in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>1.",
+      "correct": true,
+      "latency_ms": 228.66687500209082,
+      "prompt_tokens": 164,
+      "category": "random"
+    },
+    {
+      "id": "3",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|im_start|>0.0",
+      "correct": true,
+      "latency_ms": 227.33791700011352,
+      "prompt_tokens": 164,
+      "category": "random"
+    },
+    {
+      "id": "4",
+      "question": "Is there a sandwich in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>1.",
+      "correct": true,
+      "latency_ms": 233.99341600452317,
+      "prompt_tokens": 164,
+      "category": "random"
+    },
+    {
+      "id": "5",
+      "question": "Is there a skis in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|im_start|>1.0",
+      "correct": false,
+      "latency_ms": 230.31366700161016,
+      "prompt_tokens": 165,
+      "category": "random"
+    },
+    {
+      "id": "6",
+      "question": "Is there a couch in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|>",
+      "correct": true,
+      "latency_ms": 231.61358300421853,
+      "prompt_tokens": 164,
+      "category": "random"
+    },
+    {
+      "id": "7",
+      "question": "Is there a truck in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|im_start|>0.0",
+      "correct": true,
+      "latency_ms": 199.9138329993002,
+      "prompt_tokens": 130,
+      "category": "random"
+    },
+    {
+      "id": "8",
+      "question": "Is there a pizza in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>1.",
+      "correct": true,
+      "latency_ms": 198.0354589977651,
+      "prompt_tokens": 130,
+      "category": "random"
+    },
+    {
+      "id": "9",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|im_start|>1.0",
+      "correct": true,
+      "latency_ms": 199.34408299741335,
+      "prompt_tokens": 130,
+      "category": "random"
+    },
+    {
+      "id": "10",
+      "question": "Is there a sink in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|>",
+      "correct": true,
+      "latency_ms": 198.67145900207106,
+      "prompt_tokens": 130,
+      "category": "random"
+    },
+    {
+      "id": "11",
+      "question": "Is there an umbrella in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|im_start|>0.0",
+      "correct": true,
+      "latency_ms": 198.85029199940618,
+      "prompt_tokens": 130,
+      "category": "random"
+    },
+    {
+      "id": "12",
+      "question": "Is there a cell phone in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|im_start|>0.0",
+      "correct": true,
+      "latency_ms": 199.5912090060301,
+      "prompt_tokens": 131,
+      "category": "random"
+    },
+    {
+      "id": "13",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|>",
+      "correct": true,
+      "latency_ms": 229.06454099575058,
+      "prompt_tokens": 164,
+      "category": "random"
+    },
+    {
+      "id": "14",
+      "question": "Is there a sheep in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|>",
+      "correct": true,
+      "latency_ms": 227.6800000036019,
+      "prompt_tokens": 164,
+      "category": "random"
+    },
+    {
+      "id": "15",
+      "question": "Is there a bicycle in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|>",
+      "correct": true,
+      "latency_ms": 227.4711669961107,
+      "prompt_tokens": 164,
+      "category": "random"
+    },
+    {
+      "id": "16",
+      "question": "Is there a broccoli in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|>",
+      "correct": true,
+      "latency_ms": 227.74699999717996,
+      "prompt_tokens": 164,
+      "category": "random"
+    },
+    {
+      "id": "17",
+      "question": "Is there a car in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|>",
+      "correct": false,
+      "latency_ms": 228.3242080011405,
+      "prompt_tokens": 164,
+      "category": "random"
+    },
+    {
+      "id": "18",
+      "question": "Is there a tennis racket in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>61111111111",
+      "correct": true,
+      "latency_ms": 229.3646659963997,
+      "prompt_tokens": 165,
+      "category": "random"
+    },
+    {
+      "id": "19",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|im_start|>1.0",
+      "correct": true,
+      "latency_ms": 227.99933300120756,
+      "prompt_tokens": 164,
+      "category": "random"
+    },
+    {
+      "id": "20",
+      "question": "Is there a teddy bear in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>1.",
+      "correct": true,
+      "latency_ms": 228.71862500323914,
+      "prompt_tokens": 166,
+      "category": "random"
+    },
+    {
+      "id": "21",
+      "question": "Is there a potted plant in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>1.",
+      "correct": true,
+      "latency_ms": 228.13412500545382,
+      "prompt_tokens": 166,
+      "category": "random"
+    },
+    {
+      "id": "22",
+      "question": "Is there a broccoli in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|>",
+      "correct": true,
+      "latency_ms": 227.69737499766052,
+      "prompt_tokens": 164,
+      "category": "random"
+    },
+    {
+      "id": "23",
+      "question": "Is there a car in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>1.",
+      "correct": false,
+      "latency_ms": 227.68245899351314,
+      "prompt_tokens": 164,
+      "category": "random"
+    },
+    {
+      "id": "24",
+      "question": "Is there an orange in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>1.",
+      "correct": true,
+      "latency_ms": 231.16970800037961,
+      "prompt_tokens": 164,
+      "category": "random"
+    },
+    {
+      "id": "25",
+      "question": "Is there a traffic light in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|im_start|>0.0",
+      "correct": true,
+      "latency_ms": 191.45854200178292,
+      "prompt_tokens": 115,
+      "category": "random"
+    },
+    {
+      "id": "26",
+      "question": "Is there a train in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|im_start|>1.0",
+      "correct": true,
+      "latency_ms": 188.34274999971967,
+      "prompt_tokens": 114,
+      "category": "random"
+    },
+    {
+      "id": "27",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|im_start|>0.0",
+      "correct": true,
+      "latency_ms": 188.9808339983574,
+      "prompt_tokens": 114,
+      "category": "random"
+    },
+    {
+      "id": "28",
+      "question": "Is there a surfboard in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|im_start|>0.0",
+      "correct": true,
+      "latency_ms": 189.26741600444075,
+      "prompt_tokens": 115,
+      "category": "random"
+    },
+    {
+      "id": "29",
+      "question": "Is there a car in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|im_start|>0.0",
+      "correct": true,
+      "latency_ms": 189.0157919988269,
+      "prompt_tokens": 114,
+      "category": "random"
+    },
+    {
+      "id": "30",
+      "question": "Is there a kite in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>0.",
+      "correct": true,
+      "latency_ms": 188.3858329965733,
+      "prompt_tokens": 114,
+      "category": "random"
+    },
+    {
+      "id": "31",
+      "question": "Is there a dog in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|im_start|>0.0",
+      "correct": true,
+      "latency_ms": 227.98187500302447,
+      "prompt_tokens": 164,
+      "category": "random"
+    },
+    {
+      "id": "32",
+      "question": "Is there a toaster in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>0.",
+      "correct": true,
+      "latency_ms": 228.018041998439,
+      "prompt_tokens": 164,
+      "category": "random"
+    },
+    {
+      "id": "33",
+      "question": "Is there a dining table in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|im_start|>0.0",
+      "correct": true,
+      "latency_ms": 228.41637500096112,
+      "prompt_tokens": 165,
+      "category": "random"
+    },
+    {
+      "id": "34",
+      "question": "Is there a sports ball in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>1.",
+      "correct": true,
+      "latency_ms": 227.73950000555487,
+      "prompt_tokens": 165,
+      "category": "random"
+    },
+    {
+      "id": "35",
+      "question": "Is there a bed in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>0.",
+      "correct": false,
+      "latency_ms": 228.45416700147325,
+      "prompt_tokens": 164,
+      "category": "random"
+    },
+    {
+      "id": "36",
+      "question": "Is there a book in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>0.",
+      "correct": true,
+      "latency_ms": 227.94441700534662,
+      "prompt_tokens": 164,
+      "category": "random"
+    },
+    {
+      "id": "37",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|>",
+      "correct": true,
+      "latency_ms": 238.01941700367024,
+      "prompt_tokens": 184,
+      "category": "random"
+    },
+    {
+      "id": "38",
+      "question": "Is there a traffic light in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|>",
+      "correct": true,
+      "latency_ms": 237.91725000046426,
+      "prompt_tokens": 185,
+      "category": "random"
+    },
+    {
+      "id": "39",
+      "question": "Is there a spoon in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>66161111111",
+      "correct": false,
+      "latency_ms": 237.21354099689052,
+      "prompt_tokens": 184,
+      "category": "random"
+    },
+    {
+      "id": "40",
+      "question": "Is there a bird in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>0.",
+      "correct": true,
+      "latency_ms": 241.2613339984091,
+      "prompt_tokens": 184,
+      "category": "random"
+    },
+    {
+      "id": "41",
+      "question": "Is there a fork in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|>",
+      "correct": true,
+      "latency_ms": 237.30375000013737,
+      "prompt_tokens": 184,
+      "category": "random"
+    },
+    {
+      "id": "42",
+      "question": "Is there a truck in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>1.",
+      "correct": true,
+      "latency_ms": 238.76524999650428,
+      "prompt_tokens": 184,
+      "category": "random"
+    },
+    {
+      "id": "43",
+      "question": "Is there a tv in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "no<|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|>",
+      "correct": false,
+      "latency_ms": 239.60245800117264,
+      "prompt_tokens": 184,
+      "category": "random"
+    },
+    {
+      "id": "44",
+      "question": "Is there a bowl in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|>",
+      "correct": true,
+      "latency_ms": 237.57124999974621,
+      "prompt_tokens": 184,
+      "category": "random"
+    },
+    {
+      "id": "45",
+      "question": "Is there a toaster in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>0.",
+      "correct": true,
+      "latency_ms": 237.55620799784083,
+      "prompt_tokens": 184,
+      "category": "random"
+    },
+    {
+      "id": "46",
+      "question": "Is there a cow in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|>",
+      "correct": true,
+      "latency_ms": 238.22366699459963,
+      "prompt_tokens": 184,
+      "category": "random"
+    },
+    {
+      "id": "47",
+      "question": "Is there a microwave in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|>",
+      "correct": true,
+      "latency_ms": 237.7126249994035,
+      "prompt_tokens": 184,
+      "category": "random"
+    },
+    {
+      "id": "48",
+      "question": "Is there a laptop in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|>",
+      "correct": true,
+      "latency_ms": 237.16391600464704,
+      "prompt_tokens": 184,
+      "category": "random"
+    },
+    {
+      "id": "49",
+      "question": "Is there a backpack in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|im_start|>0.0",
+      "correct": true,
+      "latency_ms": 228.5712080047233,
+      "prompt_tokens": 164,
+      "category": "random"
+    },
+    {
+      "id": "50",
+      "question": "Is there a cell phone in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>1.",
+      "correct": true,
+      "latency_ms": 228.58504199393792,
+      "prompt_tokens": 165,
+      "category": "random"
+    },
+    {
+      "id": "51",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>1.",
+      "correct": true,
+      "latency_ms": 227.87075000087498,
+      "prompt_tokens": 164,
+      "category": "random"
+    },
+    {
+      "id": "52",
+      "question": "Is there a couch in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|>",
+      "correct": true,
+      "latency_ms": 228.3751659997506,
+      "prompt_tokens": 164,
+      "category": "random"
+    },
+    {
+      "id": "53",
+      "question": "Is there a skis in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|im_start|>0.0",
+      "correct": true,
+      "latency_ms": 227.54395900119562,
+      "prompt_tokens": 165,
+      "category": "random"
+    },
+    {
+      "id": "54",
+      "question": "Is there a tennis racket in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>66111111111",
+      "correct": true,
+      "latency_ms": 226.49899999669287,
+      "prompt_tokens": 165,
+      "category": "random"
+    },
+    {
+      "id": "55",
+      "question": "Is there a bird in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>66191111111",
+      "correct": true,
+      "latency_ms": 240.19229099940276,
+      "prompt_tokens": 184,
+      "category": "random"
+    },
+    {
+      "id": "56",
+      "question": "Is there a fire hydrant in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|>",
+      "correct": true,
+      "latency_ms": 237.9755829970236,
+      "prompt_tokens": 186,
+      "category": "random"
+    },
+    {
+      "id": "57",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|im_start|>0.0",
+      "correct": true,
+      "latency_ms": 236.19454199797474,
+      "prompt_tokens": 184,
+      "category": "random"
+    },
+    {
+      "id": "58",
+      "question": "Is there a bed in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|>",
+      "correct": true,
+      "latency_ms": 238.01970800559502,
+      "prompt_tokens": 184,
+      "category": "random"
+    },
+    {
+      "id": "59",
+      "question": "Is there a boat in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>1.",
+      "correct": true,
+      "latency_ms": 240.18966699804878,
+      "prompt_tokens": 184,
+      "category": "random"
+    },
+    {
+      "id": "60",
+      "question": "Is there a bench in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>1.",
+      "correct": true,
+      "latency_ms": 236.37354200036498,
+      "prompt_tokens": 184,
+      "category": "random"
+    },
+    {
+      "id": "61",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>1.",
+      "correct": true,
+      "latency_ms": 227.31075000046985,
+      "prompt_tokens": 164,
+      "category": "random"
+    },
+    {
+      "id": "62",
+      "question": "Is there a bear in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>1.",
+      "correct": true,
+      "latency_ms": 227.89824999927077,
+      "prompt_tokens": 164,
+      "category": "random"
+    },
+    {
+      "id": "63",
+      "question": "Is there an orange in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>1.",
+      "correct": true,
+      "latency_ms": 230.03266700106906,
+      "prompt_tokens": 164,
+      "category": "random"
+    },
+    {
+      "id": "64",
+      "question": "Is there a cow in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>1.",
+      "correct": true,
+      "latency_ms": 228.28437499993015,
+      "prompt_tokens": 164,
+      "category": "random"
+    },
+    {
+      "id": "65",
+      "question": "Is there a bottle in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>1.",
+      "correct": true,
+      "latency_ms": 227.29249999974854,
+      "prompt_tokens": 164,
+      "category": "random"
+    },
+    {
+      "id": "66",
+      "question": "Is there a bed in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>1.",
+      "correct": true,
+      "latency_ms": 227.6795830039191,
+      "prompt_tokens": 164,
+      "category": "random"
+    },
+    {
+      "id": "67",
+      "question": "Is there a backpack in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|im_start|>0.0",
+      "correct": true,
+      "latency_ms": 227.5854999970761,
+      "prompt_tokens": 164,
+      "category": "random"
+    },
+    {
+      "id": "68",
+      "question": "Is there a potted plant in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|>",
+      "correct": true,
+      "latency_ms": 228.85712500283262,
+      "prompt_tokens": 166,
+      "category": "random"
+    },
+    {
+      "id": "69",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>1.",
+      "correct": true,
+      "latency_ms": 228.51995800010627,
+      "prompt_tokens": 164,
+      "category": "random"
+    },
+    {
+      "id": "70",
+      "question": "Is there a wine glass in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>0.",
+      "correct": true,
+      "latency_ms": 228.7006249971455,
+      "prompt_tokens": 165,
+      "category": "random"
+    },
+    {
+      "id": "71",
+      "question": "Is there a bus in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>0.",
+      "correct": true,
+      "latency_ms": 228.67699999915203,
+      "prompt_tokens": 164,
+      "category": "random"
+    },
+    {
+      "id": "72",
+      "question": "Is there a suitcase in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|>",
+      "correct": true,
+      "latency_ms": 227.67870900133858,
+      "prompt_tokens": 164,
+      "category": "random"
+    },
+    {
+      "id": "73",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>66191111111",
+      "correct": true,
+      "latency_ms": 238.31191700446652,
+      "prompt_tokens": 184,
+      "category": "random"
+    },
+    {
+      "id": "74",
+      "question": "Is there an airplane in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>1.",
+      "correct": true,
+      "latency_ms": 241.1566250011674,
+      "prompt_tokens": 184,
+      "category": "random"
+    },
+    {
+      "id": "75",
+      "question": "Is there a dining table in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>61161111111",
+      "correct": true,
+      "latency_ms": 239.35891699511558,
+      "prompt_tokens": 185,
+      "category": "random"
+    },
+    {
+      "id": "76",
+      "question": "Is there a clock in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>66161111111",
+      "correct": true,
+      "latency_ms": 237.74212499847636,
+      "prompt_tokens": 184,
+      "category": "random"
+    },
+    {
+      "id": "77",
+      "question": "Is there a chair in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|im_start|>0.0",
+      "correct": true,
+      "latency_ms": 238.03208300523693,
+      "prompt_tokens": 184,
+      "category": "random"
+    },
+    {
+      "id": "78",
+      "question": "Is there a horse in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|>",
+      "correct": true,
+      "latency_ms": 239.6751249980298,
+      "prompt_tokens": 184,
+      "category": "random"
+    },
+    {
+      "id": "79",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|im_start|>0.0",
+      "correct": true,
+      "latency_ms": 189.72566700540483,
+      "prompt_tokens": 114,
+      "category": "random"
+    },
+    {
+      "id": "80",
+      "question": "Is there a zebra in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|im_start|>1.0",
+      "correct": true,
+      "latency_ms": 189.30470899795182,
+      "prompt_tokens": 115,
+      "category": "random"
+    },
+    {
+      "id": "81",
+      "question": "Is there a sandwich in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|im_start|>0.0",
+      "correct": false,
+      "latency_ms": 188.88058399898,
+      "prompt_tokens": 114,
+      "category": "random"
+    },
+    {
+      "id": "82",
+      "question": "Is there a tie in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|im_start|>0.0",
+      "correct": true,
+      "latency_ms": 188.8394999987213,
+      "prompt_tokens": 114,
+      "category": "random"
+    },
+    {
+      "id": "83",
+      "question": "Is there a hot dog in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|im_start|>1.0",
+      "correct": true,
+      "latency_ms": 189.69754100544378,
+      "prompt_tokens": 115,
+      "category": "random"
+    },
+    {
+      "id": "84",
+      "question": "Is there a car in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|>",
+      "correct": true,
+      "latency_ms": 188.6210000011488,
+      "prompt_tokens": 114,
+      "category": "random"
+    },
+    {
+      "id": "85",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|im_start|>0.0",
+      "correct": true,
+      "latency_ms": 191.9971669994993,
+      "prompt_tokens": 122,
+      "category": "random"
+    },
+    {
+      "id": "86",
+      "question": "Is there a carrot in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|im_start|>0.0",
+      "correct": true,
+      "latency_ms": 189.57550000050105,
+      "prompt_tokens": 122,
+      "category": "random"
+    },
+    {
+      "id": "87",
+      "question": "Is there a car in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|im_start|>0.0",
+      "correct": true,
+      "latency_ms": 191.61499999609077,
+      "prompt_tokens": 122,
+      "category": "random"
+    },
+    {
+      "id": "88",
+      "question": "Is there a potted plant in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|>",
+      "correct": true,
+      "latency_ms": 189.67787500150735,
+      "prompt_tokens": 124,
+      "category": "random"
+    },
+    {
+      "id": "89",
+      "question": "Is there a frisbee in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|im_start|>0.0",
+      "correct": true,
+      "latency_ms": 190.51362499885727,
+      "prompt_tokens": 124,
+      "category": "random"
+    },
+    {
+      "id": "90",
+      "question": "Is there a chair in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|im_start|>0.0",
+      "correct": true,
+      "latency_ms": 191.64037500013364,
+      "prompt_tokens": 122,
+      "category": "random"
+    },
+    {
+      "id": "91",
+      "question": "Is there a knife in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>66111111111",
+      "correct": true,
+      "latency_ms": 241.4135829967563,
+      "prompt_tokens": 184,
+      "category": "random"
+    },
+    {
+      "id": "92",
+      "question": "Is there a teddy bear in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|im_start|>1.0",
+      "correct": true,
+      "latency_ms": 243.44720799854258,
+      "prompt_tokens": 186,
+      "category": "random"
+    },
+    {
+      "id": "93",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|>",
+      "correct": true,
+      "latency_ms": 241.408041001705,
+      "prompt_tokens": 184,
+      "category": "random"
+    },
+    {
+      "id": "94",
+      "question": "Is there a hot dog in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|><|im_end|>",
+      "correct": true,
+      "latency_ms": 238.64812499959953,
+      "prompt_tokens": 185,
+      "category": "random"
+    },
+    {
+      "id": "95",
+      "question": "Is there a cake in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|im_start|>0.0",
+      "correct": true,
+      "latency_ms": 237.44354199880036,
+      "prompt_tokens": 184,
+      "category": "random"
+    },
+    {
+      "id": "96",
+      "question": "Is there a tie in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>1.",
+      "correct": true,
+      "latency_ms": 238.6055830065743,
+      "prompt_tokens": 184,
+      "category": "random"
+    },
+    {
+      "id": "97",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>0.",
+      "correct": true,
+      "latency_ms": 227.8118749964051,
+      "prompt_tokens": 164,
+      "category": "random"
+    },
+    {
+      "id": "98",
+      "question": "Is there a keyboard in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>1.",
+      "correct": true,
+      "latency_ms": 227.8698330046609,
+      "prompt_tokens": 164,
+      "category": "random"
+    },
+    {
+      "id": "99",
+      "question": "Is there a remote in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>0.",
+      "correct": false,
+      "latency_ms": 227.98054099985166,
+      "prompt_tokens": 164,
+      "category": "random"
+    },
+    {
+      "id": "100",
+      "question": "Is there a frisbee in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|>0.0 seconds><|im_end|>\n<|endoftext|><|im_start|>1.",
+      "correct": true,
+      "latency_ms": 228.36429199378472,
+      "prompt_tokens": 166,
+      "category": "random"
+    }
+  ]
+}
