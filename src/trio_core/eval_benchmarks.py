@@ -1065,6 +1065,11 @@ class BenchmarkRunner:
             latency = (time.perf_counter() - tic) * 1000
 
             pred_text = out.text.strip()
+            # Strip <think>...</think> blocks (Qwen3.5 thinking mode)
+            # Handle both complete and truncated think tags
+            pred_text = re.sub(r"<think>.*?</think>", "", pred_text, flags=re.DOTALL).strip()
+            if pred_text.startswith("<think>"):
+                pred_text = ""  # entirely thinking, no answer produced
             correct = benchmark.judge(sample, pred_text)
 
             result.predictions.append(PredictionResult(

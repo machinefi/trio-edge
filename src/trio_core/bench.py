@@ -646,11 +646,17 @@ class BenchSweep:
                     try:
                         benchmark = get_benchmark(bench_name, max_samples=self.max_samples, **self.benchmark_kwargs)
 
+                        # Thinking models (Qwen3.5) need more tokens for
+                        # multiple-choice benchmarks since <think> tags consume tokens
+                        max_tok = self.max_tokens
+                        if bench_name in ("mmbench", "gqa", "mvbench") and "qwen3.5" in model.key:
+                            max_tok = max(max_tok, 64)
+
                         if is_mlxvlm:
-                            result = _run_mlxvlm_baseline(engine_or_backend, benchmark, max_tokens=self.max_tokens)
+                            result = _run_mlxvlm_baseline(engine_or_backend, benchmark, max_tokens=max_tok)
                         else:
                             from trio_core.eval_benchmarks import BenchmarkRunner
-                            runner = BenchmarkRunner(engine_or_backend, max_tokens=self.max_tokens)
+                            runner = BenchmarkRunner(engine_or_backend, max_tokens=max_tok)
                             result = runner.run(benchmark)
 
                         result.print()
