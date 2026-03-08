@@ -9,9 +9,10 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
 import numpy as np
 
@@ -39,6 +40,9 @@ from trio_core.engine import TrioCore
 logger = logging.getLogger(__name__)
 
 _engine: TrioCore | None = None
+_active_requests: int = 0
+_active_lock = asyncio.Lock()
+_shutdown_event: asyncio.Event | None = None
 
 
 def get_engine() -> TrioCore:
@@ -49,15 +53,48 @@ def get_engine() -> TrioCore:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _engine
+    global _engine, _shutdown_event
+    _shutdown_event = asyncio.Event()
     config = app.state.config if hasattr(app.state, "config") else EngineConfig()
     backend = getattr(app.state, "backend", None)
     _engine = TrioCore(config, backend=backend)
     logger.info("Loading model: %s", config.model)
-    _engine.load()
+    try:
+        _engine.load()
+    except Exception as e:
+        logger.error("Failed to load model %s: %s", config.model, e)
+        raise
     logger.info("Engine ready: backend=%s", _engine._backend.backend_name if _engine._backend else "none")
     yield
-    logger.info("Shutting down")
+    # Graceful shutdown: wait for in-flight requests to finish
+    logger.info("Shutting down — waiting for %d active request(s)...", _active_requests)
+    _shutdown_event.set()
+    for _ in range(300):  # 30s max wait
+        if _active_requests <= 0:
+            break
+        await asyncio.sleep(0.1)
+    if _active_requests > 0:
+        logger.warning("Shutdown with %d request(s) still active", _active_requests)
+    logger.info("Shutdown complete")
+
+
+class _RequestIDMiddleware(BaseHTTPMiddleware):
+    """Add X-Request-ID header and track active requests for graceful shutdown."""
+
+    async def dispatch(self, request: Request, call_next):
+        global _active_requests
+        request_id = request.headers.get("X-Request-ID", uuid.uuid4().hex[:12])
+        request.state.request_id = request_id
+        async with _active_lock:
+            _active_requests += 1
+        try:
+            logger.info("[%s] %s %s", request_id, request.method, request.url.path)
+            response = await call_next(request)
+            response.headers["X-Request-ID"] = request_id
+            return response
+        finally:
+            async with _active_lock:
+                _active_requests -= 1
 
 
 def create_app(config: EngineConfig | None = None, backend: str | None = None) -> FastAPI:
@@ -71,6 +108,22 @@ def create_app(config: EngineConfig | None = None, backend: str | None = None) -
     app.state.config = config or EngineConfig()
     app.state.backend = backend
 
+    # Global exception handler — return structured JSON, never raw 500
+    @app.exception_handler(Exception)
+    async def _global_exception_handler(request: Request, exc: Exception):
+        request_id = getattr(request.state, "request_id", "unknown")
+        logger.error("[%s] Unhandled error: %s", request_id, exc, exc_info=True)
+        if isinstance(exc, MemoryError):
+            return JSONResponse(
+                status_code=507,
+                content={"error": "out_of_memory", "message": "Not enough memory for this request. Try fewer frames or a smaller model.", "request_id": request_id},
+            )
+        return JSONResponse(
+            status_code=500,
+            content={"error": "internal_error", "message": str(exc), "request_id": request_id},
+        )
+
+    app.add_middleware(_RequestIDMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -384,17 +437,21 @@ async def _stream_video_analyze(
     engine: TrioCore, request: VideoAnalyzeRequest
 ) -> AsyncIterator[str]:
     """Stream /v1/video/analyze response as SSE."""
-    async for chunk in engine.stream_analyze(
-        video=request.video,
-        prompt=request.prompt,
-        max_tokens=request.max_tokens,
-        temperature=request.temperature,
-    ):
-        if chunk.get("metrics"):
-            data = {"text": "", "finished": True, "metrics": chunk["metrics"].__dict__}
-        else:
-            data = {"text": chunk["text"], "finished": chunk["finished"]}
-        yield f"data: {json.dumps(data)}\n\n"
+    try:
+        async for chunk in engine.stream_analyze(
+            video=request.video,
+            prompt=request.prompt,
+            max_tokens=request.max_tokens,
+            temperature=request.temperature,
+        ):
+            if chunk.get("metrics"):
+                data = {"text": "", "finished": True, "metrics": chunk["metrics"].__dict__}
+            else:
+                data = {"text": chunk["text"], "finished": chunk["finished"]}
+            yield f"data: {json.dumps(data)}\n\n"
+    except Exception as e:
+        logger.error("Stream error in /v1/video/analyze: %s", e, exc_info=True)
+        yield f"data: {json.dumps({'error': str(e), 'finished': True})}\n\n"
     yield "data: [DONE]\n\n"
 
 
@@ -406,17 +463,21 @@ async def _stream_frames_analyze(
     temperature: float | None,
 ) -> AsyncIterator[str]:
     """Stream /v1/frames/analyze response as SSE."""
-    async for chunk in engine.stream_analyze(
-        video=frames,
-        prompt=prompt,
-        max_tokens=max_tokens,
-        temperature=temperature,
-    ):
-        if chunk.get("metrics"):
-            data = {"text": "", "finished": True, "metrics": chunk["metrics"].__dict__}
-        else:
-            data = {"text": chunk["text"], "finished": chunk["finished"]}
-        yield f"data: {json.dumps(data)}\n\n"
+    try:
+        async for chunk in engine.stream_analyze(
+            video=frames,
+            prompt=prompt,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        ):
+            if chunk.get("metrics"):
+                data = {"text": "", "finished": True, "metrics": chunk["metrics"].__dict__}
+            else:
+                data = {"text": chunk["text"], "finished": chunk["finished"]}
+            yield f"data: {json.dumps(data)}\n\n"
+    except Exception as e:
+        logger.error("Stream error in /v1/frames/analyze: %s", e, exc_info=True)
+        yield f"data: {json.dumps({'error': str(e), 'finished': True})}\n\n"
     yield "data: [DONE]\n\n"
 
 
@@ -441,31 +502,43 @@ async def _stream_chat_completion(
     yield f"data: {first.model_dump_json(exclude_none=True)}\n\n"
 
     # Content chunks
-    async for chunk in engine.stream_analyze(
-        video=video,
-        prompt=prompt,
-        max_tokens=max_tokens,
-        temperature=temperature,
-    ):
-        if chunk.get("finished") and chunk.get("metrics"):
-            # Final chunk with finish_reason
-            final = ChatCompletionChunk(
-                id=response_id,
-                model=model,
-                choices=[StreamChoice(
-                    delta=DeltaContent(content=""),
-                    finish_reason="stop",
-                )],
-            )
-            yield f"data: {final.model_dump_json(exclude_none=True)}\n\n"
-            break
+    try:
+        async for chunk in engine.stream_analyze(
+            video=video,
+            prompt=prompt,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        ):
+            if chunk.get("finished") and chunk.get("metrics"):
+                # Final chunk with finish_reason
+                final = ChatCompletionChunk(
+                    id=response_id,
+                    model=model,
+                    choices=[StreamChoice(
+                        delta=DeltaContent(content=""),
+                        finish_reason="stop",
+                    )],
+                )
+                yield f"data: {final.model_dump_json(exclude_none=True)}\n\n"
+                break
 
-        if chunk.get("text"):
-            content_chunk = ChatCompletionChunk(
-                id=response_id,
-                model=model,
-                choices=[StreamChoice(delta=DeltaContent(content=chunk["text"]))],
-            )
-            yield f"data: {content_chunk.model_dump_json(exclude_none=True)}\n\n"
+            if chunk.get("text"):
+                content_chunk = ChatCompletionChunk(
+                    id=response_id,
+                    model=model,
+                    choices=[StreamChoice(delta=DeltaContent(content=chunk["text"]))],
+                )
+                yield f"data: {content_chunk.model_dump_json(exclude_none=True)}\n\n"
+    except Exception as e:
+        logger.error("Stream error in /v1/chat/completions: %s", e, exc_info=True)
+        error_chunk = ChatCompletionChunk(
+            id=response_id,
+            model=model,
+            choices=[StreamChoice(
+                delta=DeltaContent(content=""),
+                finish_reason="error",
+            )],
+        )
+        yield f"data: {error_chunk.model_dump_json(exclude_none=True)}\n\n"
 
     yield "data: [DONE]\n\n"

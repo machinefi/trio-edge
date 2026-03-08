@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
 
 import typer
 
@@ -106,7 +107,6 @@ def doctor():
         all_ok = False
 
     # ffmpeg (needed for video)
-    import shutil
     ffmpeg = shutil.which("ffmpeg")
     if ffmpeg:
         import subprocess
@@ -117,15 +117,29 @@ def doctor():
         typer.echo("ffmpeg:    ✗ not found → brew install ffmpeg")
         all_ok = False
 
-    # Model cache
+    # Disk space
     typer.echo()
     import os
     cache_dir = os.path.expanduser("~/.cache/huggingface/hub")
+    try:
+        usage = shutil.disk_usage(os.path.dirname(cache_dir))
+        free_gb = usage.free / (1024 ** 3)
+        if free_gb < 5:
+            typer.echo(f"Disk:      ✗ {free_gb:.1f}GB free — need ≥5GB for model downloads")
+            all_ok = False
+        else:
+            typer.echo(f"Disk:      ✓ {free_gb:.1f}GB free")
+    except OSError:
+        typer.echo("Disk:      ? unable to check free space")
+
+    # Model cache
     if os.path.isdir(cache_dir):
         models = [d for d in os.listdir(cache_dir) if d.startswith("models--")]
         typer.echo(f"HF cache:  {cache_dir} ({len(models)} models)")
     else:
-        typer.echo(f"HF cache:  {cache_dir} (empty — model will download on first run)")
+        typer.echo(f"HF cache:  {cache_dir} (empty)")
+        typer.echo("           First run will download the model (~2-5GB for 4-bit, ~15GB for 7B fp16).")
+        typer.echo("           This may take 5-20 minutes depending on your connection.")
 
     typer.echo()
     if all_ok:
@@ -187,7 +201,10 @@ def analyze(
 
     if not json_output:
         typer.echo(f"Loading {config.model}...")
-    engine.load()
+    try:
+        engine.load()
+    except Exception as e:
+        _die_load_error(e, config.model)
 
     if not json_output:
         typer.echo(f"Analyzing {video}...")
@@ -248,7 +265,10 @@ def bench(
 
     engine = TrioCore(config, backend=backend)
     typer.echo(f"Loading {config.model}...")
-    engine.load()
+    try:
+        engine.load()
+    except Exception as e:
+        _die_load_error(e, config.model)
     typer.echo(f"{engine._backend.backend_name} ({engine._backend.device_info.device_name})")
 
     latencies = []
@@ -259,6 +279,25 @@ def bench(
 
     avg = sum(latencies) / len(latencies)
     typer.echo(f"\n{runs} runs, avg {avg:.0f}ms")
+
+
+def _die_load_error(e: Exception, model: str) -> None:
+    """Print a friendly error message for model loading failures and exit."""
+    msg = str(e)
+    typer.echo(f"\n✗ Failed to load model: {model}", err=True)
+    if "does not appear to have" in msg or "404" in msg or "not found" in msg.lower():
+        typer.echo(f"  Model not found on HuggingFace. Check the model ID.", err=True)
+        typer.echo(f"  Example: trio analyze --model mlx-community/Qwen2.5-VL-3B-Instruct-4bit video.mp4", err=True)
+    elif "out of memory" in msg.lower() or "oom" in msg.lower() or isinstance(e, MemoryError):
+        typer.echo(f"  Not enough memory. Try a smaller model (e.g. 3B-4bit).", err=True)
+    elif "connection" in msg.lower() or "timeout" in msg.lower() or "resolve" in msg.lower():
+        typer.echo(f"  Network error — check your internet connection.", err=True)
+    elif "no module" in msg.lower() or isinstance(e, ImportError):
+        typer.echo(f"  Missing dependency: {msg}", err=True)
+        typer.echo(f"  Run: trio doctor", err=True)
+    else:
+        typer.echo(f"  {msg}", err=True)
+    raise typer.Exit(1)
 
 
 if __name__ == "__main__":
