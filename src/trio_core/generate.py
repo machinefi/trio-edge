@@ -487,7 +487,7 @@ class PromptCache:
         import numpy as np
         h = hashlib.md5(np.array(input_ids.flatten(), copy=False).tobytes(), usedforsecurity=False)
         if pixel_values is not None and pixel_values.size > 0:
-            flat = np.array(pixel_values.flatten(), copy=False)
+            flat = np.array(pixel_values.reshape(-1), copy=False)
             n = flat.shape[0]
             # Encode shape for collision resistance
             h.update(np.array(pixel_values.shape, dtype=np.int64).tobytes())

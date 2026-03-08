@@ -308,19 +308,20 @@ class TrioCore(CallbackMixin):
 
         def _run_sync():
             try:
-                for chunk in self._backend.stream_generate(
-                    frames, prompt,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    top_p=self.config.top_p,
-                ):
-                    chunk_queue.put(chunk)
+                with self._lock:
+                    for chunk in self._backend.stream_generate(
+                        frames, prompt,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                        top_p=self.config.top_p,
+                    ):
+                        chunk_queue.put(chunk)
             except Exception as e:
                 chunk_queue.put(e)
             finally:
                 chunk_queue.put(_sentinel)
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         p_inf = PhaseTimer()
         with p_inf:
             task = loop.run_in_executor(None, _run_sync)
