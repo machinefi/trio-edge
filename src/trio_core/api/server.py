@@ -109,8 +109,12 @@ def create_app(config: EngineConfig | None = None, backend: str | None = None) -
     app.state.backend = backend
 
     # Global exception handler — return structured JSON, never raw 500
+    # Note: HTTPException is handled by FastAPI's built-in handler (correct status codes).
+    # This only catches non-HTTP exceptions that would otherwise produce raw 500s.
     @app.exception_handler(Exception)
     async def _global_exception_handler(request: Request, exc: Exception):
+        if isinstance(exc, HTTPException):
+            raise exc  # let FastAPI handle it with correct status code
         request_id = getattr(request.state, "request_id", "unknown")
         logger.error("[%s] Unhandled error: %s", request_id, exc, exc_info=True)
         if isinstance(exc, MemoryError):

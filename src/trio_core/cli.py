@@ -286,15 +286,15 @@ def _die_load_error(e: Exception, model: str) -> None:
     msg = str(e)
     typer.echo(f"\n✗ Failed to load model: {model}", err=True)
     if "does not appear to have" in msg or "404" in msg or "not found" in msg.lower():
-        typer.echo(f"  Model not found on HuggingFace. Check the model ID.", err=True)
-        typer.echo(f"  Example: trio analyze --model mlx-community/Qwen2.5-VL-3B-Instruct-4bit video.mp4", err=True)
+        typer.echo("  Model not found on HuggingFace. Check the model ID.", err=True)
+        typer.echo("  Example: trio analyze --model mlx-community/Qwen2.5-VL-3B-Instruct-4bit video.mp4", err=True)
     elif "out of memory" in msg.lower() or "oom" in msg.lower() or isinstance(e, MemoryError):
-        typer.echo(f"  Not enough memory. Try a smaller model (e.g. 3B-4bit).", err=True)
+        typer.echo("  Not enough memory. Try a smaller model (e.g. 3B-4bit).", err=True)
     elif "connection" in msg.lower() or "timeout" in msg.lower() or "resolve" in msg.lower():
-        typer.echo(f"  Network error — check your internet connection.", err=True)
+        typer.echo("  Network error — check your internet connection.", err=True)
     elif "no module" in msg.lower() or isinstance(e, ImportError):
         typer.echo(f"  Missing dependency: {msg}", err=True)
-        typer.echo(f"  Run: trio doctor", err=True)
+        typer.echo("  Run: trio doctor", err=True)
     else:
         typer.echo(f"  {msg}", err=True)
     raise typer.Exit(1)

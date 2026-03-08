@@ -52,7 +52,7 @@ CLI/API → engine → backends → generate
 | **P2** | 量化精度 | `generate.py:125-131` | prefix-hit restored cache 可能被二次量化 | 添加 `is_quantized` flag | **S** | 未修复 |
 | **P2** | 多图支持 | `backends.py:643-646` | 单图被 duplicate 为视频，浪费 prefill | 单图走 `_prepare_images` | **S** | 未修复 |
 | **P2** | OOM 估算粗糙 | `backends.py:580-581` | `pixel_bytes * 6` 不考虑模型/KV/ToMe | 更精确估算 | **S** | 未修复 |
-| **P2** | 错误恢复 | `api/server.py` | streaming 异常不保证 temp 清理；中文触发检测失效 | `async with` + i18n | **S** | 未修复 |
+| ~~P2~~ | ~~错误恢复~~ | ~~`api/server.py`~~ | ~~streaming 异常不保证 temp 清理~~ | ~~SSE 错误帧 + 全局异常处理器~~ | ~~S~~ | **已修复** — streaming 错误发送 SSE error event；全局异常返回结构化 JSON；中文触发检测待改进 |
 | **P2** | 可测试性 | `generate.py` | `generate_step` 强依赖 `mx.core`，无法 CPU-only CI | 分离纯逻辑层 | **L** | 未修复 |
 | **P3** | 命名一致性 | 多处 | `prompt_cache` vs `prompt_cache_manager` 混淆 | 统一命名 | **S** | 未修复 |
 | **P3** | 代码重复 | `models/*/language.py` | `get_rope_index()` 三模型 450 行重复 | 提取到共享 mixin | **M** | 未修复 |
@@ -195,5 +195,56 @@ CLI/API → engine → backends → generate
 | 空 `eval_tensors` 保护（无可缓存层时不调用 `mx.eval()`） | OK |
 | `c.offset >= prefix_len` 条件保留 | OK |
 | slice 创建新 array → eval 后脱离原 buffer → 不被后续 mutation 影响 | OK |
+
+403 测试全部通过。
+
+### 第五轮：产品化 — CLI UX + API 服务器稳定性
+
+**变更文件:** `cli.py` (+35 行), `api/server.py` (+112 行, -58 行)
+
+**修改内容:**
+
+1. **A: CLI 模型加载友好错误** (`cli.py:284-300`)
+   - `analyze`、`bench` 命令的 `engine.load()` 包裹 try-catch
+   - `_die_load_error()` 按异常类型输出分类提示：404/OOM/网络/依赖缺失
+   - 输出到 stderr，退出码 1
+
+2. **B: FastAPI 全局异常处理器** (`server.py:112-126`)
+   - `@app.exception_handler(Exception)` 捕获非 HTTP 异常
+   - 返回结构化 JSON `{"error": "...", "message": "...", "request_id": "..."}`
+   - `MemoryError` → 507，其余 → 500
+   - `HTTPException` 透传给 FastAPI 内置处理器（保留正确状态码）
+
+3. **C: Graceful shutdown** (`server.py:69-78`)
+   - 关闭时等待 `_active_requests` 归零，最多 30 秒
+   - 超时后 warning 日志，继续关闭
+
+4. **D: `trio doctor` 磁盘空间 + 下载提示** (`cli.py:120-142`)
+   - `shutil.disk_usage()` 检查可用空间，<5GB 报错
+   - HF cache 为空时显示模型大小和预计下载时间
+
+5. **E: Request ID 中间件** (`server.py:81-97`)
+   - `_RequestIDMiddleware` 生成 `X-Request-ID`（或使用客户端传入的）
+   - 每请求日志 `[request_id] METHOD /path`
+   - 响应头返回 `X-Request-ID`
+   - 同时跟踪 `_active_requests` 用于 graceful shutdown
+
+6. **F: Streaming SSE 错误帧** (`server.py:440-544`)
+   - 3 个 streaming 函数（video_analyze、frames_analyze、chat_completions）包裹 try-catch
+   - 异常时发送 `data: {"error": "...", "finished": true}` 后再发 `[DONE]`
+   - `/v1/chat/completions` 用 `finish_reason="error"` 遵循 OpenAI SSE 协议
+
+**Self-review:**
+
+| 检查项 | 结果 |
+|--------|------|
+| 全局异常处理器不会吃掉 HTTPException（503/400 等） | OK — 首版遗漏，已修复：`isinstance(exc, HTTPException)` 时 re-raise |
+| `_active_requests` 递增/递减在 try/finally 中，不会泄漏 | OK |
+| `_active_lock` 是 `asyncio.Lock`，在异步上下文正确使用 | OK |
+| `_die_load_error` 中无多余 f-string | OK — 首版遗漏，已清理 |
+| `serve` 命令不需要 try-catch（lifespan 中已有，且 uvicorn 会打印错误） | OK |
+| 磁盘空间检查用 `os.path.dirname(cache_dir)` — 即使 hub/ 不存在也能检查父目录 | OK |
+| SSE 错误帧格式与正常帧一致（JSON + `\n\n`），客户端可解析 | OK |
+| `_shutdown_event` 设置了但未被检查 — 目前仅用于标记状态，不阻止新请求 | 可接受 — 后续可在中间件中检查拒绝新请求 |
 
 403 测试全部通过。
