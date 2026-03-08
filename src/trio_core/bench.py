@@ -78,7 +78,7 @@ MODEL_REGISTRY: dict[str, ModelEntry] = {
     "qwen2.5-vl-3b": _entry("qwen2.5-vl-3b", "mlx-community/Qwen2.5-VL-3B-Instruct-4bit"),
     "qwen2.5-vl-7b": _entry("qwen2.5-vl-7b", "mlx-community/Qwen2.5-VL-7B-Instruct-4bit", supports_fastv=False),
     # Qwen3-VL
-    "qwen3-vl-2b": _entry("qwen3-vl-2b", "mlx-community/Qwen3-VL-2B-Instruct-4bit"),
+    "qwen3-vl-2b": _entry("qwen3-vl-2b", "mlx-community/Qwen3-VL-2B-Instruct-4bit", supports_fastv=False),
     "qwen3-vl-4b": _entry("qwen3-vl-4b", "mlx-community/Qwen3-VL-4B-Instruct-4bit"),
     "qwen3-vl-8b": _entry("qwen3-vl-8b", "mlx-community/Qwen3-VL-8B-Instruct-4bit"),
     # Qwen3.5 (DeltaNet hybrid) — FastV incompatible (DeltaNet layers have no self_attn)
@@ -432,11 +432,13 @@ def build_engine(model: ModelEntry, config: OptimConfig, *, max_tokens: int = 16
         return (vlm_model, processor), True
 
     # Build EngineConfig with non-special kwargs
+    # Disable auto_optimize — benchmarks must control optimizations explicitly
     config_kwargs = {
         "model": model.hf_id,
         "max_tokens": max_tokens,
         "dedup_enabled": False,
         "motion_enabled": False,
+        "auto_optimize": False,
     }
     for k, v in kwargs.items():
         if not k.startswith("_"):

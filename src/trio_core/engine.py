@@ -165,6 +165,14 @@ class TrioCore(CallbackMixin):
         # Apply benchmark-proven optimizations from model profile
         self._apply_auto_optimize()
 
+        # Guard: disable FastV if profile says it's not supported
+        if self.config.fastv_enabled and self._profile and not self._profile.supports_fastv:
+            logger.warning(
+                "FastV disabled for %s %s — not supported (profile.supports_fastv=False)",
+                self._profile.family, self._profile.param_size,
+            )
+            self.config.fastv_enabled = False
+
         backend = resolve_backend(self.config, backend_override=self._backend_override)
         self._backend = backend
         self._backend.load()
