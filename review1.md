@@ -1,6 +1,6 @@
 # trio-core VLM 推理引擎全面审查报告 (v2)
 
-## 1. 整体引擎健康度评分：8.0 / 10
+## 1. 整体引擎健康度评分：8.9 / 10
 
 对于一个 ~14.4K LOC 的单人项目，代码质量远超预期。干净的 DAG 依赖、无循环导入、合理的抽象层次。
 
@@ -9,9 +9,9 @@
 | 扣分 | 维度 | 说明 |
 |------|------|------|
 | ~~-1.0~~ | ~~可维护性/代码重复~~ | **已修复**: `_TokenHandler` 类统一 tokenizer init / EOS 检测 / detokenizer 分支，四个 decode loop 共享逻辑。`_frames_to_pil` 提升至 `BaseBackend`。 |
-| **-0.8** | **性能** | 每次 decode step 的 `y.item()` 强制 GPU→CPU 同步（generate.py:980）；~~streaming 模式下 O(n²) decode~~ 非 detokenizer 路径仍存在但已标注为 rare path |
-| **-0.7** | **内存/正确性** | `PromptCache` 持有前一帧完整 `_last_embeds`（generate.py:228-229, 445-449），9B 模型约 ~50MB/帧永驻内存；prefix cache 的 `save_prefix` 做全层 KV slice + `mx.eval`（generate.py:492-497），是同步阻塞点 |
-| **-0.5** | **可维护性** | generate_step 24 参数爆炸；视觉 token ID 探测散布 3 处；`get_rope_index()` 三模型 450 行重复 |
+| **-0.6** | **性能** | 每次 decode step 的 `y.item()` 强制 GPU→CPU 同步（generate.py:980）；~~streaming 模式下 O(n²) decode~~ 非 detokenizer 路径仍存在但已标注为 rare path；~~save_prefix 36 次逐层 sync~~ 已改为 1 次批量 eval |
+| ~~-0.7~~ → **-0.3** | **内存/正确性** | ~~`PromptCache._last_embeds` 永驻内存~~ 已修复（仅启用时存储）；~~save_prefix 同步阻塞~~ 部分修复（eval 不可去除但已批量化）；~~KV cache 碎片~~ 非问题 |
+| ~~-0.5~~ → **-0.2** | **可维护性** | ~~generate_step 24 参数爆炸~~ 已修复；~~视觉 token ID 探测散布~~ 已修复；`get_rope_index()` 三模型 450 行重复仍在 |
 
 ---
 
@@ -46,9 +46,9 @@ CLI/API → engine → backends → generate
 |--------|----------|---------------|------|----------|--------|------|
 | ~~P0~~ | ~~代码重复~~ | ~~`backends.py:228-561`~~ | ~~四个 decode loop 变体 80% 代码相同~~ | ~~抽取 `_TokenHandler`~~ | ~~M~~ | **已修复** |
 | ~~P1~~ | ~~内存泄漏~~ | ~~`generate.py:228,445-449`~~ | ~~`PromptCache._last_embeds` 永驻内存~~ | ~~仅在 visual_similarity 启用时存储~~ | ~~S~~ | **已修复** |
-| **P1** | 同步阻塞 | `generate.py:492-497` | `save_prefix` 对所有层做 KV slice + `mx.eval(k, v)` — 36 层同步点 | 延迟到下次 prefix_hit 时才 eval | **S** | 未修复 |
+| ~~P1~~ | ~~同步阻塞~~ | ~~`generate.py:492-497`~~ | ~~`save_prefix` 对所有层做 KV slice + `mx.eval(k, v)` — 36 层同步点~~ | ~~批量 eval 替代逐层 eval~~ | ~~S~~ | **部分修复** — eval 不可去除（KVCache in-place mutation 需要 materialize），改为批量 `mx.eval(*all_tensors)` 减少 36→1 次 GPU→CPU sync |
 | **P1** | 正确性 | `generate.py:731-734` | `_prefill_suffix` 直接写 `lm._position_ids` — 非线程安全 | 参数传递 position_ids | **M** | 未修复 |
-| **P1** | KV cache 碎片 | `models/base.py:144-194` | `trim` 只移 offset 不释放 buffer | 添加 `compact()` 方法 | **M** | 未修复 |
+| ~~P1~~ | ~~KV cache 碎片~~ | ~~`models/base.py:144-194`~~ | ~~`trim` 只移 offset 不释放 buffer~~ | ~~添加 `compact()` 方法~~ | ~~M~~ | **非问题** — MLX 统一内存模型下保留 buffer 避免重分配是正确策略，`mx.clear_cache()` 处理内存压力 |
 | **P2** | 量化精度 | `generate.py:125-131` | prefix-hit restored cache 可能被二次量化 | 添加 `is_quantized` flag | **S** | 未修复 |
 | **P2** | 多图支持 | `backends.py:643-646` | 单图被 duplicate 为视频，浪费 prefill | 单图走 `_prepare_images` | **S** | 未修复 |
 | **P2** | OOM 估算粗糙 | `backends.py:580-581` | `pixel_bytes * 6` 不考虑模型/KV/ToMe | 更精确估算 | **S** | 未修复 |
@@ -76,7 +76,7 @@ CLI/API → engine → backends → generate
 | # | 目标 | 涉及模块 | 收益 | 风险 | 需 benchmark | 状态 |
 |---|------|----------|------|------|-------------|------|
 | 4 | ~~`GenerateConfig` dataclass 封装 generate_step 参数~~ | `generate.py` | 参数从 24 降到 config+4 | 中 | 否 | **已完成** |
-| 5 | **prefix cache `save_prefix` 异步化** | `generate.py:492-497` | 消除同步阻塞点，prefill TPS ~+10% | 中 | 是 | 待做 |
+| 5 | ~~prefix cache `save_prefix` 批量 eval~~ | `generate.py:524-536` | 36→1 次 GPU sync，减少同步开销 | 低 | 否 | **已完成**（eval 不可去除，改为批量化） |
 
 ### Week 3-4: 架构改进
 
@@ -168,5 +168,32 @@ CLI/API → engine → backends → generate
 | 禁用时 `has_saved_embeds=False` → `may_visual_hit=False` → `check_visual_hit` 永不调用 — 一致 | OK |
 | 启用后首帧无 saved embeds（需 warm-up）— 可接受，原行为也是如此 | OK |
 | 测试中 `save_embeds` 直接调用 PromptCache — 不受 gating 影响 | OK |
+
+403 测试全部通过。
+
+### 第四轮修复：`save_prefix` 批量 eval + KV cache 碎片分析
+
+**变更文件:** `generate.py` (+6 行, -1 行)
+
+**修改内容:**
+
+1. **`save_prefix` 批量 `mx.eval`**
+   - 原逻辑：每层 `mx.eval(k, v)`，36 层 = 36 次 GPU→CPU sync
+   - 新逻辑：收集所有 k/v 到 `eval_tensors` 列表，一次 `mx.eval(*eval_tensors)`
+   - eval 不可去除原因：KVCache `update_and_fetch` 做 in-place mutation (`self.keys[..., prev:offset, :] = keys`)，lazy slice 引用同一 buffer，下次请求会覆盖
+
+2. **KV cache 碎片（G）— 结论：非问题**
+   - `KVCache.trim()` 只回退 offset 不释放 buffer — 这在 MLX 统一内存下是正确策略
+   - 保留 buffer 避免重分配，`mx.clear_cache()` 在真正内存压力时释放
+   - 不需要 `compact()` 方法
+
+**Self-review:**
+
+| 检查项 | 结果 |
+|--------|------|
+| `eval_tensors` 收集 k/v 与 `_prefix_states` append 顺序一致 | OK |
+| 空 `eval_tensors` 保护（无可缓存层时不调用 `mx.eval()`） | OK |
+| `c.offset >= prefix_len` 条件保留 | OK |
+| slice 创建新 array → eval 后脱离原 buffer → 不被后续 mutation 影响 | OK |
 
 403 测试全部通过。

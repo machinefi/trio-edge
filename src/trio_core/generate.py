@@ -521,14 +521,19 @@ class PromptCache:
         self._prefix_position_ids = position_ids
         self._prefix_rope_deltas = rope_deltas
         self._prefix_states = []
+        eval_tensors = []
         for c in kv_cache:
             if hasattr(c, 'keys') and c.keys is not None and c.offset >= prefix_len:
                 k = c.keys[..., :prefix_len, :]
                 v = c.values[..., :prefix_len, :]
-                mx.eval(k, v)
+                eval_tensors.extend([k, v])
                 self._prefix_states.append((k, v))
             else:
                 self._prefix_states.append(None)
+        # Single batched eval instead of per-layer eval — reduces sync overhead
+        # from 36 GPU→CPU round-trips to 1.
+        if eval_tensors:
+            mx.eval(*eval_tensors)
         logger.debug("Prefix saved: %d tokens, %d layers", prefix_len, len(self._prefix_states))
 
     def restore_prefix_cache(self) -> List[Any]:
