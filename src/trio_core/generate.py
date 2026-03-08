@@ -570,6 +570,23 @@ class PromptCache:
                 h.update(flat[::stride][:16384].tobytes())
         return h.hexdigest()
 
+def _get_visual_token_ids(model_config) -> Tuple[Optional[int], Optional[int]]:
+    """Get (image_token_id, video_token_id) from model config.
+
+    Handles naming differences across model families:
+    - Qwen2.5-VL: image_token_id, video_token_id
+    - Qwen3-VL/3.5: image_token_index, video_token_index
+    - InternVL: image_token_index only
+    """
+    img_id = getattr(model_config, 'image_token_id', None)
+    if img_id is None:
+        img_id = getattr(model_config, 'image_token_index', None)
+    vid_id = getattr(model_config, 'video_token_id', None)
+    if vid_id is None:
+        vid_id = getattr(model_config, 'video_token_index', None)
+    return img_id, vid_id
+
+
 def _find_visual_boundary(input_ids: mx.array, model: nn.Module) -> int:
     """Find position of first visual placeholder token in input_ids.
 
@@ -578,12 +595,7 @@ def _find_visual_boundary(input_ids: mx.array, model: nn.Module) -> int:
     """
     import numpy as np
     ids = np.array(input_ids[0])
-    img_id = getattr(model.config, 'image_token_id', None)
-    if img_id is None:
-        img_id = getattr(model.config, 'image_token_index', None)
-    vid_id = getattr(model.config, 'video_token_id', None)
-    if vid_id is None:
-        vid_id = getattr(model.config, 'video_token_index', None)
+    img_id, vid_id = _get_visual_token_ids(model.config)
     for i, tid in enumerate(ids):
         if (img_id is not None and tid == img_id) or (vid_id is not None and tid == vid_id):
             return int(i)
@@ -836,6 +848,7 @@ def _post_prefill_bookkeeping(
     cache_hit: bool,
     full_inputs_embeds: Optional[mx.array],
     kwargs: dict,
+    visual_similarity_threshold: float = 0.0,
 ) -> None:
     """Save state for future cache hits + StreamMem bookkeeping."""
     if prompt_cache_manager is None:
@@ -846,19 +859,17 @@ def _post_prefill_bookkeeping(
         prompt_cache_manager.save_state(
             original_input_ids, y, logprobs, prompt_cache, pixel_values, kwargs=kwargs
         )
-        prompt_cache_manager.save_embeds(full_inputs_embeds, original_input_ids)
+        # Only store full embeddings when visual similarity is enabled —
+        # otherwise this holds ~28MB (9B model) permanently for nothing.
+        if visual_similarity_threshold > 0:
+            prompt_cache_manager.save_embeds(full_inputs_embeds, original_input_ids)
 
     # StreamMem: register frame + evict if over budget
     sm = prompt_cache_manager.streaming_memory
     if sm is not None and not cache_hit and not visual_hit:
         import numpy as np
 
-        img_id = getattr(model.config, 'image_token_id', None)
-        if img_id is None:
-            img_id = getattr(model.config, 'image_token_index', None)
-        vid_id = getattr(model.config, 'video_token_id', None)
-        if vid_id is None:
-            vid_id = getattr(model.config, 'video_token_index', None)
+        img_id, vid_id = _get_visual_token_ids(model.config)
 
         ids_np = np.array(original_input_ids[0])
         n_visual = 0
@@ -1022,6 +1033,7 @@ def generate_step(
         model, original_input_ids, pixel_values, cache_ref[0],
         prompt_cache_manager, y, logprobs, visual_hit,
         resolution.cache_hit, full_inputs_embeds, kwargs,
+        visual_similarity_threshold=visual_similarity_threshold,
     )
 
     # ── Phase 3: Decode loop ──────────────────────────────────────────

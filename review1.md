@@ -35,7 +35,7 @@ CLI/API → engine → backends → generate
 | 1 | ~~Decode loop 四重复制~~ | ~~`backends.py` 330 行~~ | ~~修改 EOS 逻辑需改 4 处~~ | ~~抽取 `_TokenHandler`~~ | **已修复** |
 | 2 | ~~generate_step 参数爆炸~~ | ~~`generate.py:854-878`，24 个参数~~ | ~~任何新功能都要穿透全调用栈~~ | ~~引入 `GenerateConfig` dataclass~~ | **已修复** |
 | 3 | **Backend 直接操作 model internals** | `_prefill_suffix` 写 `lm._position_ids`；FastV 修改 `model.vision_tower` | 多请求并发 race condition | 用 context manager 或 adapter 模式 | 未修复 |
-| 4 | **视觉 token ID 探测散布各处** | `_find_visual_boundary`、`_post_prefill_bookkeeping`、`model_adapter.py` 3 处重复 | 新模型要改多处 | 统一到 config 层 | 未修复 |
+| 4 | ~~视觉 token ID 探测散布各处~~ | ~~`_find_visual_boundary`、`_post_prefill_bookkeeping` 2 处重复~~ | ~~新模型要改多处~~ | ~~提取 `_get_visual_token_ids()`~~ | **已修复** |
 | 5 | ~~`_frames_to_pil` 双重实现~~ | ~~`MLXBackend` 和 `TransformersBackend` 完全一致~~ | ~~改一个忘另一个~~ | ~~提升为 `BaseBackend`~~ | **已修复** |
 
 ---
@@ -45,7 +45,7 @@ CLI/API → engine → backends → generate
 | 优先级 | 问题类型 | 影响模块/文件 | 描述 | 建议修复 | 工作量 | 状态 |
 |--------|----------|---------------|------|----------|--------|------|
 | ~~P0~~ | ~~代码重复~~ | ~~`backends.py:228-561`~~ | ~~四个 decode loop 变体 80% 代码相同~~ | ~~抽取 `_TokenHandler`~~ | ~~M~~ | **已修复** |
-| **P1** | 内存泄漏 | `generate.py:228,445-449` | `PromptCache._last_embeds` 永驻内存，9B 模型约 ~28MB float16 不释放 | 添加 TTL 或保存降维指纹 | **S** | 未修复 |
+| ~~P1~~ | ~~内存泄漏~~ | ~~`generate.py:228,445-449`~~ | ~~`PromptCache._last_embeds` 永驻内存~~ | ~~仅在 visual_similarity 启用时存储~~ | ~~S~~ | **已修复** |
 | **P1** | 同步阻塞 | `generate.py:492-497` | `save_prefix` 对所有层做 KV slice + `mx.eval(k, v)` — 36 层同步点 | 延迟到下次 prefix_hit 时才 eval | **S** | 未修复 |
 | **P1** | 正确性 | `generate.py:731-734` | `_prefill_suffix` 直接写 `lm._position_ids` — 非线程安全 | 参数传递 position_ids | **M** | 未修复 |
 | **P1** | KV cache 碎片 | `models/base.py:144-194` | `trim` 只移 offset 不释放 buffer | 添加 `compact()` 方法 | **M** | 未修复 |
@@ -68,7 +68,8 @@ CLI/API → engine → backends → generate
 |---|------|----------|------|------|-------------|------|
 | 1 | ~~消除 decode loop 四重复制~~ | `backends.py` | 删 ~130 行重复，EOS bug 修一处即可 | 低 | 否 | **已完成** |
 | 2 | ~~修复非 streaming 路径的多余 decode~~ | `backends.py` | 非 streaming `add_token` 不再做 decode | 低 | 否 | **已完成** |
-| 3 | **统一 `visual_token_ids` 获取** | `generate.py` / `model_adapter.py` | 消除 3 处重复 getattr 链 | 极低 | 否 | 待做 |
+| 3 | ~~统一 `visual_token_ids` 获取~~ | `generate.py` | 消除 2 处重复 getattr 链 | 极低 | 否 | **已完成** |
+| 3b | ~~`_last_embeds` 仅在启用时存储~~ | `generate.py` | 默认省 ~28MB 内存 | 极低 | 否 | **已完成** |
 
 ### Week 2: 中等投入
 
@@ -140,3 +141,32 @@ CLI/API → engine → backends → generate
    - `_run_generate` / `_run_stream_generate` 改用 `config=cfg`，generate_step 调用从 7 个 kwargs 降到 4 个
 
 **Self-review:** 无问题。所有旧 kwargs 的默认值与 GenerateConfig 字段默认值完全一致。向后兼容：未传 config 的调用方（如 docstring 示例）行为不变。403 测试全部通过。
+
+### 第三轮修复：视觉 token ID 统一 + `_last_embeds` 内存优化
+
+**变更文件:** `generate.py`
+
+**修改内容:**
+
+1. **新增 `_get_visual_token_ids(model_config)` 工具函数**
+   - 统一处理 `image_token_id` / `image_token_index` / `video_token_id` / `video_token_index` 命名差异
+   - `_find_visual_boundary` 和 `_post_prefill_bookkeeping` 两处 getattr 链替换为单次调用
+   - `model_adapter.py` 中各 adapter 已有自己的 `get_visual_token_ids()`，保持不动
+
+2. **`save_embeds` 仅在 `visual_similarity_threshold > 0` 时调用**
+   - `_post_prefill_bookkeeping` 新增 `visual_similarity_threshold` 参数
+   - 默认 (threshold=0.0) 不存储 `_last_embeds`，9B 模型省 ~28MB 常驻内存
+   - 启用时 (threshold>0) 行为不变
+
+**Self-review:**
+
+| 检查项 | 结果 |
+|--------|------|
+| `_get_visual_token_ids` 返回值顺序 `(img_id, vid_id)` 与两个调用方使用一致 | OK |
+| `_post_prefill_bookkeeping` 新参数有默认值 `0.0`，不破坏任何可能的外部调用 | OK |
+| `generate_step` 中调用 `_post_prefill_bookkeeping` 已传入 `visual_similarity_threshold` | OK |
+| 禁用时 `has_saved_embeds=False` → `may_visual_hit=False` → `check_visual_hit` 永不调用 — 一致 | OK |
+| 启用后首帧无 saved embeds（需 warm-up）— 可接受，原行为也是如此 | OK |
+| 测试中 `save_embeds` 直接调用 PromptCache — 不受 gating 影响 | OK |
+
+403 测试全部通过。
