@@ -300,22 +300,36 @@ class FastVMLXBackend(MLXBackend):
         prompt_tps = prompt_token_count / max(prompt_time, 1e-9)
 
         tokenizer = self._processor.tokenizer if hasattr(self._processor, "tokenizer") else self._processor
-        tokenizer.stopping_criteria.reset(model.config.eos_token_id)
+        if hasattr(tokenizer, "stopping_criteria"):
+            tokenizer.stopping_criteria.reset(model.config.eos_token_id)
+        eos_token_id = getattr(model.config, "eos_token_id", None)
 
-        detokenizer = self._processor.detokenizer
-        detokenizer.reset()
+        has_detokenizer = hasattr(self._processor, "detokenizer")
+        if has_detokenizer:
+            detokenizer = self._processor.detokenizer
+            detokenizer.reset()
 
         # Decode loop
         tic = time.perf_counter()
         text = ""
+        token_ids = []
         n_generated = 0
 
         for n_generated in range(max_tokens):
-            if tokenizer.stopping_criteria(y.item()):
+            token_val = y.item()
+            if hasattr(tokenizer, "stopping_criteria") and tokenizer.stopping_criteria(token_val):
                 break
+            if eos_token_id is not None:
+                if isinstance(eos_token_id, list) and token_val in eos_token_id:
+                    break
+                elif token_val == eos_token_id:
+                    break
 
-            detokenizer.add_token(y.item())
-            text += detokenizer.last_segment
+            if has_detokenizer:
+                detokenizer.add_token(token_val)
+                text += detokenizer.last_segment
+            else:
+                token_ids.append(token_val)
 
             outputs = model.language_model(y[None], cache=prompt_cache)
             logits = outputs.logits[:, -1, :]
@@ -327,8 +341,11 @@ class FastVMLXBackend(MLXBackend):
             if n_generated % 256 == 0:
                 mx.clear_cache()
 
-        detokenizer.finalize()
-        text += detokenizer.last_segment
+        if has_detokenizer:
+            detokenizer.finalize()
+            text += detokenizer.last_segment
+        else:
+            text = tokenizer.decode(token_ids)
 
         n_generated = max(n_generated, 1)
         decode_time = time.perf_counter() - tic

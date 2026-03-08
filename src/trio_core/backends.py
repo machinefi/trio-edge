@@ -421,6 +421,10 @@ class MLXBackend(BaseBackend):
             messages, tokenize=False, add_generation_prompt=True,
         )
 
+        # Disable thinking mode (Qwen3.5 appends <think>\n by default)
+        if formatted.endswith("<think>\n"):
+            formatted = formatted[:-len("<think>\n")]
+
         inputs = self._call_processor(
             text=[formatted], videos=[pil_frames],
         )
@@ -480,6 +484,10 @@ class MLXBackend(BaseBackend):
                 formatted = apply_chat_template(
                     self._processor, self._config, prompt, num_images=len(images),
                 )
+
+        # Disable thinking mode (Qwen3.5 appends <think>\n by default)
+        if formatted.endswith("<think>\n"):
+            formatted = formatted[:-len("<think>\n")]
 
         inputs = self._call_processor(
             text=[formatted], images=images,

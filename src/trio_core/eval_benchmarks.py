@@ -241,7 +241,11 @@ class Benchmark(ABC):
     @staticmethod
     def _normalize(text: str) -> str:
         """Normalize text for yes/no comparison."""
-        text = text.strip().lower()
+        import re
+        # Strip <think>...</think> blocks (Qwen3.5 thinking mode)
+        text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+        # Take only first line to avoid hallucinated continuations
+        text = text.split("\n")[0].strip().lower()
         # Check for yes/no indicators in the full response
         # "Yes, there is..." → yes
         # "There is no..." / "No, there isn't..." → no

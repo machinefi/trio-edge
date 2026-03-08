@@ -258,6 +258,7 @@ PROFILES: dict[str, ModelProfile] = {
         kv_heads=2,
         model_size_gb=1.5,
         inference_memory_gb=2.0,
+        supports_tome=False,    # deepstack re-adds visual embeds, breaks after ToMe merge
     ),
     "qwen3-vl-4b": ModelProfile(
         family="qwen3-vl",
@@ -277,6 +278,7 @@ PROFILES: dict[str, ModelProfile] = {
         kv_heads=4,
         model_size_gb=2.5,
         inference_memory_gb=3.5,
+        supports_tome=False,    # deepstack re-adds visual embeds, breaks after ToMe merge
     ),
     "qwen3-vl-8b": ModelProfile(
         family="qwen3-vl",
@@ -296,6 +298,7 @@ PROFILES: dict[str, ModelProfile] = {
         kv_heads=4,
         model_size_gb=5.0,
         inference_memory_gb=7.0,
+        supports_tome=False,    # deepstack re-adds visual embeds, breaks after ToMe merge
     ),
     # ── Gemma 3n (edge-first, MatFormer nested architecture) ────────────
     "gemma3n-e2b": ModelProfile(
