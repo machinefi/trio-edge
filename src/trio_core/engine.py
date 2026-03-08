@@ -125,13 +125,60 @@ class TrioCore(CallbackMixin):
         self.last_result: VideoResult | None = None
         self.last_frames: np.ndarray | None = None
 
+    def _apply_auto_optimize(self) -> None:
+        """Apply benchmark-proven optimizations from model profile.
+
+        Only applies if auto_optimize=True and user hasn't explicitly
+        enabled any optimization (compress, tome, fastv).
+        """
+        if not self.config.auto_optimize:
+            return
+
+        profile = self._profile
+        if not profile.recommended_optims:
+            return
+
+        # Don't override if user has explicitly configured optimizations
+        user_has_optims = (
+            self.config.compress_enabled
+            or self.config.tome_enabled
+            or self.config.fastv_enabled
+        )
+        if user_has_optims:
+            return
+
+        # Apply recommended settings
+        for key, value in profile.recommended_optims.items():
+            setattr(self.config, key, value)
+
+        logger.info(
+            "Auto-optimize: applied %s for %s %s",
+            profile.recommended_optims, profile.family, profile.param_size,
+        )
+
     def load(self) -> None:
         """Load model — auto-detects hardware and selects best backend."""
         if self._loaded:
             logger.info("Model already loaded: %s", self.config.model)
             return
 
+        # Apply benchmark-proven optimizations from model profile
+        self._apply_auto_optimize()
+
         backend = resolve_backend(self.config, backend_override=self._backend_override)
+
+        # If compressed is enabled, swap to CompressedMLXBackend
+        if self.config.compress_enabled and backend.backend_name == "mlx":
+            from trio_core.compressed_backend import CompressedMLXBackend
+            from trio_core.token_compression import TokenCompressor
+
+            compressor = TokenCompressor(
+                strategy="similarity", ratio=self.config.compress_ratio,
+            )
+            backend = CompressedMLXBackend(
+                self.config.model, compressor, device_info=backend.device_info,
+            )
+
         self._backend = backend
         self._backend.load()
 

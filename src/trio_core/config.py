@@ -97,6 +97,22 @@ class EngineConfig(BaseSettings):
         default=4, description="Number of attention sink tokens to always preserve (StreamingLLM)"
     )
 
+    # Visual token compression (post-encoder)
+    compress_enabled: bool = Field(
+        default=False, description="Enable visual token compression after vision encoder"
+    )
+    compress_ratio: float = Field(
+        default=0.5,
+        description="Fraction of visual tokens to keep (0.3-0.7). Lower = more compression.",
+    )
+
+    # Auto-optimize (apply benchmark-proven settings from model profile)
+    auto_optimize: bool = Field(
+        default=True,
+        description="Auto-apply recommended optimizations from model profile. "
+        "Set to False to use explicit config only.",
+    )
+
     # Cache (Phase 2)
     cache_enabled: bool = Field(default=False, description="Enable video cache")
     cache_max_entries: int = Field(default=50, description="Max cache entries")

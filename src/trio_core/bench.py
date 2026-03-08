@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import gc
 import json
+import logging
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -28,6 +29,8 @@ from pathlib import Path
 from typing import Any
 
 from trio_core.profiles import ModelProfile, get_profile
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # 1. Model Registry
@@ -152,6 +155,12 @@ OPTIM_PRESETS: dict[str, OptimConfig] = {
         engine_kwargs={"fastv_enabled": True, "fastv_ratio": 0.5, "fastv_layer": 2},
         requires=("supports_fastv",),
     ),
+    "fastv_r30": OptimConfig(
+        name="fastv_r30",
+        description="FastV attention pruning (ratio=0.3, layer=2)",
+        engine_kwargs={"fastv_enabled": True, "fastv_ratio": 0.3, "fastv_layer": 2},
+        requires=("supports_fastv",),
+    ),
     "tome_fastv": OptimConfig(
         name="tome_fastv",
         description="ToMe r=4 + FastV combined",
@@ -161,10 +170,43 @@ OPTIM_PRESETS: dict[str, OptimConfig] = {
         },
         requires=("supports_tome", "supports_fastv"),
     ),
+    "compressed_30": OptimConfig(
+        name="compressed_30",
+        description="Post-encoder token compression 30%",
+        engine_kwargs={"_compress": 0.3},
+    ),
+    "compressed_40": OptimConfig(
+        name="compressed_40",
+        description="Post-encoder token compression 40%",
+        engine_kwargs={"_compress": 0.4},
+    ),
     "compressed_50": OptimConfig(
         name="compressed_50",
         description="Post-encoder token compression 50%",
         engine_kwargs={"_compress": 0.5},
+    ),
+    "compressed_60": OptimConfig(
+        name="compressed_60",
+        description="Post-encoder token compression 60%",
+        engine_kwargs={"_compress": 0.6},
+    ),
+    "tome_compressed_50": OptimConfig(
+        name="tome_compressed_50",
+        description="ToMe r=4 + Compressed 50%",
+        engine_kwargs={
+            "tome_enabled": True, "tome_r": 4, "tome_metric": "hidden", "tome_min_keep_ratio": 0.3,
+            "_compress": 0.5,
+        },
+        requires=("supports_tome",),
+    ),
+    "tome_compressed_40": OptimConfig(
+        name="tome_compressed_40",
+        description="ToMe r=4 + Compressed 40%",
+        engine_kwargs={
+            "tome_enabled": True, "tome_r": 4, "tome_metric": "hidden", "tome_min_keep_ratio": 0.3,
+            "_compress": 0.4,
+        },
+        requires=("supports_tome",),
     ),
     "kv_reuse": OptimConfig(
         name="kv_reuse",
@@ -410,6 +452,20 @@ def build_engine(model: ModelEntry, config: OptimConfig, *, max_tokens: int = 16
         compressor = TokenCompressor(strategy="similarity", ratio=ratio)
         backend = CompressedMLXBackend(model.hf_id, compressor)
         backend.load()
+
+        # Apply ToMe wrapping if both compress + tome are requested
+        if kwargs.get("tome_enabled", False):
+            from trio_core.native_vision import create_tome_vision
+            if backend._adapter and backend._adapter.supports_tome:
+                native_vision = create_tome_vision(
+                    backend._model.vision_tower,
+                    tome_r=kwargs.get("tome_r", 4),
+                    metric=kwargs.get("tome_metric", "hidden"),
+                    min_keep_ratio=kwargs.get("tome_min_keep_ratio", 0.3),
+                )
+                backend._model.vision_tower = native_vision
+                logger.info("Compound mode: ToMe (vision) + Compressed %.0f%%", ratio * 100)
+
         engine._backend = backend
         engine._loaded = True
     else:

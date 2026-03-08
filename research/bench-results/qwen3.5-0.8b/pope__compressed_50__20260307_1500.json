@@ -1,0 +1,1019 @@
+{
+  "name": "POPE-random (n=100)",
+  "n_samples": 100,
+  "accuracy": 0.93,
+  "f1": 0.9142857142857144,
+  "yes_rate": 0.55,
+  "avg_latency_ms": 135.22658251946268,
+  "avg_prompt_tokens": 163.75,
+  "total_time_s": 13.524646759033203,
+  "metadata": {
+    "backend": "mlx-compressed",
+    "model": "mlx-community/Qwen3.5-0.8B-MLX-4bit",
+    "device": "Apple M3 Ultra",
+    "max_tokens": 16,
+    "timestamp": "2026-03-07 15:00:20"
+  },
+  "predictions": [
+    {
+      "id": "1",
+      "question": "Is there a snowboard in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|> questions are<|im_end|>\n<|im_start|>\n<think>\n\n</think>\n\n yes",
+      "correct": true,
+      "latency_ms": 210.81887499894947,
+      "prompt_tokens": 169,
+      "category": "random"
+    },
+    {
+      "id": "2",
+      "question": "Is there a car in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> extension<|im_end|>\n<|endoftext|><|im_start|><|im_end|>\n<|endoftext|><|im_start|><|im_end|>",
+      "correct": true,
+      "latency_ms": 138.27791700168746,
+      "prompt_tokens": 168,
+      "category": "random"
+    },
+    {
+      "id": "3",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|> judgment is based on the following:\n1. The",
+      "correct": true,
+      "latency_ms": 137.84258300438523,
+      "prompt_tokens": 168,
+      "category": "random"
+    },
+    {
+      "id": "4",
+      "question": "Is there a sandwich in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> extension<|im_end|>\n<|endoftext|><|im_start|><|im_end|>\n<|endoftext|><|im_start|><|im_end|>",
+      "correct": true,
+      "latency_ms": 136.71887499367585,
+      "prompt_tokens": 168,
+      "category": "random"
+    },
+    {
+      "id": "5",
+      "question": "Is there a skis in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|> judgment is based on the following:\n- The user",
+      "correct": true,
+      "latency_ms": 138.64374999684514,
+      "prompt_tokens": 169,
+      "category": "random"
+    },
+    {
+      "id": "6",
+      "question": "Is there a couch in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> extension<|im_end|>\n<|endoftext|><|im_start|><|im_end|>\n<|endoftext|><|im_start|><|im_end|>",
+      "correct": true,
+      "latency_ms": 137.43724999949336,
+      "prompt_tokens": 168,
+      "category": "random"
+    },
+    {
+      "id": "7",
+      "question": "Is there a truck in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>BJ_F:\nIs there a truck in the image",
+      "correct": true,
+      "latency_ms": 126.35608399432385,
+      "prompt_tokens": 134,
+      "category": "random"
+    },
+    {
+      "id": "8",
+      "question": "Is there a pizza in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> best answer: no<|im_end|>\n<|endoftext|><|im_start|> best answer:",
+      "correct": true,
+      "latency_ms": 125.58362499839859,
+      "prompt_tokens": 134,
+      "category": "random"
+    },
+    {
+      "id": "9",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>\u91c7\u53d6\u4e86\u4ee5\u4e0b\u54ea\u4e2a\u6b65\u9aa4\uff1f\n1. \u8bc6\u522b\u4e86",
+      "correct": true,
+      "latency_ms": 126.21062499965774,
+      "prompt_tokens": 134,
+      "category": "random"
+    },
+    {
+      "id": "10",
+      "question": "Is there a sink in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> extension<|im_end|>\n<|endoftext|><|im_start|> answer<|im_end|>\n<|endoftext|><|im_start|> answer",
+      "correct": true,
+      "latency_ms": 125.16474999574712,
+      "prompt_tokens": 134,
+      "category": "random"
+    },
+    {
+      "id": "11",
+      "question": "Is there an umbrella in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>\u91c7\u53d6\u4e86\u4ee5\u4e0b\u54ea\u4e2a\u6b65\u9aa4\uff1f\n1. \u8bc6\u522b\u56fe\u50cf",
+      "correct": true,
+      "latency_ms": 125.42933399527101,
+      "prompt_tokens": 134,
+      "category": "random"
+    },
+    {
+      "id": "12",
+      "question": "Is there a cell phone in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no.<|im_end|>\n<|endoftext|><|im_start|> case<|im_end|>\n<|endoftext|><|im_start|> scene<|im_end|>\n<|endoftext|><|im_start|>",
+      "correct": true,
+      "latency_ms": 125.9782080014702,
+      "prompt_tokens": 135,
+      "category": "random"
+    },
+    {
+      "id": "13",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|> questions<|im_end|>\n<|im_start|>assistant<think>\n\n</think>\n\n yes<|im_end|>",
+      "correct": true,
+      "latency_ms": 138.47358299972257,
+      "prompt_tokens": 168,
+      "category": "random"
+    },
+    {
+      "id": "14",
+      "question": "Is there a sheep in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> answer is: no<|im_end|>\n<|endoftext|><|im_start|> answer is:",
+      "correct": true,
+      "latency_ms": 136.8616670006304,
+      "prompt_tokens": 168,
+      "category": "random"
+    },
+    {
+      "id": "15",
+      "question": "Is there a bicycle in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|> judgment is based on the following:\n1. The",
+      "correct": true,
+      "latency_ms": 137.6743750006426,
+      "prompt_tokens": 168,
+      "category": "random"
+    },
+    {
+      "id": "16",
+      "question": "Is there a broccoli in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> extension:\nIs there a broccoli in the image?",
+      "correct": true,
+      "latency_ms": 137.18912500189617,
+      "prompt_tokens": 168,
+      "category": "random"
+    },
+    {
+      "id": "17",
+      "question": "Is there a car in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|> answers<|im_end|>\n<|endoftext|><|im_start|> answer<|im_end|>\n<|im_start|>print<|im_end|>",
+      "correct": true,
+      "latency_ms": 136.68116700137034,
+      "prompt_tokens": 168,
+      "category": "random"
+    },
+    {
+      "id": "18",
+      "question": "Is there a tennis racket in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> answer<|im_end|>\n<|endoftext|><|im_start|> answer<|im_end|>\n<|endoftext|><|im_start|> answer",
+      "correct": true,
+      "latency_ms": 136.49770800111583,
+      "prompt_tokens": 169,
+      "category": "random"
+    },
+    {
+      "id": "19",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|> answers are: yes<|im_end|>\n<|endoftext|><|im_start|> answers are:",
+      "correct": true,
+      "latency_ms": 136.611666996032,
+      "prompt_tokens": 168,
+      "category": "random"
+    },
+    {
+      "id": "20",
+      "question": "Is there a teddy bear in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> description is not complete.<|im_end|>\n<|endoftext|><|im_start|> answer is",
+      "correct": true,
+      "latency_ms": 135.7258339994587,
+      "prompt_tokens": 170,
+      "category": "random"
+    },
+    {
+      "id": "21",
+      "question": "Is there a potted plant in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> answers are: no<|im_end|>\n<|endoftext|><|im_start|> answers are:",
+      "correct": false,
+      "latency_ms": 136.07841700286372,
+      "prompt_tokens": 170,
+      "category": "random"
+    },
+    {
+      "id": "22",
+      "question": "Is there a broccoli in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> answers are: no<|im_end|>\n<|endoftext|><|im_start|> answers are:",
+      "correct": true,
+      "latency_ms": 136.67720800003735,
+      "prompt_tokens": 168,
+      "category": "random"
+    },
+    {
+      "id": "23",
+      "question": "Is there a car in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> extension: Is there a car in the image?<|im_end|>",
+      "correct": false,
+      "latency_ms": 137.6735000012559,
+      "prompt_tokens": 168,
+      "category": "random"
+    },
+    {
+      "id": "24",
+      "question": "Is there an orange in the image?",
+      "answer_gt": "no",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|> answers are: yes<|im_end|>\n<|endoftext|><|im_start|> answers are:",
+      "correct": false,
+      "latency_ms": 137.11912500002654,
+      "prompt_tokens": 168,
+      "category": "random"
+    },
+    {
+      "id": "25",
+      "question": "Is there a traffic light in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|> questions<|im_end|>\n<|endoftext|><|im_start|> answer<|im_end|>\n<|endoftext|><|im_start|> answer",
+      "correct": true,
+      "latency_ms": 121.7629169987049,
+      "prompt_tokens": 119,
+      "category": "random"
+    },
+    {
+      "id": "26",
+      "question": "Is there a train in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> answer is <|im_end|>\n<|im_start|>assistant<think>\n\n</think>",
+      "correct": true,
+      "latency_ms": 118.78558399621397,
+      "prompt_tokens": 118,
+      "category": "random"
+    },
+    {
+      "id": "27",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>assistant<think>\n\n</think>\n\n yes<|im_end|>\n<|endoftext|><|im_start|> answer",
+      "correct": true,
+      "latency_ms": 119.3912079979782,
+      "prompt_tokens": 118,
+      "category": "random"
+    },
+    {
+      "id": "28",
+      "question": "Is there a surfboard in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> extension:\nIs there a surfboard in the image",
+      "correct": true,
+      "latency_ms": 119.36412499926519,
+      "prompt_tokens": 119,
+      "category": "random"
+    },
+    {
+      "id": "29",
+      "question": "Is there a car in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|> conclusion is not applicable.<|im_end|>\n<|endoftext|><|im_start|> conclusion is",
+      "correct": true,
+      "latency_ms": 118.5025000013411,
+      "prompt_tokens": 118,
+      "category": "random"
+    },
+    {
+      "id": "30",
+      "question": "Is there a kite in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> extension<|im_end|>\n<|endoftext|><|im_start|> answer<|im_end|>\n<|endoftext|><|im_start|> answer",
+      "correct": true,
+      "latency_ms": 119.18424999748822,
+      "prompt_tokens": 118,
+      "category": "random"
+    },
+    {
+      "id": "31",
+      "question": "Is there a dog in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|> cases<|im_end|>\n<|endoftext|><|im_start|> answer<|im_end|>\n<|endoftext|><|im_start|> answer",
+      "correct": true,
+      "latency_ms": 136.15208299597725,
+      "prompt_tokens": 168,
+      "category": "random"
+    },
+    {
+      "id": "32",
+      "question": "Is there a toaster in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> answers are:\nno<|im_end|>\n<|endoftext|><|im_start|> answers are",
+      "correct": true,
+      "latency_ms": 136.81670799996937,
+      "prompt_tokens": 168,
+      "category": "random"
+    },
+    {
+      "id": "33",
+      "question": "Is there a dining table in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|> questions<|im_end|>\n<|im_start|>assistant<think>\n\n</think>\n\nyes<|im_end|>",
+      "correct": true,
+      "latency_ms": 137.19879100244725,
+      "prompt_tokens": 169,
+      "category": "random"
+    },
+    {
+      "id": "34",
+      "question": "Is there a sports ball in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> answers are: no<|im_end|>\n<|endoftext|><|im_start|> answers are:",
+      "correct": true,
+      "latency_ms": 136.3479580031708,
+      "prompt_tokens": 169,
+      "category": "random"
+    },
+    {
+      "id": "35",
+      "question": "Is there a bed in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|> answers are: yes<|im_end|>\n<|endoftext|><|im_start|> answers are:",
+      "correct": true,
+      "latency_ms": 136.17208399955416,
+      "prompt_tokens": 168,
+      "category": "random"
+    },
+    {
+      "id": "36",
+      "question": "Is there a book in the image?",
+      "answer_gt": "no",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|> answers<|im_end|>\n<|endoftext|><|im_start|> answers<|im_end|>\n<|endoftext|><|im_start|> answers",
+      "correct": false,
+      "latency_ms": 137.38012500107288,
+      "prompt_tokens": 168,
+      "category": "random"
+    },
+    {
+      "id": "37",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|> partial question:\nIs there a person in the image",
+      "correct": true,
+      "latency_ms": 141.8809160022647,
+      "prompt_tokens": 188,
+      "category": "random"
+    },
+    {
+      "id": "38",
+      "question": "Is there a traffic light in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> extension:\nIs there a traffic light in the image",
+      "correct": true,
+      "latency_ms": 141.33708299777936,
+      "prompt_tokens": 189,
+      "category": "random"
+    },
+    {
+      "id": "39",
+      "question": "Is there a spoon in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|> judgment<|im_end|>\n<|endoftext|><|im_start|> answer<|im_end|>\n<|endoftext|><|im_start|> answer",
+      "correct": true,
+      "latency_ms": 140.8002089956426,
+      "prompt_tokens": 188,
+      "category": "random"
+    },
+    {
+      "id": "40",
+      "question": "Is there a bird in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> short answer is no<|im_end|>\n<|endoftext|><|im_start|> short answer is",
+      "correct": true,
+      "latency_ms": 141.40566699643387,
+      "prompt_tokens": 188,
+      "category": "random"
+    },
+    {
+      "id": "41",
+      "question": "Is there a fork in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|> CL<|im_end|>\n<|endoftext|><|im_start|> Step 2:<|im_end|>",
+      "correct": true,
+      "latency_ms": 141.55975000176113,
+      "prompt_tokens": 188,
+      "category": "random"
+    },
+    {
+      "id": "42",
+      "question": "Is there a truck in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> extension: Is there a truck in the image?",
+      "correct": true,
+      "latency_ms": 141.4767079986632,
+      "prompt_tokens": 188,
+      "category": "random"
+    },
+    {
+      "id": "43",
+      "question": "Is there a tv in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> questions is the answer: yes or no.<|im_end|>",
+      "correct": false,
+      "latency_ms": 141.38691600237507,
+      "prompt_tokens": 188,
+      "category": "random"
+    },
+    {
+      "id": "44",
+      "question": "Is there a bowl in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> question<|im_end|>\n<|endoftext|><|im_start|> answer<|im_end|>\n<|endoftext|><|im_start|><|im_end|>",
+      "correct": true,
+      "latency_ms": 141.79508300003363,
+      "prompt_tokens": 188,
+      "category": "random"
+    },
+    {
+      "id": "45",
+      "question": "Is there a toaster in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|> questions<|im_end|>\n<|im_start|>assistant<think>\n\n</think>\n\nyes<|im_end|>",
+      "correct": true,
+      "latency_ms": 140.86854100605706,
+      "prompt_tokens": 188,
+      "category": "random"
+    },
+    {
+      "id": "46",
+      "question": "Is there a cow in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> extension:\nIs there a cow in the image?",
+      "correct": true,
+      "latency_ms": 140.93316700018477,
+      "prompt_tokens": 188,
+      "category": "random"
+    },
+    {
+      "id": "47",
+      "question": "Is there a microwave in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|> questions<|im_end|>\n<|im_start|>assistant<think>\n\n</think>\n\n yes<|im_end|>",
+      "correct": true,
+      "latency_ms": 140.59424999868497,
+      "prompt_tokens": 188,
+      "category": "random"
+    },
+    {
+      "id": "48",
+      "question": "Is there a laptop in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> question was asked about a laptop in the image.",
+      "correct": true,
+      "latency_ms": 141.09191700117663,
+      "prompt_tokens": 188,
+      "category": "random"
+    },
+    {
+      "id": "49",
+      "question": "Is there a backpack in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>\u54f2<|im_end|>\n<|endoftext|><|im_start|> in<|im_end|>\n<|endoftext|><|im_start|><|im_end|>",
+      "correct": true,
+      "latency_ms": 136.88695800374262,
+      "prompt_tokens": 168,
+      "category": "random"
+    },
+    {
+      "id": "50",
+      "question": "Is there a cell phone in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> case is not provided.<|im_end|>\n<|endoftext|><|im_start|> answer is",
+      "correct": true,
+      "latency_ms": 137.2550419982872,
+      "prompt_tokens": 169,
+      "category": "random"
+    },
+    {
+      "id": "51",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>\u95ee\u53f7 question has been answered with one word: yes.",
+      "correct": true,
+      "latency_ms": 136.34525000088615,
+      "prompt_tokens": 168,
+      "category": "random"
+    },
+    {
+      "id": "52",
+      "question": "Is there a couch in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> answers are: yes<|im_end|>\n<|endoftext|><|im_start|> answers are:",
+      "correct": true,
+      "latency_ms": 136.58204099920113,
+      "prompt_tokens": 168,
+      "category": "random"
+    },
+    {
+      "id": "53",
+      "question": "Is there a skis in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|> questions are:\n<2.0 seconds>",
+      "correct": true,
+      "latency_ms": 137.25737500499235,
+      "prompt_tokens": 169,
+      "category": "random"
+    },
+    {
+      "id": "54",
+      "question": "Is there a tennis racket in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> answers are: no<|im_end|>\n<|endoftext|><|im_start|> answers are:",
+      "correct": true,
+      "latency_ms": 135.52500000514556,
+      "prompt_tokens": 169,
+      "category": "random"
+    },
+    {
+      "id": "55",
+      "question": "Is there a bird in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|> answers<|im_end|>\n<|endoftext|><|im_start|> answers<|im_end|>\n<|endoftext|><|im_start|> answer",
+      "correct": true,
+      "latency_ms": 140.94824999483535,
+      "prompt_tokens": 188,
+      "category": "random"
+    },
+    {
+      "id": "56",
+      "question": "Is there a fire hydrant in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> extension<|im_end|>\n<|endoftext|><|im_start|> answer<|im_end|>\n<|endoftext|><|im_start|> answer",
+      "correct": true,
+      "latency_ms": 141.49862499471055,
+      "prompt_tokens": 190,
+      "category": "random"
+    },
+    {
+      "id": "57",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>\u91c7\u53d6\u4e86\u4ee5\u4e0b\u54ea\u4e2a\u6b65\u9aa4\uff1f\n- \u5c06\u56fe\u50cf\u8f6c\u6362\u4e3a",
+      "correct": true,
+      "latency_ms": 141.58054099971196,
+      "prompt_tokens": 188,
+      "category": "random"
+    },
+    {
+      "id": "58",
+      "question": "Is there a bed in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> answers are: yes<|im_end|>\n<|endoftext|><|im_start|> answers are:",
+      "correct": true,
+      "latency_ms": 141.10425000399118,
+      "prompt_tokens": 188,
+      "category": "random"
+    },
+    {
+      "id": "59",
+      "question": "Is there a boat in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|> answers<|im_end|>\n<|endoftext|><|im_start|> answer<|im_end|>\n<|im_start|>print<|im_end|>",
+      "correct": true,
+      "latency_ms": 141.07041699753609,
+      "prompt_tokens": 188,
+      "category": "random"
+    },
+    {
+      "id": "60",
+      "question": "Is there a bench in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> best answer: no<|im_end|>\n<|endoftext|><|im_start|> answer<|im_end|>",
+      "correct": true,
+      "latency_ms": 140.8117500031949,
+      "prompt_tokens": 188,
+      "category": "random"
+    },
+    {
+      "id": "61",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|> questions<|im_end|>\n<|im_start|>assistant<think>\n\n</think>\n\n yes<|im_end|>",
+      "correct": true,
+      "latency_ms": 137.6145419999375,
+      "prompt_tokens": 168,
+      "category": "random"
+    },
+    {
+      "id": "62",
+      "question": "Is there a bear in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> answer is: no<|im_end|>\n<|endoftext|><|im_start|> answer is:",
+      "correct": true,
+      "latency_ms": 136.52504199853865,
+      "prompt_tokens": 168,
+      "category": "random"
+    },
+    {
+      "id": "63",
+      "question": "Is there an orange in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|> answers<|im_end|>\n<|endoftext|><|im_start|> answers<|im_end|>\n<|endoftext|><|im_start|> answer",
+      "correct": true,
+      "latency_ms": 136.9915420000325,
+      "prompt_tokens": 168,
+      "category": "random"
+    },
+    {
+      "id": "64",
+      "question": "Is there a cow in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> answer is: no<|im_end|>\n<|endoftext|><|im_start|> answer is:",
+      "correct": true,
+      "latency_ms": 136.39595799759263,
+      "prompt_tokens": 168,
+      "category": "random"
+    },
+    {
+      "id": "65",
+      "question": "Is there a bottle in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|> answers are: yes<|im_end|>\n<|endoftext|><|im_start|> answers are:",
+      "correct": true,
+      "latency_ms": 136.98191699950257,
+      "prompt_tokens": 168,
+      "category": "random"
+    },
+    {
+      "id": "66",
+      "question": "Is there a bed in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> answers are: yes<|im_end|>\n<|endoftext|><|im_start|> answers are:",
+      "correct": true,
+      "latency_ms": 135.9828339991509,
+      "prompt_tokens": 168,
+      "category": "random"
+    },
+    {
+      "id": "67",
+      "question": "Is there a backpack in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|> question was asking about a specific object in the image.",
+      "correct": true,
+      "latency_ms": 136.45199999882607,
+      "prompt_tokens": 168,
+      "category": "random"
+    },
+    {
+      "id": "68",
+      "question": "Is there a potted plant in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> answer is:<|im_end|>\n<|endoftext|><|im_start|> answer is:<|im_end|>",
+      "correct": true,
+      "latency_ms": 136.90062499517808,
+      "prompt_tokens": 170,
+      "category": "random"
+    },
+    {
+      "id": "69",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|> question is about the correct answer<|im_end|>\n<|im_start|>assistant<think>",
+      "correct": true,
+      "latency_ms": 137.38562499929685,
+      "prompt_tokens": 168,
+      "category": "random"
+    },
+    {
+      "id": "70",
+      "question": "Is there a wine glass in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> answer is:<|im_end|>\n<|endoftext|><|im_start|> answer is:<|im_end|>",
+      "correct": true,
+      "latency_ms": 137.37154199770885,
+      "prompt_tokens": 169,
+      "category": "random"
+    },
+    {
+      "id": "71",
+      "question": "Is there a bus in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|> question was asking about the presence of a bus in the",
+      "correct": true,
+      "latency_ms": 136.76300000224728,
+      "prompt_tokens": 168,
+      "category": "random"
+    },
+    {
+      "id": "72",
+      "question": "Is there a suitcase in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> question was asking about a specific object in the image.",
+      "correct": true,
+      "latency_ms": 137.16187499812804,
+      "prompt_tokens": 168,
+      "category": "random"
+    },
+    {
+      "id": "73",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>\u95ee\u53f7 is asking about the presence of a person in the",
+      "correct": true,
+      "latency_ms": 140.23416699637892,
+      "prompt_tokens": 188,
+      "category": "random"
+    },
+    {
+      "id": "74",
+      "question": "Is there an airplane in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> extension:\nIs there an airplane in the image?",
+      "correct": true,
+      "latency_ms": 141.56374999583932,
+      "prompt_tokens": 188,
+      "category": "random"
+    },
+    {
+      "id": "75",
+      "question": "Is there a dining table in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>\u5e03\u4e01<|im_end|>\n<|endoftext|><|im_start|><|im_end|>\n<|im_start|>assistant\n<think>",
+      "correct": true,
+      "latency_ms": 141.417167003965,
+      "prompt_tokens": 189,
+      "category": "random"
+    },
+    {
+      "id": "76",
+      "question": "Is there a clock in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> extension:\nIs there a clock in the image?",
+      "correct": true,
+      "latency_ms": 141.11749999574386,
+      "prompt_tokens": 188,
+      "category": "random"
+    },
+    {
+      "id": "77",
+      "question": "Is there a chair in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>\u91c7\u53d6\u4e86<|im_end|>\n<|endoftext|><|im_start|>p<|im_end|>\n<|im_start|>user",
+      "correct": true,
+      "latency_ms": 141.82670800073538,
+      "prompt_tokens": 188,
+      "category": "random"
+    },
+    {
+      "id": "78",
+      "question": "Is there a horse in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> extension<|im_end|>\n<|endoftext|><|im_start|> answer<|im_end|>\n<|endoftext|><|im_start|> answer",
+      "correct": true,
+      "latency_ms": 140.95658299629577,
+      "prompt_tokens": 188,
+      "category": "random"
+    },
+    {
+      "id": "79",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|> questions<|im_end|>\n<|im_start|>assistant<think>\n\n</think>\n\n yes<|im_end|>",
+      "correct": true,
+      "latency_ms": 119.18416600383352,
+      "prompt_tokens": 118,
+      "category": "random"
+    },
+    {
+      "id": "80",
+      "question": "Is there a zebra in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> answers are: no<|im_end|>\n<|endoftext|><|im_start|> answers are:",
+      "correct": true,
+      "latency_ms": 119.13862499932293,
+      "prompt_tokens": 119,
+      "category": "random"
+    },
+    {
+      "id": "81",
+      "question": "Is there a sandwich in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|> answers are: yes<|im_end|>\n<|endoftext|><|im_start|> answers are:",
+      "correct": true,
+      "latency_ms": 119.4322499941336,
+      "prompt_tokens": 118,
+      "category": "random"
+    },
+    {
+      "id": "82",
+      "question": "Is there a tie in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> answers are: no<|im_end|>\n<|endoftext|><|im_start|> answers are:",
+      "correct": true,
+      "latency_ms": 119.43141699885018,
+      "prompt_tokens": 118,
+      "category": "random"
+    },
+    {
+      "id": "83",
+      "question": "Is there a hot dog in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|> answers must be in English<|im_end|>\n<|im_start|>assistant\n<think>",
+      "correct": true,
+      "latency_ms": 119.45729199942434,
+      "prompt_tokens": 119,
+      "category": "random"
+    },
+    {
+      "id": "84",
+      "question": "Is there a car in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> answers are: no<|im_end|>\n<|endoftext|><|im_start|> answers are:",
+      "correct": true,
+      "latency_ms": 118.849708000198,
+      "prompt_tokens": 118,
+      "category": "random"
+    },
+    {
+      "id": "85",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>\u91c7\u53d6\u4e86\u4ee5\u4e0b\u54ea\u4e2a\u6b65\u9aa4\u6765\u8bc6\u522b\u56fe\u50cf\u4e2d\u7684\u7269\u4f53\uff1f",
+      "correct": true,
+      "latency_ms": 120.73575000249548,
+      "prompt_tokens": 126,
+      "category": "random"
+    },
+    {
+      "id": "86",
+      "question": "Is there a carrot in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> extension<|im_end|>\n<|endoftext|><|im_start|><|im_end|>\n<|endoftext|><|im_start|> answer<|im_end|>",
+      "correct": true,
+      "latency_ms": 121.38033300288953,
+      "prompt_tokens": 126,
+      "category": "random"
+    },
+    {
+      "id": "87",
+      "question": "Is there a car in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>\u91c7\u53d6\u4e86\u4ee5\u4e0b\u54ea\u4e2a\u6b65\u9aa4\uff1f\n1. \u8bc6\u522b\u56fe\u50cf",
+      "correct": true,
+      "latency_ms": 121.51450000237674,
+      "prompt_tokens": 126,
+      "category": "random"
+    },
+    {
+      "id": "88",
+      "question": "Is there a potted plant in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> answer is: no<|im_end|>\n<|endoftext|><|im_start|> answer is:",
+      "correct": true,
+      "latency_ms": 119.71804199856706,
+      "prompt_tokens": 128,
+      "category": "random"
+    },
+    {
+      "id": "89",
+      "question": "Is there a frisbee in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>BJ_F:\nIs there a frisbee in the",
+      "correct": true,
+      "latency_ms": 120.48749999667052,
+      "prompt_tokens": 127,
+      "category": "random"
+    },
+    {
+      "id": "90",
+      "question": "Is there a chair in the image?",
+      "answer_gt": "no",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>\u91c7\u53d6\u4e86\u4ee5\u4e0b\u54ea\u4e2a\u6b65\u9aa4\uff1f\n1. \u8bc6\u522b\u56fe\u50cf",
+      "correct": false,
+      "latency_ms": 120.13304199354025,
+      "prompt_tokens": 126,
+      "category": "random"
+    },
+    {
+      "id": "91",
+      "question": "Is there a knife in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>.cloud<|im_end|>\n<|im_start|>user\nWhat is the main subject",
+      "correct": true,
+      "latency_ms": 141.47654200496618,
+      "prompt_tokens": 188,
+      "category": "random"
+    },
+    {
+      "id": "92",
+      "question": "Is there a teddy bear in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> shortest answer to the question is: no<|im_end|>\n<|im_start|>",
+      "correct": true,
+      "latency_ms": 141.38545799505664,
+      "prompt_tokens": 190,
+      "category": "random"
+    },
+    {
+      "id": "93",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>.cloud<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n yes",
+      "correct": true,
+      "latency_ms": 141.65704199695028,
+      "prompt_tokens": 188,
+      "category": "random"
+    },
+    {
+      "id": "94",
+      "question": "Is there a hot dog in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> answer is: no<|im_end|>\n<|endoftext|><|im_start|> answer is:",
+      "correct": true,
+      "latency_ms": 141.14787499420345,
+      "prompt_tokens": 189,
+      "category": "random"
+    },
+    {
+      "id": "95",
+      "question": "Is there a cake in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>.cloud<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n yes",
+      "correct": true,
+      "latency_ms": 142.00420799897984,
+      "prompt_tokens": 188,
+      "category": "random"
+    },
+    {
+      "id": "96",
+      "question": "Is there a tie in the image?",
+      "answer_gt": "no",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|>elve<|im_end|>\n<|im_start|>assistant<think>\n\n</think>\n\nyes<|im_end|>",
+      "correct": false,
+      "latency_ms": 141.8229170012637,
+      "prompt_tokens": 188,
+      "category": "random"
+    },
+    {
+      "id": "97",
+      "question": "Is there a person in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|> questions<|im_end|>\n<|im_start|>assistant<think>\n\n</think>\n\n yes<|im_end|>",
+      "correct": true,
+      "latency_ms": 137.05879200279014,
+      "prompt_tokens": 168,
+      "category": "random"
+    },
+    {
+      "id": "98",
+      "question": "Is there a keyboard in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> extension:\nIs there a keyboard in the image?",
+      "correct": true,
+      "latency_ms": 136.76562500040745,
+      "prompt_tokens": 168,
+      "category": "random"
+    },
+    {
+      "id": "99",
+      "question": "Is there a remote in the image?",
+      "answer_gt": "yes",
+      "answer_pred": "yes<|im_end|>\n<|endoftext|><|im_start|><|im_end|>\n<|im_start|>assistant<think>\n\n</think>\n\nyes<|im_end|>",
+      "correct": true,
+      "latency_ms": 136.47458299965365,
+      "prompt_tokens": 168,
+      "category": "random"
+    },
+    {
+      "id": "100",
+      "question": "Is there a frisbee in the image?",
+      "answer_gt": "no",
+      "answer_pred": "no<|im_end|>\n<|endoftext|><|im_start|> shortest answer to the question is: no<|im_end|>\n<|im_start|>",
+      "correct": true,
+      "latency_ms": 136.98091699916404,
+      "prompt_tokens": 169,
+      "category": "random"
+    }
+  ]
+}
