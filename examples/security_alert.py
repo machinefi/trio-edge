@@ -2,13 +2,21 @@
 """Security Alert — minimal camera monitor with desktop notifications.
 
 A 30-line example showing how to use trio-core as a security camera AI.
-Watches your camera, asks a yes/no question every 2 seconds,
+Watches a video source, asks a yes/no question every 2 seconds,
 and prints an alert when the condition is met.
 
 Usage:
-    python examples/security_alert.py
-    python examples/security_alert.py --condition "Is there a package at the door?"
-    python examples/security_alert.py --condition "Is anyone wearing a mask?" --camera 1
+    # RTSP camera
+    python examples/security_alert.py --source "rtsp://admin:pass@192.168.1.100:554/stream1"
+
+    # Local webcam
+    python examples/security_alert.py --source 0
+
+    # Video file (for demo / testing)
+    python examples/security_alert.py --source test_videos/intruder_house.mp4
+
+    # Custom condition
+    python examples/security_alert.py --source 0 --condition "Is there a package at the door?"
 
 Requires: pip install trio-core
 """
@@ -21,17 +29,24 @@ import cv2
 from trio_core import TrioCore
 
 parser = argparse.ArgumentParser()
+parser.add_argument("--source", "-s", default="0",
+                    help="RTSP URL, video file, or camera index (default: 0)")
 parser.add_argument("--condition", "-c", default="Is there a person?")
-parser.add_argument("--camera", type=int, default=0)
 parser.add_argument("--interval", type=float, default=2.0, help="Seconds between checks")
 args = parser.parse_args()
+
+# Accept "0", "1" as camera index, otherwise treat as URL/path
+source = int(args.source) if args.source.isdigit() else args.source
 
 engine = TrioCore()
 engine.load()
 prompt = f"Answer YES or NO: {args.condition}"
 
-cap = cv2.VideoCapture(args.camera)
-print(f"Watching camera {args.camera} — {args.condition}")
+cap = cv2.VideoCapture(source)
+if not cap.isOpened():
+    print(f"ERROR: Cannot open source: {args.source}")
+    raise SystemExit(1)
+print(f"Watching {args.source} — {args.condition}")
 
 try:
     while cap.isOpened():
