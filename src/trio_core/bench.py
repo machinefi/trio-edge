@@ -76,7 +76,7 @@ def _entry(key: str, hf_id: str, *, tier: int = 1, supports_fastv: bool = True) 
 MODEL_REGISTRY: dict[str, ModelEntry] = {
     # Qwen2.5-VL
     "qwen2.5-vl-3b": _entry("qwen2.5-vl-3b", "mlx-community/Qwen2.5-VL-3B-Instruct-4bit"),
-    "qwen2.5-vl-7b": _entry("qwen2.5-vl-7b", "mlx-community/Qwen2.5-VL-7B-Instruct-4bit"),
+    "qwen2.5-vl-7b": _entry("qwen2.5-vl-7b", "mlx-community/Qwen2.5-VL-7B-Instruct-4bit", supports_fastv=False),
     # Qwen3-VL
     "qwen3-vl-2b": _entry("qwen3-vl-2b", "mlx-community/Qwen3-VL-2B-Instruct-4bit"),
     "qwen3-vl-4b": _entry("qwen3-vl-4b", "mlx-community/Qwen3-VL-4B-Instruct-4bit"),

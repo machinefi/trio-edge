@@ -151,9 +151,9 @@ Video → [Dedup] → [Motion Gate] → [ViT + ToMe] → [LLM + FastV] → [KV R
 
 ## Benchmarks
 
-Apple M3 Ultra, 4-bit quantized, POPE benchmark (100 samples, object hallucination yes/no).
+Apple M3 Ultra, 4-bit quantized. Accuracy is hardware-independent (bit-identical output on any Apple Silicon). Latency scales proportionally across devices.
 
-### Accuracy — Baseline vs Optimizations
+### POPE — Object Hallucination (100 samples, yes/no)
 
 | Model | Params | Baseline | ToMe r=4 | Compressed 50% | FastV |
 |---|---|---|---|---|---|
@@ -166,12 +166,28 @@ Apple M3 Ultra, 4-bit quantized, POPE benchmark (100 samples, object hallucinati
 | Qwen3.5-9B | 9B | 92% | 91% (-1) | 90% (-2) | — |
 | Qwen3-VL-8B | 8B | 91% | — | **93% (+2)** | 75% (-16) |
 | Qwen3-VL-4B | 4B | 91% | — | 88% (-3) | 85% (-6) |
-| Qwen2.5-VL-7B | 7B | 90% | 86% (-4) | 90% (0) | 41% (-49) |
+| Qwen2.5-VL-7B | 7B | 90% | 86% (-4) | 90% (0) | ✗ |
 | Qwen3.5-4B | 4B | 90% | 89% (-1) | 89% (-1) | — |
 
-`—` = architecturally incompatible (auto-skipped). ToMe incompatible with Qwen3-VL (deepstack) and InternVL3 (pixel shuffle). FastV incompatible with Qwen3.5 (DeltaNet layers).
+### TextVQA — OCR Reading (50 samples, open-ended)
 
-### Latency — ms/sample
+| Model | Params | Baseline | ToMe r=4 | Compressed 50% | FastV |
+|---|---|---|---|---|---|
+| Qwen3.5-2B | 2B | **80%** | 78% (-2) | 74% (-6) | — |
+| InternVL3-2B | 2B | 78% | — | 72% (-6) | — |
+| Qwen3-VL-2B | 2B | 76% | — | **76% (0)** | 66% (-10) |
+| Qwen2.5-VL-3B | 3B | 72% | 42% (-30) | 60% (-12) | 40% (-32) |
+| Qwen3-VL-4B | 4B | 72% | — | **72% (0)** | 56% (-16) |
+| Qwen3.5-0.8B | 0.8B | 70% | 64% (-6) | 52% (-18) | — |
+| Qwen3-VL-8B | 8B | 70% | — | **70% (0)** | 54% (-16) |
+| Qwen2.5-VL-7B | 7B | 66% | 52% (-14) | **68% (+2)** | ✗ |
+| Qwen3.5-9B | 9B | 56% | **62% (+6)** | 56% (0) | — |
+| Qwen3.5-4B | 4B | 52% | **64% (+12)** | 52% (0) | — |
+| InternVL3-1B | 1B | 50% | — | 50% (0) | — |
+
+`—` = architecturally incompatible (auto-skipped). `✗` = produces garbage output. ToMe incompatible with Qwen3-VL (deepstack) and InternVL3 (pixel shuffle). FastV incompatible with Qwen3.5 (DeltaNet layers) and Qwen2.5-VL-7B (over-prunes).
+
+### Latency — ms/sample (POPE)
 
 | Model | Baseline | ToMe r=4 | Compressed 50% | FastV | Best Speedup |
 |---|---|---|---|---|---|
@@ -181,7 +197,7 @@ Apple M3 Ultra, 4-bit quantized, POPE benchmark (100 samples, object hallucinati
 | Qwen2.5-VL-3B | 354ms | 629ms | **279ms** | 288ms | 1.27x |
 | Qwen3.5-4B | 407ms | 454ms | **337ms** | — | 1.20x |
 | Qwen3-VL-4B | 414ms | — | **335ms** | 341ms | 1.24x |
-| Qwen2.5-VL-7B | 522ms | 693ms | **384ms** | 398ms | 1.36x |
+| Qwen2.5-VL-7B | 522ms | 693ms | **384ms** | — | 1.36x |
 | Qwen3-VL-8B | 633ms | — | **503ms** | 516ms | 1.26x |
 | Qwen3.5-9B | 632ms | 694ms | **506ms** | — | 1.25x |
 | InternVL3-1B | 677ms | — | **577ms** | — | 1.17x |
@@ -209,7 +225,8 @@ Apple M3 Ultra, 4-bit quantized, POPE benchmark (100 samples, object hallucinati
 
 | Model | Size | 4-bit | ToMe | FastV | Compressed | KV Reuse |
 |---|---|---|---|---|---|---|
-| Qwen2.5-VL 3B/7B | 3-7B | 1.8-4.5G | ✓ | ✓ | ✓ | ✓ |
+| Qwen2.5-VL 3B | 3B | 1.8G | ✓ | ✓ | ✓ | ✓ |
+| Qwen2.5-VL 7B | 7B | 4.5G | ✓ | ✗ | ✓ | ✓ |
 | Qwen3-VL 2B/4B/8B | 2-8B | 1.5-5.0G | — | ✓ | ✓ | ✓ |
 | Qwen3.5 0.8B/2B/4B/9B | 0.8-9B | 0.5-5.0G | ✓ | — | ✓ | ✓ (DeltaNet) |
 | InternVL3 1B/2B | 1-2B | 1.0-1.6G | — | — | ✓ | ✓ |

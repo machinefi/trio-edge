@@ -191,8 +191,8 @@ PROFILES: dict[str, ModelProfile] = {
         kv_heads=4,
         model_size_gb=2.5,
         inference_memory_gb=3.5,
-        # POPE: 90% baseline → 89% compressed_50 (-1%, 1.20x speedup)
-        recommended_optims={"compress_enabled": True, "compress_ratio": 0.5},
+        # POPE: 90%→89% (-1). TextVQA: 52%→64% (+12!). ToMe cleans noisy ViT tokens.
+        recommended_optims={"tome_enabled": True, "tome_r": 4, "tome_metric": "hidden"},
     ),
     "qwen3.5-9b": ModelProfile(
         family="qwen3.5",
@@ -212,8 +212,8 @@ PROFILES: dict[str, ModelProfile] = {
         kv_heads=4,
         model_size_gb=5.0,
         inference_memory_gb=7.0,
-        # POPE: 92% baseline → 90% compressed_50 (-2%, 1.25x speedup)
-        recommended_optims={"compress_enabled": True, "compress_ratio": 0.5},
+        # POPE: 92%→91% (-1). TextVQA: 56%→62% (+6). ToMe cleans noisy ViT tokens.
+        recommended_optims={"tome_enabled": True, "tome_r": 4, "tome_metric": "hidden"},
     ),
     "qwen2.5-vl-3b": ModelProfile(
         family="qwen2.5-vl",
