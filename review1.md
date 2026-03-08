@@ -76,6 +76,6 @@
 | 量化死代码清理 | P2 | `backends.py`, `fastv_backend.py` | 删除所有 `quantize_cache_fn(kv_bits=None)` no-op 调用和未使用的 `functools`/`maybe_quantize_kv_cache` import |
 | OOM 防护 | P2 | `backends.py` | `_check_memory()` prefill 前估算 pixel_values 内存，超出 Metal 可用内存时抛出 `MemoryError`。self-review 修复：移入 `_prepare()` 覆盖所有子类路径 |
 | 类型命名修复 | P3 | `model_adapter.py` | `VisionOutput.hidden_states: object` → `Any`，`MergeResult.embeds: object` → `Any` |
-| stream_analyze async 桥接 | P2 | `engine.py` | `stream_analyze` 用 thread+queue 桥接同步 `stream_generate`，不再阻塞 event loop |
+| stream_analyze async 桥接 | P2 | `engine.py` | `stream_analyze` 用 thread+queue 桥接同步 `stream_generate`，不再阻塞 event loop。self-review: 加 `self._lock` 防并发 GPU 访问，`get_running_loop()` 替换废弃 API |
 | Backend registry | P2 耦合 | `backends.py`, `engine.py` | `resolve_backend(config)` 统一后端选择逻辑，engine 不再直接构造子类。`register_backend()` 支持插件注册 |
-| Hash 优化 | P3 | `generate.py` | `_hash_input` 大 pixel_values 用 strided sampling（shape+首尾+stride），<64K 元素仍全量 hash |
+| Hash 优化 | P3 | `generate.py` | `_hash_input` 大 pixel_values 用 strided sampling（shape+首尾+stride），<64K 元素仍全量 hash。self-review: `reshape(-1)` 替代 `flatten()` 避免多余拷贝 |
