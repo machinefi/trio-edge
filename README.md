@@ -37,9 +37,33 @@ trio device
 # Analyze a video
 trio analyze video.mp4 -q "What is happening?"
 
+# Live camera monitor — define what to watch in plain English
+trio webcam -w "a person is waving"
+
 # Start the API server
 trio serve
 ```
+
+### Live Camera Monitor
+
+```bash
+# Default: detect if someone is holding something
+trio webcam
+
+# Custom watch conditions — just describe what to look for
+trio webcam -w "a person is waving"
+trio webcam -w "no safety helmet"
+trio webcam -w "package missing from doorstep"
+trio webcam -w "someone entered the restricted area"
+
+# iPhone as camera (macOS Continuity Camera)
+trio webcam -s 1 -w "a person is waving"
+
+# IP camera via RTSP
+trio webcam -s "rtsp://admin:pass@192.168.1.100:554/stream" -w "intruder detected"
+```
+
+Auto-calibrates resolution for ~500ms inference on any Mac. Green = clear, red = alert with audio notification. No ML training needed — just describe what to monitor.
 
 ### Python
 
