@@ -281,19 +281,63 @@ def bench(
     typer.echo(f"\n{runs} runs, avg {avg:.0f}ms")
 
 
+_SMOKE_VIDEOS = [
+    {
+        "name": "surveillance_rotate",
+        "url": "https://assets.mixkit.co/videos/48922/48922-720.mp4",
+        "prompt": "You are a security camera AI. Describe what you see. Is there any suspicious activity?",
+        "label": "Surveillance camera (rotating)",
+    },
+    {
+        "name": "thieves_indoor",
+        "url": "https://assets.mixkit.co/videos/31372/31372-720.mp4",
+        "prompt": "You are a security camera AI monitoring a room. Describe any people and their behavior. Is anything suspicious?",
+        "label": "Indoor security (thieves)",
+    },
+    {
+        "name": "intruder_house",
+        "url": "https://assets.mixkit.co/videos/12830/12830-720.mp4",
+        "prompt": "Security alert: Is there a person? Describe their appearance and whether they appear to be an intruder.",
+        "label": "House intrusion",
+    },
+]
+
+
+def _ensure_smoke_videos() -> dict[str, str]:
+    """Download smoke test videos if not cached. Returns {name: path}."""
+    import os
+    import urllib.request
+
+    cache_dir = os.path.expanduser("~/.cache/trio-core/smoke-videos")
+    os.makedirs(cache_dir, exist_ok=True)
+    paths = {}
+    for v in _SMOKE_VIDEOS:
+        path = os.path.join(cache_dir, f"{v['name']}.mp4")
+        if not os.path.exists(path):
+            typer.echo(f"  Downloading {v['label']}...", nl=False)
+            urllib.request.urlretrieve(v["url"], path)
+            size_mb = os.path.getsize(path) / (1024 * 1024)
+            typer.echo(f" {size_mb:.1f}MB")
+        paths[v["name"]] = path
+    return paths
+
+
 @app.command()
 def smoke(
     model: str = typer.Option(None, "--model", "-m", help="Override model"),
     backend: str = typer.Option(None, "--backend", "-b", help="Force backend: mlx, transformers"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Debug logging"),
 ):
-    """Run end-to-end smoke tests to verify everything works."""
+    """Run end-to-end smoke tests to verify everything works.
+
+    Tests model loading, real surveillance video inference, streaming,
+    and API endpoints. Downloads test videos on first run (~18MB total).
+    """
     _setup_logging(verbose)
     import asyncio
     import time
 
-    import numpy as np
-    from PIL import Image, ImageDraw
+    from PIL import Image
 
     from trio_core.config import EngineConfig
     from trio_core.engine import TrioCore
@@ -317,30 +361,10 @@ def smoke(
             results.append((name, False, f"{e} ({dt:.1f}s)"))
             typer.echo(f" ✗ {e} ({dt:.1f}s)")
 
-    # Generate synthetic test image: colored rectangles with shapes
-    def _make_test_image() -> np.ndarray:
-        img = Image.new("RGB", (224, 224), (135, 206, 235))  # sky blue
-        draw = ImageDraw.Draw(img)
-        draw.rectangle([20, 120, 80, 200], fill=(34, 139, 34))   # green box
-        draw.rectangle([140, 100, 200, 200], fill=(220, 20, 60))  # red box
-        draw.ellipse([80, 30, 150, 100], fill=(255, 215, 0))      # yellow circle
-        arr = np.array(img, dtype=np.float32) / 255.0
-        return arr.transpose(2, 0, 1)[np.newaxis]  # (1, 3, 224, 224)
-
-    # Generate synthetic test video: 4 frames with slight variation
-    def _make_test_video() -> np.ndarray:
-        frames = []
-        for i in range(4):
-            img = Image.new("RGB", (224, 224), (135, 206, 235))
-            draw = ImageDraw.Draw(img)
-            offset = i * 15
-            draw.rectangle([20 + offset, 120, 80 + offset, 200], fill=(34, 139, 34))
-            draw.ellipse([80, 30, 150, 100], fill=(255, 215, 0))
-            arr = np.array(img, dtype=np.float32) / 255.0
-            frames.append(arr.transpose(2, 0, 1))
-        return np.stack(frames)  # (4, 3, 224, 224)
-
     typer.echo(f"\ntrio smoke — {config.model}\n")
+
+    # Phase 0: Download test videos
+    video_paths = _ensure_smoke_videos()
 
     # Phase 1: Load model
     engine = TrioCore(config, backend=backend)
@@ -355,31 +379,28 @@ def smoke(
         typer.echo("\n✗ Cannot continue — model failed to load.")
         raise typer.Exit(1)
 
-    # Phase 2: Single image inference
-    test_image = _make_test_image()
+    # Phase 2: Surveillance video tests (3 real scenarios)
+    for v in _SMOKE_VIDEOS:
+        path = video_paths[v["name"]]
 
-    def _single_image():
-        r = engine.analyze_video(test_image, "What shapes and colors do you see?", max_tokens=64)
-        assert len(r.text.strip()) > 0, "empty response"
-        return f"{len(r.text)} chars, {r.metrics.tokens_per_sec:.1f} tok/s"
-    _run("Single image", _single_image)
+        def _video_test(p=path, prompt=v["prompt"]):
+            r = engine.analyze_video(p, prompt, max_tokens=128)
+            assert len(r.text.strip()) > 0, "empty response"
+            return (
+                f"{r.metrics.frames_input}→{r.metrics.frames_after_dedup}f, "
+                f"{r.metrics.tokens_per_sec:.0f} tok/s, {len(r.text)} chars"
+            )
+        _run(v["label"], _video_test)
 
-    # Phase 3: Multi-frame (video) inference
-    test_video = _make_test_video()
+    # Phase 3: Streaming with real video
+    stream_path = video_paths["intruder_house"]
 
-    def _video():
-        r = engine.analyze_video(test_video, "Describe what is happening.", max_tokens=64)
-        assert len(r.text.strip()) > 0, "empty response"
-        return f"{len(r.text)} chars, {r.metrics.prompt_tokens} prompt tokens"
-    _run("Video (4 frames)", _video)
-
-    # Phase 4: Streaming
     def _streaming():
         chunks = []
 
         async def _run_stream():
             async for chunk in engine.stream_analyze(
-                test_image, "What do you see?", max_tokens=32,
+                stream_path, "Describe the scene in detail. What do you see?", max_tokens=128,
             ):
                 if chunk.get("text"):
                     chunks.append(chunk["text"])
@@ -388,17 +409,20 @@ def smoke(
         text = "".join(chunks)
         assert len(text.strip()) > 0, "empty streaming response"
         return f"{len(chunks)} chunks, {len(text)} chars"
-    _run("Streaming", _streaming)
+    _run("Streaming (video)", _streaming)
 
-    # Phase 5: API endpoints (using FastAPI TestClient, no server needed)
+    # Phase 4: API endpoints (using FastAPI TestClient, no server needed)
     def _api():
         try:
             from starlette.testclient import TestClient
         except ImportError:
             return "skipped (httpx not installed)"
 
-        from trio_core.api.server import create_app, _engine as _old
+        import base64
+        import io
+
         import trio_core.api.server as srv
+        from trio_core.api.server import create_app
 
         app_instance = create_app(config, backend=backend)
         # Inject already-loaded engine instead of loading again
@@ -419,8 +443,6 @@ def smoke(
         assert r.status_code == 200, f"/v1/models → {r.status_code}"
 
         # /analyze-frame with base64 image
-        import base64
-        import io
         img = Image.new("RGB", (64, 64), (255, 0, 0))
         buf = io.BytesIO()
         img.save(buf, format="JPEG")
@@ -432,7 +454,7 @@ def smoke(
         })
         assert r.status_code == 200, f"/analyze-frame → {r.status_code}: {r.text}"
 
-        return f"4 endpoints OK"
+        return "4 endpoints OK"
     _run("API endpoints", _api)
 
     # Summary

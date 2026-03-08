@@ -16,3 +16,4 @@ venv/
 /eval_*.json
 .coverage
 mvbench_videos/
+test_videos/
