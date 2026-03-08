@@ -185,7 +185,54 @@ Apple M3 Ultra, 4-bit quantized. Accuracy is hardware-independent (bit-identical
 | Qwen3.5-4B | 4B | 52% | **64% (+12)** | 52% (0) | — |
 | InternVL3-1B | 1B | 50% | — | 50% (0) | — |
 
-`—` = architecturally incompatible (auto-skipped). `✗` = produces garbage output. ToMe incompatible with Qwen3-VL (deepstack) and InternVL3 (pixel shuffle). FastV incompatible with Qwen3.5 (DeltaNet layers) and Qwen2.5-VL-7B (over-prunes).
+### GQA — Visual Reasoning (50 samples, open-ended)
+
+| Model | Params | Baseline | ToMe r=4 | Compressed 50% | FastV |
+|---|---|---|---|---|---|
+| **Qwen3.5-2B** | 2B | **66%** | 66% (0) | **68% (+2)** | — |
+| InternVL3-2B | 2B | 64% | — | **66% (+2)** | — |
+| Qwen3.5-9B | 9B | 64% | 64% (0) | 62% (-2) | — |
+| Qwen3-VL-4B | 4B | 62% | — | 62% (0) | 50% (-12) |
+| Qwen3.5-4B | 4B | 60% | 60% (0) | **64% (+4)** | — |
+| Qwen3.5-0.8B | 0.8B | 60% | 60% (0) | 60% (0) | — |
+| Qwen2.5-VL-3B | 3B | 58% | 54% (-4) | 52% (-6) | 42% (-16) |
+| Qwen3-VL-2B | 2B | 58% | — | 58% (0) | 0% |
+| InternVL3-1B | 1B | 58% | — | 58% (0) | — |
+| Qwen3-VL-8B | 8B | 54% | — | 54% (0) | 42% (-12) |
+| Qwen2.5-VL-7B | 7B | 52% | **58% (+6)** | 50% (-2) | — |
+
+### MMBench — Multi-ability (50 samples, multiple choice)
+
+| Model | Params | Baseline | ToMe r=4 | Compressed 50% | FastV |
+|---|---|---|---|---|---|
+| **InternVL3-2B** | 2B | **96%** | — | 96% (0) | — |
+| Qwen2.5-VL-7B | 7B | 94% | **96% (+2)** | 94% (0) | — |
+| Qwen3-VL-4B | 4B | 94% | — | 94% (0) | 90% (-4) |
+| Qwen3-VL-8B | 8B | 94% | — | 94% (0) | 78% (-16) |
+| Qwen2.5-VL-3B | 3B | 90% | 82% (-8) | 86% (-4) | 66% (-24) |
+| Qwen3.5-9B | 9B | 90% | 90% (0) | **96% (+6)** | — |
+| InternVL3-1B | 1B | 86% | — | 86% (0) | — |
+| Qwen3.5-2B | 2B | 82% | 82% (0) | 82% (0) | — |
+| Qwen3-VL-2B | 2B | 80% | — | 80% (0) | 2% |
+| Qwen3.5-0.8B | 0.8B | 62% | 62% (0) | 54% (-8) | — |
+| Qwen3.5-4B | 4B | 44% | 44% (0) | 36% (-8) | — |
+
+### MVBench — Video Understanding (12 tasks, 5 samples/task)
+
+| Model | Params | Baseline | Compressed 50% |
+|---|---|---|---|
+| Qwen2.5-VL-3B | 3B | **61%** | 59% (-2) |
+| Qwen2.5-VL-7B | 7B | **61%** | 61% (0) |
+| Qwen3.5-2B | 2B | **61%** | 57% (-4) |
+| Qwen3-VL-8B | 8B | 57% | 57% (0) |
+| Qwen3-VL-2B | 2B | 54% | 54% (0) |
+| Qwen3-VL-4B | 4B | 54% | 54% (0) |
+| Qwen3.5-9B | 9B | 46% | 37% (-9) |
+| Qwen3.5-0.8B | 0.8B | 35% | **46% (+11)** |
+| Qwen3.5-4B | 4B | 7% | 2% |
+| InternVL3 | 1-2B | — | — |
+
+`—` = architecturally incompatible (auto-skipped). `✗` = produces garbage output. ToMe incompatible with Qwen3-VL (deepstack) and InternVL3 (pixel shuffle). FastV incompatible with Qwen3.5 (DeltaNet layers) and Qwen2.5-VL-7B (over-prunes). InternVL3 does not support multi-image/video inference (MVBench).
 
 ### Latency — ms/sample (POPE)
 
