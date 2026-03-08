@@ -79,5 +79,5 @@
 | stream_analyze async 桥接 | P2 | `engine.py` | `stream_analyze` 用 thread+queue 桥接同步 `stream_generate`，不再阻塞 event loop。self-review: 加 `self._lock` 防并发 GPU 访问，`get_running_loop()` 替换废弃 API |
 | Backend registry | P2 耦合 | `backends.py`, `engine.py` | `resolve_backend(config)` 统一后端选择逻辑，engine 不再直接构造子类。`register_backend()` 支持插件注册 |
 | Hash 优化 | P3 | `generate.py` | `_hash_input` 大 pixel_values 用 strided sampling（shape+首尾+stride），<64K 元素仍全量 hash。self-review: `reshape(-1)` 替代 `flatten()` 避免多余拷贝 |
-| generate_step 拆分 | -1.0 扣分 | `generate.py` | 360→131 行。拆为 `_resolve_cache`(44L) + `_run_prefill`(62L) + `_prefill_suffix`(31L) + `_prefill_full`(38L) + `_post_prefill_bookkeeping`(57L) |
+| generate_step 拆分 | -1.0 扣分 | `generate.py` | 360→131 行。拆为 `_resolve_cache`(44L) + `_run_prefill`(62L) + `_prefill_suffix`(31L) + `_prefill_full`(38L) + `_post_prefill_bookkeeping`(57L)。self-review: 用 `cache_ref[0]` 可变容器修复闭包 prompt_cache 一致性 bug |
 | PromptCache 封装 | 耦合#3 | `generate.py` | 添加 `prefill_offset`/`prefix_len`/`cached_kwargs`/`trim_to_prefill_state()` 等公开 API，消除 generate_step 中所有 `prompt_cache_manager._xxx` 访问 |

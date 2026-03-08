@@ -654,7 +654,7 @@ def _run_prefill(
     pixel_values,
     mask,
     inputs_embeds: Optional[mx.array],
-    prompt_cache: List[Any],
+    cache_ref: list,
     prompt_cache_manager: Optional[PromptCache],
     resolution: _CacheResolution,
     step_fn: Callable,
@@ -663,10 +663,11 @@ def _run_prefill(
     visual_similarity_threshold: float,
     kwargs: dict,
 ) -> Tuple[mx.array, mx.array, bool, Optional[mx.array], Optional[dict]]:
-    """Run ViT + prefill, return (first_token, logprobs, visual_hit, full_embeds, new_kwargs).
+    """Run ViT + prefill.
 
+    Returns (first_token, logprobs, visual_hit, full_embeds, new_kwargs).
+    Updates cache_ref[0] in-place so _step's closure sees the correct cache.
     new_kwargs is non-None only when kwargs must be replaced (visual_hit).
-    For other paths, _step's nonlocal closure already updates kwargs.
     """
     may_visual_hit = resolution.may_visual_hit
     prefix_hit = resolution.prefix_hit
@@ -696,6 +697,7 @@ def _run_prefill(
 
         new_kwargs = None
         if visual_hit:
+            cache_ref[0] = prompt_cache_manager.kv_cache
             prompt_cache_manager.trim_to_prefill_state()
             prompt_cache_manager.restore_arrays_cache()
             y, logprobs = prompt_cache_manager.get_cached_first_token()
@@ -703,12 +705,12 @@ def _run_prefill(
             logger.debug("Visual similarity HIT — reusing KV cache (skipping LLM prefill)")
         elif prefix_hit:
             y, logprobs = _prefill_suffix(
-                model, input_ids, inputs_embeds, prompt_cache,
+                model, input_ids, inputs_embeds, cache_ref,
                 prompt_cache_manager, may_visual_hit, step_fn, quantize_cache_fn,
             )
         else:
             y, logprobs = _prefill_full(
-                model, input_ids, original_input_ids, inputs_embeds, prompt_cache,
+                model, input_ids, original_input_ids, inputs_embeds, cache_ref,
                 prompt_cache_manager, may_visual_hit, step_fn, quantize_cache_fn,
                 prefill_step_size, kwargs,
             )
@@ -717,12 +719,12 @@ def _run_prefill(
 
 
 def _prefill_suffix(
-    model, input_ids, inputs_embeds, prompt_cache,
+    model, input_ids, inputs_embeds, cache_ref,
     prompt_cache_manager, may_visual_hit, step_fn, quantize_cache_fn,
 ):
     """Prefix-hit path: skip text prefix, prefill only visual + suffix tokens."""
     if may_visual_hit:
-        prompt_cache_manager.restore_prefix_cache()
+        cache_ref[0] = prompt_cache_manager.restore_prefix_cache()
     prefix_len = prompt_cache_manager.prefix_len
     lm = model.language_model
 
@@ -736,7 +738,7 @@ def _prefill_suffix(
     suffix_embeds = inputs_embeds[:, prefix_len:]
     suffix_ids = input_ids[:, prefix_len:]
     y, logprobs = step_fn(suffix_ids, inputs_embeds=suffix_embeds)
-    quantize_cache_fn(prompt_cache)
+    quantize_cache_fn(cache_ref[0])
 
     if hasattr(lm, '_rope_deltas'):
         lm._rope_deltas = saved_rope_deltas
@@ -749,13 +751,15 @@ def _prefill_suffix(
 
 
 def _prefill_full(
-    model, input_ids, original_input_ids, inputs_embeds, prompt_cache,
+    model, input_ids, original_input_ids, inputs_embeds, cache_ref,
     prompt_cache_manager, may_visual_hit, step_fn, quantize_cache_fn,
     prefill_step_size, kwargs,
 ):
     """Full-miss path: complete prefill (possibly chunked)."""
     if may_visual_hit and prompt_cache_manager is not None:
-        prompt_cache = prompt_cache_manager.get_or_create_cache()
+        cache_ref[0] = prompt_cache_manager.get_or_create_cache()
+
+    prompt_cache = cache_ref[0]
 
     if prefill_step_size is not None and inputs_embeds.shape[1] > prefill_step_size:
         while inputs_embeds.shape[1] > 1:
@@ -904,7 +908,9 @@ def generate_step(
         input_ids, pixel_values, model, prompt_cache,
         prompt_cache_manager, visual_similarity_threshold, max_kv_size,
     )
-    prompt_cache = resolution.prompt_cache
+    # Mutable container so extracted functions can update the cache
+    # and _step's closure sees the change.
+    cache_ref = [resolution.prompt_cache]
 
     # ── Shared step function (closure over mutable state) ─────────────
     def _step(y, inputs_embeds=None):
@@ -912,10 +918,10 @@ def generate_step(
 
         with mx.stream(_generation_stream):
             if "decoder_input_ids" in kwargs:
-                outputs = model.language_model(cache=prompt_cache, **kwargs)
+                outputs = model.language_model(cache=cache_ref[0], **kwargs)
             else:
                 outputs = model.language_model(
-                    y, inputs_embeds=inputs_embeds, cache=prompt_cache, **kwargs,
+                    y, inputs_embeds=inputs_embeds, cache=cache_ref[0], **kwargs,
                 )
 
             logits = outputs.logits[:, -1, :]
@@ -924,7 +930,7 @@ def generate_step(
                 for processor in processors:
                     logits = processor(tokens, logits)
 
-            quantize_cache_fn(prompt_cache)
+            quantize_cache_fn(cache_ref[0])
             logprobs = logits - mx.logsumexp(logits)
             y = sampler(logprobs)
 
@@ -946,7 +952,7 @@ def generate_step(
     else:
         y, logprobs, visual_hit, full_inputs_embeds, new_kwargs = _run_prefill(
             model, input_ids, original_input_ids, pixel_values, mask,
-            inputs_embeds, prompt_cache, prompt_cache_manager, resolution,
+            inputs_embeds, cache_ref, prompt_cache_manager, resolution,
             _step, quantize_cache_fn, prefill_step_size,
             visual_similarity_threshold, kwargs,
         )
@@ -954,7 +960,7 @@ def generate_step(
             kwargs = new_kwargs
 
     _post_prefill_bookkeeping(
-        model, original_input_ids, pixel_values, prompt_cache,
+        model, original_input_ids, pixel_values, cache_ref[0],
         prompt_cache_manager, y, logprobs, visual_hit,
         resolution.cache_hit, full_inputs_embeds, kwargs,
     )
