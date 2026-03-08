@@ -946,6 +946,11 @@ _BACKEND_MAP: dict[str, type[BaseBackend]] = {
 }
 
 
+def register_backend(name: str, cls: type[BaseBackend]) -> None:
+    """Register a backend class by name (e.g. from a plugin)."""
+    _BACKEND_MAP[name] = cls
+
+
 def auto_backend(
     model_name: str,
     *,
@@ -978,3 +983,59 @@ def auto_backend(
         chosen, device_info.device_name, device_info.accelerator, device_info.memory_gb,
     )
     return cls(model_name, device_info=device_info)
+
+
+def resolve_backend(config, *, backend_override: str | None = None) -> BaseBackend:
+    """Create the right backend from an EngineConfig.
+
+    Handles feature flags (FastV, ToMe, compound mode) so the engine
+    doesn't need to know about backend subclasses.
+
+    Args:
+        config: EngineConfig instance.
+        backend_override: Force "mlx" or "transformers". None = auto.
+
+    Returns:
+        Configured (but not loaded) backend instance.
+    """
+    base = auto_backend(config.model, backend=backend_override)
+
+    if base.backend_name != "mlx":
+        return base
+
+    # FastV (optionally compound with ToMe)
+    if config.fastv_enabled:
+        from trio_core.fastv_backend import FastVMLXBackend
+
+        tome_kwargs = {}
+        if config.tome_enabled:
+            logger.info("Compound mode: ToMe (vision) + FastV (LLM)")
+            tome_kwargs = dict(
+                tome_r=config.tome_r,
+                tome_metric=config.tome_metric,
+                tome_min_keep_ratio=config.tome_min_keep_ratio,
+                tome_adaptive=config.tome_adaptive,
+            )
+        return FastVMLXBackend(
+            config.model,
+            prune_ratio=config.fastv_ratio,
+            prune_after_layer=config.fastv_layer,
+            device_info=base.device_info,
+            **tome_kwargs,
+        )
+
+    # ToMe only
+    if config.tome_enabled:
+        from trio_core.tome_backend import ToMeMLXBackend
+
+        return ToMeMLXBackend(
+            config.model,
+            tome_r=config.tome_r,
+            metric=config.tome_metric,
+            min_keep_ratio=config.tome_min_keep_ratio,
+            adaptive=config.tome_adaptive,
+            content_aware=config.tome_content_aware,
+            device_info=base.device_info,
+        )
+
+    return base

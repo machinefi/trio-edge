@@ -68,7 +68,7 @@ class TestTrioCoreHealth:
 
 
 class TestTrioCoreLoad:
-    @patch("trio_core.engine.auto_backend")
+    @patch("trio_core.engine.resolve_backend")
     def test_load_auto_selects_backend(self, mock_auto):
         mock_backend = MagicMock()
         mock_backend.backend_name = "mlx"
@@ -77,11 +77,11 @@ class TestTrioCoreLoad:
 
         engine = TrioCore()
         engine.load()
-        mock_auto.assert_called_once_with(engine.config.model, backend=None)
+        mock_auto.assert_called_once_with(engine.config, backend_override=None)
         mock_backend.load.assert_called_once()
         assert engine._loaded
 
-    @patch("trio_core.engine.auto_backend")
+    @patch("trio_core.engine.resolve_backend")
     def test_load_respects_backend_override(self, mock_auto):
         mock_backend = MagicMock()
         mock_backend.backend_name = "transformers"
@@ -90,7 +90,7 @@ class TestTrioCoreLoad:
 
         engine = TrioCore(backend="transformers")
         engine.load()
-        mock_auto.assert_called_once_with(engine.config.model, backend="transformers")
+        mock_auto.assert_called_once_with(engine.config, backend_override="transformers")
 
 
 class TestAnalyzeVideo:
@@ -143,7 +143,7 @@ class TestAnalyzeVideo:
 class TestLoadIdempotency:
     """load() called twice — second call returns early (lines 131-132)."""
 
-    @patch("trio_core.engine.auto_backend")
+    @patch("trio_core.engine.resolve_backend")
     def test_load_twice_is_idempotent(self, mock_auto):
         mock_backend = MagicMock()
         mock_backend.backend_name = "mlx"
@@ -161,12 +161,13 @@ class TestLoadIdempotency:
 
 
 class TestBackendSwap:
-    """Backend swap logic: ToMe-only vs FastV+ToMe (lines 142-166)."""
+    """Backend swap logic in resolve_backend: ToMe-only vs FastV+ToMe."""
 
-    @patch("trio_core.engine.auto_backend")
-    @patch("trio_core.tome_backend.ToMeMLXBackend", create=True)
-    def test_tome_only_swaps_to_tome_backend(self, mock_tome_cls, mock_auto):
-        """tome_enabled=True, fastv_enabled=False → ToMeMLXBackend (lines 164-166)."""
+    @patch("trio_core.backends.auto_backend")
+    def test_tome_only_swaps_to_tome_backend(self, mock_auto):
+        """tome_enabled=True, fastv_enabled=False → ToMeMLXBackend."""
+        from trio_core.backends import resolve_backend
+
         base_backend = MagicMock()
         base_backend.backend_name = "mlx"
         base_backend.device_info.device_name = "Apple M3"
@@ -175,25 +176,20 @@ class TestBackendSwap:
         mock_tome_instance = MagicMock()
         mock_tome_instance.backend_name = "tome_mlx"
 
-        with patch("trio_core.engine.ToMeMLXBackend", create=True) as patched:
-            # We need to patch inside engine module's import
-            pass
-
         config = EngineConfig(tome_enabled=True, tome_r=4)
-        engine = TrioCore(config)
 
-        with patch("trio_core.tome_backend.ToMeMLXBackend") as mock_tb:
-            mock_tb.return_value = mock_tome_instance
-            # Patch at the import location inside engine.load()
-            with patch.dict("sys.modules", {"trio_core.tome_backend": MagicMock(ToMeMLXBackend=mock_tb)}):
-                engine.load()
+        mock_tb = MagicMock(return_value=mock_tome_instance)
+        with patch.dict("sys.modules", {"trio_core.tome_backend": MagicMock(ToMeMLXBackend=mock_tb)}):
+            result = resolve_backend(config)
 
-        # The backend should have been swapped
-        assert engine._backend is not base_backend
+        assert result is mock_tome_instance
+        mock_tb.assert_called_once()
 
-    @patch("trio_core.engine.auto_backend")
+    @patch("trio_core.backends.auto_backend")
     def test_fastv_plus_tome_compound(self, mock_auto):
-        """fastv_enabled=True + tome_enabled=True → FastVMLXBackend compound (lines 142-154)."""
+        """fastv_enabled=True + tome_enabled=True → FastVMLXBackend compound."""
+        from trio_core.backends import resolve_backend
+
         base_backend = MagicMock()
         base_backend.backend_name = "mlx"
         base_backend.device_info.device_name = "Apple M3"
@@ -206,20 +202,20 @@ class TestBackendSwap:
             fastv_enabled=True, fastv_ratio=0.5, fastv_layer=2,
             tome_enabled=True, tome_r=4, tome_metric="hidden",
         )
-        engine = TrioCore(config)
 
         mock_fastv_cls = MagicMock(return_value=mock_fastv_instance)
         with patch.dict("sys.modules", {"trio_core.fastv_backend": MagicMock(FastVMLXBackend=mock_fastv_cls)}):
-            engine.load()
+            result = resolve_backend(config)
 
         mock_fastv_cls.assert_called_once()
         call_kwargs = mock_fastv_cls.call_args
-        # Should pass tome kwargs in compound mode
         assert call_kwargs.kwargs.get("tome_r") == 4 or call_kwargs[1].get("tome_r") == 4
 
-    @patch("trio_core.engine.auto_backend")
+    @patch("trio_core.backends.auto_backend")
     def test_fastv_without_tome(self, mock_auto):
         """fastv_enabled=True, tome_enabled=False → FastVMLXBackend without tome kwargs."""
+        from trio_core.backends import resolve_backend
+
         base_backend = MagicMock()
         base_backend.backend_name = "mlx"
         base_backend.device_info.device_name = "Apple M3"
@@ -229,22 +225,20 @@ class TestBackendSwap:
         mock_fastv_instance.backend_name = "fastv_mlx"
 
         config = EngineConfig(fastv_enabled=True, fastv_ratio=0.5, fastv_layer=2)
-        engine = TrioCore(config)
 
         mock_fastv_cls = MagicMock(return_value=mock_fastv_instance)
         with patch.dict("sys.modules", {"trio_core.fastv_backend": MagicMock(FastVMLXBackend=mock_fastv_cls)}):
-            engine.load()
+            result = resolve_backend(config)
 
         mock_fastv_cls.assert_called_once()
         call_kwargs = mock_fastv_cls.call_args
-        # tome_r should NOT be in kwargs
         assert "tome_r" not in (call_kwargs.kwargs or {})
 
 
 class TestFeatureFlagMethods:
     """Feature flags: early_stop, visual_similarity, streaming_memory (lines 181, 185, 189)."""
 
-    @patch("trio_core.engine.auto_backend")
+    @patch("trio_core.engine.resolve_backend")
     def test_early_stop_flag(self, mock_auto):
         """early_stop=True calls backend.set_early_stop (line 181)."""
         mock_backend = MagicMock()
@@ -259,7 +253,7 @@ class TestFeatureFlagMethods:
 
         mock_backend.set_early_stop.assert_called_once_with(True, 0.9)
 
-    @patch("trio_core.engine.auto_backend")
+    @patch("trio_core.engine.resolve_backend")
     def test_visual_similarity_flag(self, mock_auto):
         """visual_similarity_threshold > 0 calls backend.set_visual_similarity (line 185)."""
         mock_backend = MagicMock()
@@ -274,7 +268,7 @@ class TestFeatureFlagMethods:
 
         mock_backend.set_visual_similarity.assert_called_once_with(0.95)
 
-    @patch("trio_core.engine.auto_backend")
+    @patch("trio_core.engine.resolve_backend")
     def test_streaming_memory_flag(self, mock_auto):
         """streaming_memory_enabled calls backend.set_streaming_memory (line 189)."""
         mock_backend = MagicMock()
@@ -294,7 +288,7 @@ class TestFeatureFlagMethods:
 
         mock_backend.set_streaming_memory.assert_called_once_with(True, 8000, 0.2, 8)
 
-    @patch("trio_core.engine.auto_backend")
+    @patch("trio_core.engine.resolve_backend")
     def test_feature_flags_skip_when_backend_lacks_method(self, mock_auto):
         """Feature flags are skipped if backend doesn't have the method."""
         mock_backend = MagicMock(spec=["backend_name", "device_info", "load", "health"])

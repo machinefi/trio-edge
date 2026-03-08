@@ -20,7 +20,7 @@
 
 | # | 耦合点 | 涉及模块 | 危害 |
 |---|--------|---------|------|
-| 1 | **Engine 直接构造后端子类** | `engine.py` | 新增后端要改 engine。应改为 backend registry。 |
+| ~~1~~ | ~~**Engine 直接构造后端子类**~~ | ~~`engine.py`~~ | **已修复**: `resolve_backend(config)` + `register_backend()` |
 | 3 | **generate_step 访问 PromptCache 内部** | `generate.py` | 直接读 `_prefill_offset`、`_last_embeds`，打破封装。 |
 | 4 | **model.language_model._position_ids 突变** | `tome_backend.py`, `fastv_backend.py`, `compressed_backend.py` | MRoPE 位置编码通过 mutation 传递。当前 threading.Lock 保护下安全，但架构不良。 |
 | 5 | **mlx-vlm 紧耦合** | `fastv_backend.py`, `generate.py` | `create_attention_mask`、`KVCache` 依赖第三方内部 API。 |
@@ -36,9 +36,9 @@
 | ~~P2~~ | ~~错误处理缺失~~ | ~~`backends.py`~~ | ~~`generate_step` 没有 OOM 处理~~ | **已修复**: `_check_memory()` prefill 前检查 Metal 可用内存 | ~~M~~ |
 | ~~P2~~ | ~~量化死代码~~ | ~~`generate.py`, `backends.py`, `fastv_backend.py`~~ | ~~`quantize_cache_fn` 硬编码 `kv_bits=None`~~ | **已修复**: 删除所有 no-op quantize_cache_fn 调用 | ~~S~~ |
 | **P2** | 可测试性差 | 全部 backend 文件 | `generate()` 强依赖 GPU，无 CI 测试 | Protocol 抽象 model forward | **L** |
-| **P2** | stream_generate 不是真 async | `engine.py` | `stream_analyze` 内部同步阻塞事件循环 | `asyncio.to_thread` 桥接 | **M** |
+| ~~P2~~ | ~~stream_generate 不是真 async~~ | ~~`engine.py`~~ | ~~`stream_analyze` 内部同步阻塞事件循环~~ | **已修复**: thread+queue 桥接，不阻塞 event loop | ~~M~~ |
 | ~~P3~~ | ~~命名不一致~~ | ~~`model_adapter.py`~~ | ~~`VisionOutput.hidden_states` 声明为 `object`~~ | **已修复**: `object` → `Any` | ~~S~~ |
-| **P3** | hash 性能 | `generate.py` | MD5 hash 大型 pixel_values 较慢 | xxhash 或部分 hash | **S** |
+| ~~P3~~ | ~~hash 性能~~ | ~~`generate.py`~~ | ~~MD5 hash 大型 pixel_values 较慢~~ | **已修复**: strided sampling，大 tensor 只 hash shape+首尾+stride | ~~S~~ |
 
 ---
 
@@ -55,7 +55,7 @@
 
 | # | 目标 | 涉及模块 | 收益 | 风险 |
 |---|------|---------|------|------|
-| 6 | **hash 优化** | `generate.py` | cache hit 检测 ms → us | 低 |
+| 6 | ~~**hash 优化**~~ | ~~`generate.py`~~ | **已修复**: strided sampling | 低 |
 
 ### Week 4: 健壮性
 
@@ -76,3 +76,6 @@
 | 量化死代码清理 | P2 | `backends.py`, `fastv_backend.py` | 删除所有 `quantize_cache_fn(kv_bits=None)` no-op 调用和未使用的 `functools`/`maybe_quantize_kv_cache` import |
 | OOM 防护 | P2 | `backends.py` | `_check_memory()` prefill 前估算 pixel_values 内存，超出 Metal 可用内存时抛出 `MemoryError`。self-review 修复：移入 `_prepare()` 覆盖所有子类路径 |
 | 类型命名修复 | P3 | `model_adapter.py` | `VisionOutput.hidden_states: object` → `Any`，`MergeResult.embeds: object` → `Any` |
+| stream_analyze async 桥接 | P2 | `engine.py` | `stream_analyze` 用 thread+queue 桥接同步 `stream_generate`，不再阻塞 event loop |
+| Backend registry | P2 耦合 | `backends.py`, `engine.py` | `resolve_backend(config)` 统一后端选择逻辑，engine 不再直接构造子类。`register_backend()` 支持插件注册 |
+| Hash 优化 | P3 | `generate.py` | `_hash_input` 大 pixel_values 用 strided sampling（shape+首尾+stride），<64K 元素仍全量 hash |

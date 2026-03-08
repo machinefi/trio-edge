@@ -478,11 +478,27 @@ class PromptCache:
 
     @staticmethod
     def _hash_input(input_ids: mx.array, pixel_values: mx.array = None) -> str:
-        """Fast hash of input_ids + pixel_values for exact-match detection."""
+        """Fast hash of input_ids + pixel_values for exact-match detection.
+
+        Uses strided sampling for large pixel_values to avoid hashing
+        multi-MB tensors. Shape + first/last/strided slices provide
+        collision resistance without full-data cost.
+        """
         import numpy as np
         h = hashlib.md5(np.array(input_ids.flatten(), copy=False).tobytes(), usedforsecurity=False)
         if pixel_values is not None and pixel_values.size > 0:
-            h.update(np.array(pixel_values.flatten(), copy=False).tobytes())
+            flat = np.array(pixel_values.flatten(), copy=False)
+            n = flat.shape[0]
+            # Encode shape for collision resistance
+            h.update(np.array(pixel_values.shape, dtype=np.int64).tobytes())
+            if n <= 65536:
+                h.update(flat.tobytes())
+            else:
+                # Sample first 8K + last 8K + 16K strided elements
+                stride = max(1, n // 16384)
+                h.update(flat[:8192].tobytes())
+                h.update(flat[-8192:].tobytes())
+                h.update(flat[::stride][:16384].tobytes())
         return h.hexdigest()
 
 def _find_visual_boundary(input_ids: mx.array, model: nn.Module) -> int:

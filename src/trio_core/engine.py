@@ -11,7 +11,7 @@ from typing import Any, AsyncGenerator
 
 import numpy as np
 
-from trio_core.backends import BaseBackend, auto_backend
+from trio_core.backends import BaseBackend, resolve_backend
 from trio_core.callbacks import CallbackMixin
 from trio_core.config import EngineConfig
 from trio_core.profiles import ModelProfile, get_profile
@@ -131,48 +131,7 @@ class TrioCore(CallbackMixin):
             logger.info("Model already loaded: %s", self.config.model)
             return
 
-        backend = auto_backend(
-            self.config.model,
-            backend=self._backend_override,
-        )
-
-        # If FastV is enabled and we got an MLX backend, swap to FastVMLXBackend
-        # FastV supports compound mode: ToMe (vision encoder) + FastV (LLM layers)
-        if self.config.fastv_enabled and backend.backend_name == "mlx":
-            from trio_core.fastv_backend import FastVMLXBackend
-
-            tome_kwargs = {}
-            if self.config.tome_enabled:
-                logger.info("Compound mode: ToMe (vision) + FastV (LLM)")
-                tome_kwargs = dict(
-                    tome_r=self.config.tome_r,
-                    tome_metric=self.config.tome_metric,
-                    tome_min_keep_ratio=self.config.tome_min_keep_ratio,
-                    tome_adaptive=self.config.tome_adaptive,
-                )
-
-            backend = FastVMLXBackend(
-                self.config.model,
-                prune_ratio=self.config.fastv_ratio,
-                prune_after_layer=self.config.fastv_layer,
-                device_info=backend.device_info,
-                **tome_kwargs,
-            )
-
-        # If only ToMe is enabled (no FastV) and we got an MLX backend, swap to ToMeMLXBackend
-        elif self.config.tome_enabled and backend.backend_name == "mlx":
-            from trio_core.tome_backend import ToMeMLXBackend
-
-            backend = ToMeMLXBackend(
-                self.config.model,
-                tome_r=self.config.tome_r,
-                metric=self.config.tome_metric,
-                min_keep_ratio=self.config.tome_min_keep_ratio,
-                adaptive=self.config.tome_adaptive,
-                content_aware=self.config.tome_content_aware,
-                device_info=backend.device_info,
-            )
-
+        backend = resolve_backend(self.config, backend_override=self._backend_override)
         self._backend = backend
         self._backend.load()
 
@@ -309,7 +268,14 @@ class TrioCore(CallbackMixin):
         max_tokens: int | None = None,
         temperature: float | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
-        """Stream video analysis token by token."""
+        """Stream video analysis token by token.
+
+        Runs the synchronous stream_generate in a thread so the async
+        event loop is not blocked during GPU inference.
+        """
+        import asyncio
+        import queue
+
         self._ensure_loaded()
         t0 = time.monotonic()
         max_tokens = max_tokens or self.config.max_tokens
@@ -336,15 +302,36 @@ class TrioCore(CallbackMixin):
             metrics.frames_after_motion = frames.shape[0]
         metrics.preprocess_ms = p_pre.dt
 
+        # Bridge sync generator → async via thread + queue
+        chunk_queue: queue.Queue = queue.Queue()
+        _sentinel = object()
+
+        def _run_sync():
+            try:
+                for chunk in self._backend.stream_generate(
+                    frames, prompt,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=self.config.top_p,
+                ):
+                    chunk_queue.put(chunk)
+            except Exception as e:
+                chunk_queue.put(e)
+            finally:
+                chunk_queue.put(_sentinel)
+
+        loop = asyncio.get_event_loop()
         p_inf = PhaseTimer()
         with p_inf:
-            for chunk in self._backend.stream_generate(
-                frames, prompt,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                top_p=self.config.top_p,
-            ):
-                yield {"text": chunk.text, "finished": False, "metrics": None}
+            task = loop.run_in_executor(None, _run_sync)
+            while True:
+                item = await loop.run_in_executor(None, chunk_queue.get)
+                if item is _sentinel:
+                    break
+                if isinstance(item, Exception):
+                    raise item
+                yield {"text": item.text, "finished": False, "metrics": None}
+            await task  # propagate any unhandled exception
         metrics.inference_ms = p_inf.dt
 
         metrics.latency_ms = (time.monotonic() - t0) * 1000
