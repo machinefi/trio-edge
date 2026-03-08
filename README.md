@@ -189,50 +189,50 @@ Apple M3 Ultra, 4-bit quantized. Accuracy is hardware-independent (bit-identical
 
 | Model | Params | Baseline | ToMe r=4 | Compressed 50% | FastV |
 |---|---|---|---|---|---|
-| **Qwen3.5-2B** | 2B | **66%** | 66% (0) | **68% (+2)** | — |
-| InternVL3-2B | 2B | 64% | — | **66% (+2)** | — |
-| Qwen3.5-9B | 9B | 64% | 64% (0) | 62% (-2) | — |
-| Qwen3-VL-4B | 4B | 62% | — | 62% (0) | 50% (-12) |
-| Qwen3.5-4B | 4B | 60% | 60% (0) | **64% (+4)** | — |
-| Qwen3.5-0.8B | 0.8B | 60% | 60% (0) | 60% (0) | — |
+| **Qwen3.5-2B** | 2B | **68%** | 66% (-2) | 68% (0) | — |
+| InternVL3-2B | 2B | 66% | — | 66% (0) | — |
+| Qwen3-VL-4B | 4B | 66% | — | 62% (-4) | 50% (-16) |
+| Qwen3.5-0.8B | 0.8B | 66% | 60% (-6) | 60% (-6) | — |
+| InternVL3-1B | 1B | 62% | — | 58% (-4) | — |
 | Qwen2.5-VL-3B | 3B | 58% | 54% (-4) | 52% (-6) | 42% (-16) |
-| Qwen3-VL-2B | 2B | 58% | — | 58% (0) | 0% |
-| InternVL3-1B | 1B | 58% | — | 58% (0) | — |
-| Qwen3-VL-8B | 8B | 54% | — | 54% (0) | 42% (-12) |
-| Qwen2.5-VL-7B | 7B | 52% | **58% (+6)** | 50% (-2) | — |
+| Qwen2.5-VL-7B | 7B | 58% | 58% (0) | 50% (-8) | — |
+| Qwen3.5-4B | 4B | 58% | 60% (+2) | **64% (+6)** | — |
+| Qwen3.5-9B | 9B | 56% | **64% (+8)** | **62% (+6)** | — |
+| Qwen3-VL-2B | 2B | 52% | — | **58% (+6)** | 0% |
+| Qwen3-VL-8B | 8B | 48% | — | **54% (+6)** | 42% (-6) |
 
 ### MMBench — Multi-ability (50 samples, multiple choice)
 
 | Model | Params | Baseline | ToMe r=4 | Compressed 50% | FastV |
 |---|---|---|---|---|---|
-| **InternVL3-2B** | 2B | **96%** | — | 96% (0) | — |
-| Qwen2.5-VL-7B | 7B | 94% | **96% (+2)** | 94% (0) | — |
-| Qwen3-VL-4B | 4B | 94% | — | 94% (0) | 90% (-4) |
-| Qwen3-VL-8B | 8B | 94% | — | 94% (0) | 78% (-16) |
+| **InternVL3-2B** | 2B | **98%** | — | 96% (-2) | — |
+| Qwen2.5-VL-7B | 7B | 96% | 96% (0) | 94% (-2) | — |
+| Qwen3-VL-4B | 4B | 96% | — | 94% (-2) | 90% (-6) |
+| Qwen3-VL-8B | 8B | 96% | — | 94% (-2) | 78% (-18) |
+| Qwen3.5-9B | 9B | 96% | 90% (-6) | 96% (0) | — |
 | Qwen2.5-VL-3B | 3B | 90% | 82% (-8) | 86% (-4) | 66% (-24) |
-| Qwen3.5-9B | 9B | 90% | 90% (0) | **96% (+6)** | — |
-| InternVL3-1B | 1B | 86% | — | 86% (0) | — |
+| InternVL3-1B | 1B | 88% | — | 86% (-2) | — |
+| Qwen3-VL-2B | 2B | 84% | — | 80% (-4) | 2% |
 | Qwen3.5-2B | 2B | 82% | 82% (0) | 82% (0) | — |
-| Qwen3-VL-2B | 2B | 80% | — | 80% (0) | 2% |
-| Qwen3.5-0.8B | 0.8B | 62% | 62% (0) | 54% (-8) | — |
-| Qwen3.5-4B | 4B | 44% | 44% (0) | 36% (-8) | — |
+| Qwen3.5-0.8B | 0.8B | 58% | **62% (+4)** | 54% (-4) | — |
+| Qwen3.5-4B | 4B | 46% | 44% (-2) | 36% (-10) | — |
 
 ### MVBench — Video Understanding (12 tasks, 5 samples/task)
 
 | Model | Params | Baseline | Compressed 50% |
 |---|---|---|---|
-| Qwen2.5-VL-3B | 3B | **61%** | 59% (-2) |
-| Qwen2.5-VL-7B | 7B | **61%** | 61% (0) |
-| Qwen3.5-2B | 2B | **61%** | 57% (-4) |
-| Qwen3-VL-8B | 8B | 57% | 57% (0) |
-| Qwen3-VL-2B | 2B | 54% | 54% (0) |
-| Qwen3-VL-4B | 4B | 54% | 54% (0) |
-| Qwen3.5-9B | 9B | 46% | 37% (-9) |
-| Qwen3.5-0.8B | 0.8B | 35% | **46% (+11)** |
-| Qwen3.5-4B | 4B | 7% | 2% |
+| Qwen3-VL-8B | 8B | **69%** | 57% (-12) |
+| Qwen3.5-2B | 2B | 65% | 57% (-8) |
+| Qwen2.5-VL-7B | 7B | 63% | 61% (-2) |
+| Qwen3-VL-2B | 2B | 63% | 54% (-9) |
+| Qwen3-VL-4B | 4B | 63% | 54% (-9) |
+| Qwen2.5-VL-3B | 3B | 61% | 59% (-2) |
+| Qwen3.5-0.8B | 0.8B | 50% | 46% (-4) |
+| Qwen3.5-9B | 9B | 37% | 37% (0) |
+| Qwen3.5-4B | 4B | 2% | 2% (0) |
 | InternVL3 | 1-2B | — | — |
 
-`—` = architecturally incompatible (auto-skipped). `✗` = produces garbage output. ToMe incompatible with Qwen3-VL (deepstack) and InternVL3 (pixel shuffle). FastV incompatible with Qwen3.5 (DeltaNet layers) and Qwen2.5-VL-7B (over-prunes). InternVL3 does not support multi-image/video inference (MVBench).
+`—` = architecturally incompatible (auto-skipped). `✗` = produces garbage output. ToMe incompatible with Qwen3-VL (deepstack) and InternVL3 (pixel shuffle). FastV incompatible with Qwen3.5 (DeltaNet), InternVL3, Qwen2.5-VL-7B (over-prunes), and Qwen3-VL-2B (garbage output). InternVL3 does not support multi-image/video inference (MVBench). Qwen3.5-4B: known 4-bit quantization issue on MCQ/video benchmarks (official FP16: MMBench 89%, our 4-bit: 46%).
 
 ### Latency — ms/sample (POPE)
 

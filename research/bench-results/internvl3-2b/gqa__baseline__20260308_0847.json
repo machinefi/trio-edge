@@ -1,0 +1,519 @@
+{
+  "name": "GQA (n=50)",
+  "n_samples": 50,
+  "accuracy": 0.66,
+  "f1": 0.9333333333333333,
+  "yes_rate": 0.14,
+  "avg_latency_ms": 960.4338417408871,
+  "avg_prompt_tokens": 2396.52,
+  "total_time_s": 48.022995948791504,
+  "metadata": {
+    "backend": "mlx",
+    "model": "mlx-community/InternVL3-2B-4bit",
+    "device": "Apple M3 Ultra",
+    "max_tokens": 16,
+    "timestamp": "2026-03-08 08:46:32"
+  },
+  "predictions": [
+    {
+      "id": "201307251",
+      "question": "Is it overcast?",
+      "answer_gt": "no",
+      "answer_pred": "No, the sky is clear and blue, indicating a sunny day.",
+      "correct": true,
+      "latency_ms": 487.27341699122917,
+      "prompt_tokens": 805,
+      "category": "verify"
+    },
+    {
+      "id": "201640614",
+      "question": "Who is wearing the dress?",
+      "answer_gt": "women",
+      "answer_pred": "The person in the light blue shirt is wearing the dress.",
+      "correct": false,
+      "latency_ms": 1288.5322090005502,
+      "prompt_tokens": 3366,
+      "category": "query"
+    },
+    {
+      "id": "202225914",
+      "question": "Does the utensil on top of the table look clean and black?",
+      "answer_gt": "no",
+      "answer_pred": "The utensil on top of the table is a fork, and it appears to",
+      "correct": false,
+      "latency_ms": 778.4988750063349,
+      "prompt_tokens": 1838,
+      "category": "logical"
+    },
+    {
+      "id": "2062325",
+      "question": "Is the surfer that looks wet wearing a wetsuit?",
+      "answer_gt": "yes",
+      "answer_pred": "Yes, the surfer that looks wet is wearing a wetsuit.",
+      "correct": true,
+      "latency_ms": 1284.1237919928972,
+      "prompt_tokens": 3373,
+      "category": "verify"
+    },
+    {
+      "id": "201303229",
+      "question": "How tall is the chair in the bottom of the photo?",
+      "answer_gt": "short",
+      "answer_pred": "The chair in the bottom of the photo appears to be of a standard dining chair",
+      "correct": false,
+      "latency_ms": 1280.6880419957452,
+      "prompt_tokens": 3372,
+      "category": "query"
+    },
+    {
+      "id": "201902997",
+      "question": "What kind of device is on top of the desk?",
+      "answer_gt": "keyboard",
+      "answer_pred": "The device on top of the desk is a computer monitor.",
+      "correct": false,
+      "latency_ms": 1266.9357910053805,
+      "prompt_tokens": 3371,
+      "category": "query"
+    },
+    {
+      "id": "20567512",
+      "question": "What is the airplane flying above?",
+      "answer_gt": "ocean",
+      "answer_pred": "The airplane is flying above the ocean.",
+      "correct": true,
+      "latency_ms": 756.006374998833,
+      "prompt_tokens": 1831,
+      "category": "query"
+    },
+    {
+      "id": "20136592",
+      "question": "What color are the pants?",
+      "answer_gt": "red",
+      "answer_pred": "The pants are red.",
+      "correct": true,
+      "latency_ms": 1250.4737499984913,
+      "prompt_tokens": 3366,
+      "category": "query"
+    },
+    {
+      "id": "20602803",
+      "question": "Is the ground blue or brown?",
+      "answer_gt": "brown",
+      "answer_pred": "The ground is brown.",
+      "correct": true,
+      "latency_ms": 737.1125829959055,
+      "prompt_tokens": 1831,
+      "category": "choose"
+    },
+    {
+      "id": "201079951",
+      "question": "What is around the open window?",
+      "answer_gt": "drapes",
+      "answer_pred": "The open window is surrounded by light-colored curtains.",
+      "correct": false,
+      "latency_ms": 476.9573749945266,
+      "prompt_tokens": 1063,
+      "category": "query"
+    },
+    {
+      "id": "201079952",
+      "question": "What's around the window?",
+      "answer_gt": "drapes",
+      "answer_pred": "The window is surrounded by light-colored curtains.",
+      "correct": false,
+      "latency_ms": 480.14191701076925,
+      "prompt_tokens": 1062,
+      "category": "query"
+    },
+    {
+      "id": "20982537",
+      "question": "Who is standing at the table?",
+      "answer_gt": "woman",
+      "answer_pred": "A person in a green sweater is standing at the table.",
+      "correct": false,
+      "latency_ms": 776.029540997115,
+      "prompt_tokens": 1831,
+      "category": "query"
+    },
+    {
+      "id": "201079958",
+      "question": "Are there drapes to the right of the bed?",
+      "answer_gt": "yes",
+      "answer_pred": "Yes, there are drapes to the right of the bed. The drapes",
+      "correct": true,
+      "latency_ms": 531.0612920002313,
+      "prompt_tokens": 1067,
+      "category": "verify"
+    },
+    {
+      "id": "202218649",
+      "question": "What is hanging above the chalkboard?",
+      "answer_gt": "picture",
+      "answer_pred": "A painting is hanging above the chalkboard.",
+      "correct": false,
+      "latency_ms": 754.5880419929745,
+      "prompt_tokens": 1832,
+      "category": "query"
+    },
+    {
+      "id": "20609782",
+      "question": "Is the cake on a platter?",
+      "answer_gt": "no",
+      "answer_pred": "No, the cake is not on a platter. It appears to be on",
+      "correct": true,
+      "latency_ms": 780.1288339978782,
+      "prompt_tokens": 1832,
+      "category": "verify"
+    },
+    {
+      "id": "201757757",
+      "question": "Is the person to the right of the cup wearing jeans?",
+      "answer_gt": "yes",
+      "answer_pred": "Yes, the person to the right of the cup is wearing jeans.",
+      "correct": true,
+      "latency_ms": 1300.1382080110488,
+      "prompt_tokens": 3372,
+      "category": "verify"
+    },
+    {
+      "id": "201902993",
+      "question": "What device is sitting next to the mouse pad?",
+      "answer_gt": "keyboard",
+      "answer_pred": "The keyboard is sitting next to the mouse pad.",
+      "correct": true,
+      "latency_ms": 1315.606416988885,
+      "prompt_tokens": 3370,
+      "category": "query"
+    },
+    {
+      "id": "20306193",
+      "question": "Does the sweater look open and blue?",
+      "answer_gt": "yes",
+      "answer_pred": "Yes, the sweater is open and blue.",
+      "correct": true,
+      "latency_ms": 797.5362080032937,
+      "prompt_tokens": 1832,
+      "category": "logical"
+    },
+    {
+      "id": "20183468",
+      "question": "Is the jacket long sleeved and black?",
+      "answer_gt": "yes",
+      "answer_pred": "Yes, the jacket is long-sleeved and black.",
+      "correct": true,
+      "latency_ms": 1325.3407909942325,
+      "prompt_tokens": 3369,
+      "category": "logical"
+    },
+    {
+      "id": "20753400",
+      "question": "Are there beds next to the small outlet?",
+      "answer_gt": "yes",
+      "answer_pred": "Yes, there is a bed next to a small outlet. The bed is located",
+      "correct": true,
+      "latency_ms": 211.81362500647083,
+      "prompt_tokens": 297,
+      "category": "verify"
+    },
+    {
+      "id": "20151723",
+      "question": "On which side of the picture is the leather bag?",
+      "answer_gt": "right",
+      "answer_pred": "The leather bag is on the right side of the picture.",
+      "correct": true,
+      "latency_ms": 199.53941700805444,
+      "prompt_tokens": 299,
+      "category": "query"
+    },
+    {
+      "id": "201030735",
+      "question": "Is the blue pillow square and large?",
+      "answer_gt": "no",
+      "answer_pred": "No, the blue pillow is rectangular and not large. It's placed on the",
+      "correct": true,
+      "latency_ms": 782.6107080036309,
+      "prompt_tokens": 1832,
+      "category": "logical"
+    },
+    {
+      "id": "201637161",
+      "question": "Which color is the cake?",
+      "answer_gt": "white",
+      "answer_pred": "The cake is white.",
+      "correct": true,
+      "latency_ms": 1240.6790839886526,
+      "prompt_tokens": 3366,
+      "category": "query"
+    },
+    {
+      "id": "202218839",
+      "question": "What is the name of the cooking utensil that is hang from the hook?",
+      "answer_gt": "pan",
+      "answer_pred": "The cooking utensil hanging from the hook is a slotted pan.",
+      "correct": true,
+      "latency_ms": 784.0002500015544,
+      "prompt_tokens": 1840,
+      "category": "query"
+    },
+    {
+      "id": "20982539",
+      "question": "Where is the skinny person standing?",
+      "answer_gt": "table",
+      "answer_pred": "The skinny person is standing in the center of the group.",
+      "correct": false,
+      "latency_ms": 794.0182500024093,
+      "prompt_tokens": 1831,
+      "category": "query"
+    },
+    {
+      "id": "201110833",
+      "question": "Are the plates on top of an ottoman?",
+      "answer_gt": "no",
+      "answer_pred": "No, the plates are on a dining table.",
+      "correct": true,
+      "latency_ms": 1289.8086670029443,
+      "prompt_tokens": 3370,
+      "category": "verify"
+    },
+    {
+      "id": "20866249",
+      "question": "Is the freezer near the wall small or large?",
+      "answer_gt": "large",
+      "answer_pred": "The freezer is large. It occupies a significant portion of the space in the image",
+      "correct": true,
+      "latency_ms": 1308.1859170051757,
+      "prompt_tokens": 3370,
+      "category": "choose"
+    },
+    {
+      "id": "201110525",
+      "question": "What type of food is to the left of the baby that is sitting atop the woman?",
+      "answer_gt": "marshmallow",
+      "answer_pred": "A cake is to the left of the baby.",
+      "correct": false,
+      "latency_ms": 1305.9088330046507,
+      "prompt_tokens": 3378,
+      "category": "query"
+    },
+    {
+      "id": "20120533",
+      "question": "Is the fence made of cement or aluminum?",
+      "answer_gt": "aluminum",
+      "answer_pred": "The fence in the image is made of metal. The material appears to be a",
+      "correct": false,
+      "latency_ms": 1312.0921670051757,
+      "prompt_tokens": 3369,
+      "category": "choose"
+    },
+    {
+      "id": "201952977",
+      "question": "Which side are the white houses on?",
+      "answer_gt": "left",
+      "answer_pred": "The white houses are on the left side of the image.",
+      "correct": true,
+      "latency_ms": 1284.8042499972507,
+      "prompt_tokens": 3368,
+      "category": "query"
+    },
+    {
+      "id": "201497576",
+      "question": "Are both the phone and the coffee cup the same color?",
+      "answer_gt": "yes",
+      "answer_pred": "No, the phone is black and the coffee cup is black.",
+      "correct": false,
+      "latency_ms": 776.0610830009682,
+      "prompt_tokens": 1836,
+      "category": "compare"
+    },
+    {
+      "id": "20866242",
+      "question": "Are there either any small refrigerators or microwaves in the picture?",
+      "answer_gt": "no",
+      "answer_pred": "No, there are no small refrigerators or microwaves in the picture.",
+      "correct": true,
+      "latency_ms": 1307.1798339951783,
+      "prompt_tokens": 3375,
+      "category": "logical"
+    },
+    {
+      "id": "201455911",
+      "question": "How does that car look like, orange or maybe white?",
+      "answer_gt": "white",
+      "answer_pred": "The car in the image is white.",
+      "correct": true,
+      "latency_ms": 750.3600410127547,
+      "prompt_tokens": 1836,
+      "category": "choose"
+    },
+    {
+      "id": "20856965",
+      "question": "What color is the book?",
+      "answer_gt": "white",
+      "answer_pred": "The book is black.",
+      "correct": false,
+      "latency_ms": 1268.1038750015432,
+      "prompt_tokens": 3366,
+      "category": "query"
+    },
+    {
+      "id": "2059565",
+      "question": "What color is the dirt?",
+      "answer_gt": "red",
+      "answer_pred": "The dirt is brown.",
+      "correct": false,
+      "latency_ms": 1288.1121249956777,
+      "prompt_tokens": 3366,
+      "category": "query"
+    },
+    {
+      "id": "20856960",
+      "question": "Is the bag made of leather lying on top of a sofa?",
+      "answer_gt": "no",
+      "answer_pred": "No, the bag is not made of leather. It appears to be a fabric",
+      "correct": true,
+      "latency_ms": 1316.7824169941014,
+      "prompt_tokens": 3373,
+      "category": "verify"
+    },
+    {
+      "id": "201079954",
+      "question": "What are the drapes around of?",
+      "answer_gt": "window",
+      "answer_pred": "The drapes are around the windows.",
+      "correct": false,
+      "latency_ms": 490.4251249972731,
+      "prompt_tokens": 1064,
+      "category": "query"
+    },
+    {
+      "id": "201548894",
+      "question": "On which side is the picture?",
+      "answer_gt": "left",
+      "answer_pred": "The picture is on the left side of the image.",
+      "correct": true,
+      "latency_ms": 770.2345840079943,
+      "prompt_tokens": 1831,
+      "category": "query"
+    },
+    {
+      "id": "201573912",
+      "question": "What material is the crosswalk in front of the stores?",
+      "answer_gt": "concrete",
+      "answer_pred": "The crosswalk in front of the stores is made of concrete.",
+      "correct": true,
+      "latency_ms": 771.7239170015091,
+      "prompt_tokens": 1836,
+      "category": "query"
+    },
+    {
+      "id": "202243820",
+      "question": "How large are the sprinkles that are sprinkled on the cupcakes?",
+      "answer_gt": "small",
+      "answer_pred": "The sprinkles on the cupcakes are small, likely around 1-2 mill",
+      "correct": true,
+      "latency_ms": 1282.3337500012713,
+      "prompt_tokens": 3374,
+      "category": "query"
+    },
+    {
+      "id": "201573918",
+      "question": "What type of material is the crosswalk near the street lamp made of?",
+      "answer_gt": "concrete",
+      "answer_pred": "The crosswalk near the street lamp is made of concrete.",
+      "correct": true,
+      "latency_ms": 782.8792090003844,
+      "prompt_tokens": 1839,
+      "category": "query"
+    },
+    {
+      "id": "201974972",
+      "question": "Which kind of clothing is pink?",
+      "answer_gt": "tank top",
+      "answer_pred": "The woman is wearing a pink tank top.",
+      "correct": true,
+      "latency_ms": 764.906541997334,
+      "prompt_tokens": 1831,
+      "category": "query"
+    },
+    {
+      "id": "201974971",
+      "question": "How is the clothing item that is pink called?",
+      "answer_gt": "tank top",
+      "answer_pred": "The pink item is a tank top.",
+      "correct": true,
+      "latency_ms": 758.286833006423,
+      "prompt_tokens": 1834,
+      "category": "query"
+    },
+    {
+      "id": "201974976",
+      "question": "Which kind of clothing is not pink?",
+      "answer_gt": "hat",
+      "answer_pred": "The person in the background is wearing white pants.",
+      "correct": false,
+      "latency_ms": 779.8667080060113,
+      "prompt_tokens": 1832,
+      "category": "query"
+    },
+    {
+      "id": "201996743",
+      "question": "Is this helicopter on or off?",
+      "answer_gt": "off",
+      "answer_pred": "The image shows the interior of a helicopter, but it's not possible to determine",
+      "correct": false,
+      "latency_ms": 1341.0594170127297,
+      "prompt_tokens": 3367,
+      "category": "choose"
+    },
+    {
+      "id": "20797666",
+      "question": "Do you see any cats?",
+      "answer_gt": "yes",
+      "answer_pred": "Yes, I see a cat in the image. The cat appears to be resting",
+      "correct": true,
+      "latency_ms": 1283.5737080022227,
+      "prompt_tokens": 3366,
+      "category": "verify"
+    },
+    {
+      "id": "20797665",
+      "question": "Is that shoe behind a dog?",
+      "answer_gt": "no",
+      "answer_pred": "No, the image shows a cat and a shoe. The cat is in the",
+      "correct": true,
+      "latency_ms": 1294.8142920067767,
+      "prompt_tokens": 3367,
+      "category": "verify"
+    },
+    {
+      "id": "201974979",
+      "question": "What kind of clothing is sleeveless?",
+      "answer_gt": "tank top",
+      "answer_pred": "The woman is wearing a sleeveless pink tank top.",
+      "correct": true,
+      "latency_ms": 767.0933750050608,
+      "prompt_tokens": 1832,
+      "category": "query"
+    },
+    {
+      "id": "201156138",
+      "question": "Is the field soft and snowy?",
+      "answer_gt": "no",
+      "answer_pred": "No, the field is not soft and snowy. It appears to be a grass",
+      "correct": true,
+      "latency_ms": 786.38358299213,
+      "prompt_tokens": 1831,
+      "category": "logical"
+    },
+    {
+      "id": "20442334",
+      "question": "What fruits are beneath the microwave?",
+      "answer_gt": "bananas",
+      "answer_pred": "The fruits beneath the microwave are bananas.",
+      "correct": true,
+      "latency_ms": 1260.8770420047222,
+      "prompt_tokens": 3367,
+      "category": "query"
+    }
+  ]
+}
