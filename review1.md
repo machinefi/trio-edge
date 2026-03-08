@@ -74,5 +74,5 @@
 | Server temp file leak | P0 | `api/server.py` | `_resolve_media` 返回 temp_path，调用方 try/finally 清理 |
 | merge_tokens 向量化 | P1 | `tome.py` | 消除 Python for loop，改用 broadcast argmin + 批量 gather/scatter |
 | 量化死代码清理 | P2 | `backends.py`, `fastv_backend.py` | 删除所有 `quantize_cache_fn(kv_bits=None)` no-op 调用和未使用的 `functools`/`maybe_quantize_kv_cache` import |
-| OOM 防护 | P2 | `backends.py` | `_check_memory()` prefill 前估算 pixel_values 内存，超出 Metal 可用内存时抛出 `MemoryError` |
+| OOM 防护 | P2 | `backends.py` | `_check_memory()` prefill 前估算 pixel_values 内存，超出 Metal 可用内存时抛出 `MemoryError`。self-review 修复：移入 `_prepare()` 覆盖所有子类路径 |
 | 类型命名修复 | P3 | `model_adapter.py` | `VisionOutput.hidden_states: object` → `Any`，`MergeResult.embeds: object` → `Any` |
