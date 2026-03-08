@@ -562,8 +562,10 @@ class MLXBackend(BaseBackend):
 
     # ── OOM guard ──────────────────────────────────────────────────────
 
-    def _check_memory(self, pixel_values, input_ids) -> None:
+    def _check_memory(self, pixel_values) -> None:
         """Estimate prefill memory and raise before Metal OOM kills process."""
+        if pixel_values is None:
+            return
         import mlx.core as mx
         try:
             info = mx.device_info()
@@ -575,8 +577,7 @@ class MLXBackend(BaseBackend):
         active = mx.metal.get_active_memory()
         available = budget - active
 
-        # Rough estimate: prefill needs ~6x pixel_values (forward + gradients-like intermediates)
-        # plus ~2x input_ids embedding size (hidden_dim ≈ 2048, float16 = 2 bytes)
+        # Rough estimate: prefill needs ~6x pixel_values (forward + intermediates)
         pixel_bytes = pixel_values.nbytes if hasattr(pixel_values, "nbytes") else 0
         estimated = pixel_bytes * 6
         if estimated > available:
@@ -599,7 +600,6 @@ class MLXBackend(BaseBackend):
         input_ids = kwargs.pop("input_ids")
         pixel_values = kwargs.pop("pixel_values")
         mask = kwargs.pop("mask")
-        self._check_memory(pixel_values, input_ids)
         return self._run_generate(
             input_ids, pixel_values, mask,
             max_tokens=max_tokens, temperature=temperature, top_p=top_p,
@@ -614,7 +614,6 @@ class MLXBackend(BaseBackend):
         input_ids = kwargs.pop("input_ids")
         pixel_values = kwargs.pop("pixel_values")
         mask = kwargs.pop("mask")
-        self._check_memory(pixel_values, input_ids)
         return self._run_stream_generate(
             input_ids, pixel_values, mask,
             max_tokens=max_tokens, temperature=temperature, top_p=top_p,
@@ -624,8 +623,11 @@ class MLXBackend(BaseBackend):
     def _prepare(self, frames: np.ndarray, prompt: str) -> tuple[str, dict]:
         """Route to video or image preparation based on model capability."""
         if self._is_video_model:
-            return self._prepare_video(frames, prompt)
-        return self._prepare_images(frames, prompt)
+            result = self._prepare_video(frames, prompt)
+        else:
+            result = self._prepare_images(frames, prompt)
+        self._check_memory(result[1].get("pixel_values"))
+        return result
 
     def _prepare_video(self, frames: np.ndarray, prompt: str) -> tuple[str, dict]:
         """Prepare inputs via the video pipeline (Qwen2.5-VL, Qwen3-VL, etc.).
