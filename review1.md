@@ -33,7 +33,7 @@ CLI/API → engine → backends → generate
 | # | 问题 | 位置 | 危害 | 建议 | 状态 |
 |---|------|------|------|------|------|
 | 1 | ~~Decode loop 四重复制~~ | ~~`backends.py` 330 行~~ | ~~修改 EOS 逻辑需改 4 处~~ | ~~抽取 `_TokenHandler`~~ | **已修复** |
-| 2 | **generate_step 参数爆炸** | `generate.py:854-878`，24 个参数 | 任何新功能都要穿透全调用栈传参 | 引入 `GenerateConfig` dataclass | 未修复 |
+| 2 | ~~generate_step 参数爆炸~~ | ~~`generate.py:854-878`，24 个参数~~ | ~~任何新功能都要穿透全调用栈~~ | ~~引入 `GenerateConfig` dataclass~~ | **已修复** |
 | 3 | **Backend 直接操作 model internals** | `_prefill_suffix` 写 `lm._position_ids`；FastV 修改 `model.vision_tower` | 多请求并发 race condition | 用 context manager 或 adapter 模式 | 未修复 |
 | 4 | **视觉 token ID 探测散布各处** | `_find_visual_boundary`、`_post_prefill_bookkeeping`、`model_adapter.py` 3 处重复 | 新模型要改多处 | 统一到 config 层 | 未修复 |
 | 5 | ~~`_frames_to_pil` 双重实现~~ | ~~`MLXBackend` 和 `TransformersBackend` 完全一致~~ | ~~改一个忘另一个~~ | ~~提升为 `BaseBackend`~~ | **已修复** |
@@ -72,10 +72,10 @@ CLI/API → engine → backends → generate
 
 ### Week 2: 中等投入
 
-| # | 目标 | 涉及模块 | 收益 | 风险 | 需 benchmark |
-|---|------|----------|------|------|-------------|
-| 4 | **`GenerateConfig` dataclass 封装 generate_step 参数** | `generate.py` | 参数从 24 降到 3-4 个 | 中 | 否 |
-| 5 | **prefix cache `save_prefix` 异步化** | `generate.py:492-497` | 消除同步阻塞点，prefill TPS ~+10% | 中 | 是 |
+| # | 目标 | 涉及模块 | 收益 | 风险 | 需 benchmark | 状态 |
+|---|------|----------|------|------|-------------|------|
+| 4 | ~~`GenerateConfig` dataclass 封装 generate_step 参数~~ | `generate.py` | 参数从 24 降到 config+4 | 中 | 否 | **已完成** |
+| 5 | **prefix cache `save_prefix` 异步化** | `generate.py:492-497` | 消除同步阻塞点，prefill TPS ~+10% | 中 | 是 | 待做 |
 
 ### Week 3-4: 架构改进
 
@@ -120,3 +120,23 @@ CLI/API → engine → backends → generate
 | 行为等价性全面验证 | — | 确认所有 5 个边界场景行为一致：空生成、立即 EOS、detokenizer 路径、non-detokenizer 路径、finalize_delta 空返回 |
 
 **风险:** 零 — 纯重构，403 测试全部通过。
+
+### 第二轮修复：`GenerateConfig` dataclass
+
+**变更文件:** `generate.py` (+30 行), `backends.py` (+12 行)
+
+**修改内容:**
+
+1. **新增 `GenerateConfig` dataclass** (generate.py:190-215)
+   - 将 15 个采样/缓存/引擎参数封装为一个 dataclass
+   - 字段分三组：Sampling（max_tokens, temperature, top_p 等）、Cache（max_kv_size, kv_bits 等）、Engine（early_stop, visual_similarity_threshold）
+
+2. **`generate_step` 新增 `config` 参数**
+   - `config: Optional[GenerateConfig]`，如传入则覆盖所有旧的 legacy kwargs
+   - 完全向后兼容：不传 config 时走原有 kwargs 路径，零破坏性
+
+3. **backends.py 调用方迁移**
+   - 新增 `_make_generate_config()` 工厂方法：从 backend 状态（`_early_stop`, `_visual_similarity_threshold`）+ 请求参数构建 config
+   - `_run_generate` / `_run_stream_generate` 改用 `config=cfg`，generate_step 调用从 7 个 kwargs 降到 4 个
+
+**Self-review:** 无问题。所有旧 kwargs 的默认值与 GenerateConfig 字段默认值完全一致。向后兼容：未传 config 的调用方（如 docstring 示例）行为不变。403 测试全部通过。
