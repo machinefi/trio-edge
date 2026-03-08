@@ -120,6 +120,99 @@ class BaseBackend(ABC):
             "memory_gb": self.device_info.memory_gb,
         }
 
+    @staticmethod
+    def _frames_to_pil(frames: np.ndarray) -> list:
+        """Convert (T, C, H, W) float32 numpy to list of PIL Images."""
+        from PIL import Image
+
+        images = []
+        for i in range(frames.shape[0]):
+            frame = (frames[i].transpose(1, 2, 0) * 255).clip(0, 255).astype(np.uint8)
+            images.append(Image.fromarray(frame))
+        return images
+
+
+# ── Shared token handling ────────────────────────────────────────────────────
+
+
+class _TokenHandler:
+    """Unified tokenizer init, EOS detection, and incremental detokenization.
+
+    Eliminates repeated boilerplate across generate/stream/ar decode loops.
+    """
+
+    def __init__(self, processor, model_config):
+        self.tokenizer = (
+            processor.tokenizer
+            if hasattr(processor, "tokenizer")
+            else processor
+        )
+        self._has_detokenizer = hasattr(processor, "detokenizer")
+        if self._has_detokenizer:
+            self._detokenizer = processor.detokenizer
+            self._detokenizer.reset()
+
+        if hasattr(self.tokenizer, "stopping_criteria"):
+            self.tokenizer.stopping_criteria.reset(model_config.eos_token_id)
+
+        self._eos_token_id = getattr(model_config, "eos_token_id", None)
+        self._token_ids: list[int] = []
+        self._prev_text = ""
+
+    def should_stop(self, token: int) -> bool:
+        """Check stopping criteria and EOS."""
+        if hasattr(self.tokenizer, "stopping_criteria") and self.tokenizer.stopping_criteria(token):
+            return True
+        if self._eos_token_id is not None and not self._has_detokenizer:
+            if isinstance(self._eos_token_id, list):
+                return token in self._eos_token_id
+            return token == self._eos_token_id
+        return False
+
+    def add_token(self, token: int) -> str:
+        """Add token and return incremental text delta.
+
+        For non-streaming callers the delta can be ignored — finalize()
+        does a single full decode at the end, avoiding O(n²) repeated
+        decodes in the non-detokenizer path.
+        """
+        if self._has_detokenizer:
+            self._detokenizer.add_token(token)
+            return self._detokenizer.last_segment
+        self._token_ids.append(token)
+        return ""
+
+    def add_token_streaming(self, token: int) -> str:
+        """Add token and return incremental text delta (streaming variant).
+
+        Same as add_token() but always computes the delta text for
+        immediate yield. For the non-detokenizer fallback path this
+        decodes all accumulated tokens each call (O(n²) total, but
+        this path is rare — most MLX models have a detokenizer).
+        """
+        if self._has_detokenizer:
+            self._detokenizer.add_token(token)
+            return self._detokenizer.last_segment
+        self._token_ids.append(token)
+        new_text = self.tokenizer.decode(self._token_ids, skip_special_tokens=True)
+        delta = new_text[len(self._prev_text):]
+        self._prev_text = new_text
+        return delta
+
+    def finalize(self) -> str:
+        """Return complete decoded text."""
+        if self._has_detokenizer:
+            self._detokenizer.finalize()
+            return self._detokenizer.text
+        return self.tokenizer.decode(self._token_ids, skip_special_tokens=True)
+
+    def finalize_delta(self) -> str:
+        """Return any remaining text not yet yielded (for streaming)."""
+        if self._has_detokenizer:
+            self._detokenizer.finalize()
+            return self._detokenizer.last_segment
+        return ""
+
 
 # ── MLX Backend ──────────────────────────────────────────────────────────────
 
@@ -223,6 +316,12 @@ class MLXBackend(BaseBackend):
             budget, prototype_ratio, n_sink_tokens,
         )
 
+    # ── Token handling (shared by all decode loops) ─────────────────────
+
+    def _make_token_handler(self):
+        """Create a _TokenHandler for the current model/processor."""
+        return _TokenHandler(self._processor, self._model.config)
+
     # ── Unified decode loop (shared by all MLX backend subclasses) ───────
 
     def _run_generate(
@@ -230,32 +329,17 @@ class MLXBackend(BaseBackend):
         max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
         inputs_embeds=None, **extra_kwargs,
     ) -> GenerationResult:
-        """Unified generate: tokenizer init + generate_step + detokenize + TPS.
+        """Unified generate: generate_step + detokenize + TPS.
 
         Subclasses override generate() to prepare inputs, then call this.
         """
         import mlx.core as mx
         from trio_core.generate import generate_step, _wired_limit
 
-        tokenizer = (
-            self._processor.tokenizer
-            if hasattr(self._processor, "tokenizer")
-            else self._processor
-        )
-        has_detokenizer = hasattr(self._processor, "detokenizer")
-        if has_detokenizer:
-            detokenizer = self._processor.detokenizer
-            detokenizer.reset()
-
-        if hasattr(tokenizer, "stopping_criteria"):
-            tokenizer.stopping_criteria.reset(self._model.config.eos_token_id)
-
-        text = ""
+        th = self._make_token_handler()
         prompt_tps = 0.0
         generation_tps = 0.0
         n_tokens = 0
-        token_ids = []
-        eos_token_id = getattr(self._model.config, "eos_token_id", None)
 
         with _wired_limit(self._model):
             tic = time.perf_counter()
@@ -275,33 +359,16 @@ class MLXBackend(BaseBackend):
                     prompt_tps = input_ids.size / max(prompt_time, 1e-9)
                     tic = time.perf_counter()
 
-                if hasattr(tokenizer, "stopping_criteria") and tokenizer.stopping_criteria(token):
+                if th.should_stop(token):
                     break
-
-                if eos_token_id is not None and not has_detokenizer:
-                    if isinstance(eos_token_id, list):
-                        if token in eos_token_id:
-                            break
-                    elif token == eos_token_id:
-                        break
-
-                if has_detokenizer:
-                    detokenizer.add_token(token)
-                else:
-                    token_ids.append(token)
+                th.add_token(token)
                 n_tokens = n + 1
-
-            if has_detokenizer:
-                detokenizer.finalize()
-                text = detokenizer.text
-            else:
-                text = tokenizer.decode(token_ids, skip_special_tokens=True)
 
             if n_tokens > 0:
                 generation_tps = n_tokens / max(time.perf_counter() - tic, 1e-9)
 
         return GenerationResult(
-            text=text,
+            text=th.finalize(),
             prompt_tokens=input_ids.size,
             completion_tokens=n_tokens,
             prompt_tps=prompt_tps,
@@ -314,29 +381,14 @@ class MLXBackend(BaseBackend):
         max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
         inputs_embeds=None, **extra_kwargs,
     ) -> Generator[StreamChunk, None, None]:
-        """Unified streaming: tokenizer init + generate_step + yield chunks.
+        """Unified streaming: generate_step + yield chunks.
 
         Subclasses override stream_generate() to prepare inputs, then call this.
         """
         import mlx.core as mx
         from trio_core.generate import generate_step, _wired_limit
 
-        tokenizer = (
-            self._processor.tokenizer
-            if hasattr(self._processor, "tokenizer")
-            else self._processor
-        )
-        has_detokenizer = hasattr(self._processor, "detokenizer")
-        if has_detokenizer:
-            detokenizer = self._processor.detokenizer
-            detokenizer.reset()
-
-        if hasattr(tokenizer, "stopping_criteria"):
-            tokenizer.stopping_criteria.reset(self._model.config.eos_token_id)
-
-        eos_token_id = getattr(self._model.config, "eos_token_id", None)
-        token_ids = []
-        prev_text = ""
+        th = self._make_token_handler()
         n = 0
 
         with _wired_limit(self._model):
@@ -351,43 +403,23 @@ class MLXBackend(BaseBackend):
                     **extra_kwargs,
                 )
             ):
-                if hasattr(tokenizer, "stopping_criteria") and tokenizer.stopping_criteria(token):
+                if th.should_stop(token):
                     break
+                delta = th.add_token_streaming(token)
+                yield StreamChunk(
+                    text=delta,
+                    prompt_tokens=input_ids.size,
+                    completion_tokens=n + 1,
+                )
 
-                if eos_token_id is not None and not has_detokenizer:
-                    if isinstance(eos_token_id, list):
-                        if token in eos_token_id:
-                            break
-                    elif token == eos_token_id:
-                        break
-
-                if has_detokenizer:
-                    detokenizer.add_token(token)
-                    yield StreamChunk(
-                        text=detokenizer.last_segment,
-                        prompt_tokens=input_ids.size,
-                        completion_tokens=n + 1,
-                    )
-                else:
-                    token_ids.append(token)
-                    new_text = tokenizer.decode(token_ids, skip_special_tokens=True)
-                    delta = new_text[len(prev_text):]
-                    prev_text = new_text
-                    yield StreamChunk(
-                        text=delta,
-                        prompt_tokens=input_ids.size,
-                        completion_tokens=n + 1,
-                    )
-
-            if has_detokenizer:
-                detokenizer.finalize()
-                if detokenizer.last_segment:
-                    yield StreamChunk(
-                        text=detokenizer.last_segment,
-                        prompt_tokens=input_ids.size,
-                        completion_tokens=n + 1,
-                        finished=True,
-                    )
+            final = th.finalize_delta()
+            if final:
+                yield StreamChunk(
+                    text=final,
+                    prompt_tokens=input_ids.size,
+                    completion_tokens=n + 1,
+                    finished=True,
+                )
 
             mx.clear_cache()
 
@@ -409,23 +441,9 @@ class MLXBackend(BaseBackend):
         import mlx.core as mx
         from trio_core.generate import make_sampler
 
-        tokenizer = (
-            self._processor.tokenizer
-            if hasattr(self._processor, "tokenizer")
-            else self._processor
-        )
-        has_detokenizer = hasattr(self._processor, "detokenizer")
-        if has_detokenizer:
-            detokenizer = self._processor.detokenizer
-            detokenizer.reset()
-
-        if hasattr(tokenizer, "stopping_criteria"):
-            tokenizer.stopping_criteria.reset(self._model.config.eos_token_id)
-
-        eos_token_id = getattr(self._model.config, "eos_token_id", None)
+        th = self._make_token_handler()
         sampler = make_sampler(temperature, top_p)
 
-        token_ids = []
         y = first_token
         tic = time.perf_counter()
         n_generated = 0
@@ -433,20 +451,9 @@ class MLXBackend(BaseBackend):
         for n_generated in range(max_tokens):
             tok = y.item()
 
-            if hasattr(tokenizer, "stopping_criteria") and tokenizer.stopping_criteria(tok):
+            if th.should_stop(tok):
                 break
-
-            if eos_token_id is not None and not has_detokenizer:
-                if isinstance(eos_token_id, list):
-                    if tok in eos_token_id:
-                        break
-                elif tok == eos_token_id:
-                    break
-
-            if has_detokenizer:
-                detokenizer.add_token(tok)
-            else:
-                token_ids.append(tok)
+            th.add_token(tok)
 
             outputs = self._model.language_model(y[None], cache=prompt_cache)
             logits = outputs.logits[:, -1, :]
@@ -457,12 +464,6 @@ class MLXBackend(BaseBackend):
             if n_generated % 256 == 0:
                 mx.clear_cache()
 
-        if has_detokenizer:
-            detokenizer.finalize()
-            text = detokenizer.text
-        else:
-            text = tokenizer.decode(token_ids, skip_special_tokens=True)
-
         n_generated = max(n_generated, 1)
         decode_time = time.perf_counter() - tic
         generation_tps = n_generated / max(decode_time, 1e-9)
@@ -470,7 +471,7 @@ class MLXBackend(BaseBackend):
         mx.clear_cache()
 
         return GenerationResult(
-            text=text.strip(),
+            text=th.finalize().strip(),
             prompt_tokens=prompt_token_count,
             completion_tokens=n_generated,
             prompt_tps=prompt_tps,
@@ -487,57 +488,23 @@ class MLXBackend(BaseBackend):
         import mlx.core as mx
         from trio_core.generate import make_sampler
 
-        tokenizer = (
-            self._processor.tokenizer
-            if hasattr(self._processor, "tokenizer")
-            else self._processor
-        )
-        has_detokenizer = hasattr(self._processor, "detokenizer")
-        if has_detokenizer:
-            detokenizer = self._processor.detokenizer
-            detokenizer.reset()
-
-        if hasattr(tokenizer, "stopping_criteria"):
-            tokenizer.stopping_criteria.reset(self._model.config.eos_token_id)
-
-        eos_token_id = getattr(self._model.config, "eos_token_id", None)
+        th = self._make_token_handler()
         sampler = make_sampler(temperature, top_p)
 
-        token_ids = []
-        prev_text = ""
         y = first_token
         n_generated = 0
 
         for n_generated in range(max_tokens):
             tok = y.item()
 
-            if hasattr(tokenizer, "stopping_criteria") and tokenizer.stopping_criteria(tok):
+            if th.should_stop(tok):
                 break
-
-            if eos_token_id is not None and not has_detokenizer:
-                if isinstance(eos_token_id, list):
-                    if tok in eos_token_id:
-                        break
-                elif tok == eos_token_id:
-                    break
-
-            if has_detokenizer:
-                detokenizer.add_token(tok)
-                yield StreamChunk(
-                    text=detokenizer.last_segment,
-                    prompt_tokens=prompt_token_count,
-                    completion_tokens=n_generated + 1,
-                )
-            else:
-                token_ids.append(tok)
-                new_text = tokenizer.decode(token_ids, skip_special_tokens=True)
-                delta = new_text[len(prev_text):]
-                prev_text = new_text
-                yield StreamChunk(
-                    text=delta,
-                    prompt_tokens=prompt_token_count,
-                    completion_tokens=n_generated + 1,
-                )
+            delta = th.add_token_streaming(tok)
+            yield StreamChunk(
+                text=delta,
+                prompt_tokens=prompt_token_count,
+                completion_tokens=n_generated + 1,
+            )
 
             outputs = self._model.language_model(y[None], cache=prompt_cache)
             logits = outputs.logits[:, -1, :]
@@ -548,15 +515,14 @@ class MLXBackend(BaseBackend):
             if n_generated % 256 == 0:
                 mx.clear_cache()
 
-        if has_detokenizer:
-            detokenizer.finalize()
-            if detokenizer.last_segment:
-                yield StreamChunk(
-                    text=detokenizer.last_segment,
-                    prompt_tokens=prompt_token_count,
-                    completion_tokens=n_generated + 1,
-                    finished=True,
-                )
+        final = th.finalize_delta()
+        if final:
+            yield StreamChunk(
+                text=final,
+                prompt_tokens=prompt_token_count,
+                completion_tokens=n_generated + 1,
+                finished=True,
+            )
 
         mx.clear_cache()
 
@@ -750,17 +716,6 @@ class MLXBackend(BaseBackend):
 
         return formatted, kwargs
 
-    @staticmethod
-    def _frames_to_pil(frames: np.ndarray) -> list:
-        """Convert (T, C, H, W) float32 numpy to list of PIL Images."""
-        from PIL import Image
-
-        images = []
-        for i in range(frames.shape[0]):
-            frame = (frames[i].transpose(1, 2, 0) * 255).clip(0, 255).astype(np.uint8)
-            images.append(Image.fromarray(frame))
-        return images
-
     def _call_processor(self, **kwargs) -> dict:
         """Call processor with numpy/PyTorch fallback."""
         try:
@@ -925,17 +880,6 @@ class TransformersBackend(BaseBackend):
 
         return {k: v.to(self._device) if hasattr(v, "to") else v for k, v in inputs.items()}
 
-    @staticmethod
-    def _frames_to_pil(frames: np.ndarray) -> list:
-        """Convert (T, C, H, W) float32 numpy to list of PIL Images."""
-        from PIL import Image
-
-        images = []
-        for i in range(frames.shape[0]):
-            # (C, H, W) float32 [0,1] → (H, W, C) uint8
-            frame = (frames[i].transpose(1, 2, 0) * 255).clip(0, 255).astype(np.uint8)
-            images.append(Image.fromarray(frame))
-        return images
 
 
 # ── Auto Backend Selection ───────────────────────────────────────────────────
