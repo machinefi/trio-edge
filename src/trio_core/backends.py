@@ -1003,6 +1003,14 @@ def resolve_backend(config, *, backend_override: str | None = None) -> BaseBacke
     if base.backend_name != "mlx":
         return base
 
+    # Compress is exclusive with FastV/ToMe (no compound implementation)
+    if config.compress_enabled and (config.fastv_enabled or config.tome_enabled):
+        winner = "fastv" if config.fastv_enabled else "tome"
+        logger.warning(
+            "compress_enabled ignored: %s takes priority (no compound mode).",
+            winner,
+        )
+
     # FastV (optionally compound with ToMe)
     if config.fastv_enabled:
         from trio_core.fastv_backend import FastVMLXBackend
@@ -1036,6 +1044,18 @@ def resolve_backend(config, *, backend_override: str | None = None) -> BaseBacke
             adaptive=config.tome_adaptive,
             content_aware=config.tome_content_aware,
             device_info=base.device_info,
+        )
+
+    # Compressed visual tokens
+    if config.compress_enabled:
+        from trio_core.compressed_backend import CompressedMLXBackend
+        from trio_core.token_compression import TokenCompressor
+
+        compressor = TokenCompressor(
+            strategy="similarity", ratio=config.compress_ratio,
+        )
+        return CompressedMLXBackend(
+            config.model, compressor, device_info=base.device_info,
         )
 
     return base
