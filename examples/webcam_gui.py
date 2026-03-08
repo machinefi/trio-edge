@@ -6,6 +6,8 @@ Inference runs in a background thread so the video stays smooth.
 
 Usage:
     python examples/webcam_gui.py
+    python examples/webcam_gui.py --source "rtsp://admin:pass@192.168.1.100:554/stream1"
+    python examples/webcam_gui.py --source test_videos/intruder_house.mp4
     python examples/webcam_gui.py --prompt "What is the person doing?"
     python examples/webcam_gui.py --model mlx-community/Qwen2.5-VL-3B-Instruct-4bit
 
@@ -19,6 +21,8 @@ Controls:
 """
 
 import argparse
+import shutil
+import subprocess
 import threading
 import time
 
@@ -78,7 +82,8 @@ def draw_text_box(frame: np.ndarray, text: str, metrics: str = "") -> np.ndarray
 
 def main():
     parser = argparse.ArgumentParser(description="Webcam GUI with live VLM analysis")
-    parser.add_argument("--camera", type=int, default=0, help="Camera index (default: 0)")
+    parser.add_argument("--source", "-s", default="0",
+                        help="RTSP URL, video file, or camera index (default: 0)")
     parser.add_argument("--prompt", "-p", default="Describe what you see in one sentence.",
                         help="Question to ask the VLM")
     parser.add_argument("--model", "-m", default=None, help="Model name (auto-detected if omitted)")
@@ -102,17 +107,52 @@ def main():
     health = engine.health()
     print(f"Backend: {health.get('backend', {}).get('backend', 'unknown')}")
     print(f"Device: {health.get('backend', {}).get('device', 'unknown')}")
-    print(f"Ready. Opening camera {args.camera}...")
+    # Open source: camera index, video file, or RTSP URL
+    source_str = args.source
+    source = int(source_str) if source_str.isdigit() else source_str
+    is_rtsp = isinstance(source, str) and source.startswith("rtsp://")
+    ffmpeg_proc = None
 
-    # Open camera
-    cap = cv2.VideoCapture(args.camera)
-    if not cap.isOpened():
-        print(f"Error: Cannot open camera {args.camera}")
-        print("Tip: Mac Studio needs an external webcam.")
-        return
+    print(f"Ready. Opening {source_str}...")
 
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    if is_rtsp:
+        # Use system ffmpeg for RTSP (avoids macOS Local Network sandbox on OpenCV's bundled ffmpeg)
+        if not shutil.which("ffmpeg"):
+            print("Error: ffmpeg not found — install with: brew install ffmpeg")
+            return
+        probe = subprocess.run(
+            ["ffprobe", "-v", "error", "-rtsp_transport", "tcp",
+             "-select_streams", "v:0",
+             "-show_entries", "stream=width,height",
+             "-of", "csv=p=0", source],
+            capture_output=True, text=True, timeout=10,
+        )
+        if not probe.stdout.strip():
+            print(f"Error: Cannot probe RTSP stream: {source}")
+            return
+        rtsp_w, rtsp_h = [int(x) for x in probe.stdout.strip().split(",")]
+        ffmpeg_proc = subprocess.Popen(
+            ["ffmpeg", "-rtsp_transport", "tcp", "-i", source,
+             "-f", "rawvideo", "-pix_fmt", "bgr24", "-an", "-sn", "-v", "error", "-"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=rtsp_w * rtsp_h * 3 * 2,
+        )
+        cap = None
+    else:
+        cap = cv2.VideoCapture(source)
+        if not cap.isOpened():
+            print(f"Error: Cannot open source: {source_str}")
+            print("Tip: Mac Studio needs an external webcam.")
+            return
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+
+    def _read_frame():
+        if ffmpeg_proc:
+            raw = ffmpeg_proc.stdout.read(rtsp_w * rtsp_h * 3)
+            if len(raw) != rtsp_w * rtsp_h * 3:
+                return False, None
+            return True, np.frombuffer(raw, dtype=np.uint8).reshape((rtsp_h, rtsp_w, 3))
+        return cap.read()
 
     # Shared state between main thread and inference thread
     lock = threading.Lock()
@@ -174,7 +214,7 @@ def main():
 
     try:
         while True:
-            ret, frame = cap.read()
+            ret, frame = _read_frame()
             if not ret:
                 time.sleep(0.01)
                 continue
@@ -198,7 +238,11 @@ def main():
         running = False
         force_analyze.set()  # unblock thread
         thread.join(timeout=3)
-        cap.release()
+        if cap:
+            cap.release()
+        if ffmpeg_proc:
+            ffmpeg_proc.terminate()
+            ffmpeg_proc.wait(timeout=5)
         cv2.destroyAllWindows()
         print("Done.")
 
