@@ -162,6 +162,53 @@ class AnalyzeFrameRequest(BaseModel):
     question: str = Field(..., description="Question about the image")
 
 
+# ── Watch API (/v1/watch) ────────────────────────────────────────────────────
+
+
+class WatchCondition(BaseModel):
+    """A condition to monitor for in a watch."""
+
+    id: str = Field(..., description="Condition identifier (e.g. 'person', 'package')")
+    question: str = Field(..., description="Question to ask the VLM (e.g. 'Is there a person?')")
+
+
+class WatchRequest(BaseModel):
+    """Request for POST /v1/watch — start watching an RTSP stream."""
+
+    source: str = Field(..., description="RTSP URL or video source")
+    conditions: list[WatchCondition] = Field(..., description="Conditions to monitor")
+    fps: float = Field(1.0, description="Maximum check rate (frames per second)")
+    stream: bool = Field(True, description="Return SSE stream (must be true)")
+
+
+class WatchConditionResult(BaseModel):
+    """Result for a single condition in a watch cycle."""
+
+    id: str
+    triggered: bool
+    answer: str
+
+
+class WatchMetrics(BaseModel):
+    """Metrics from a single watch inference cycle."""
+
+    latency_ms: int = 0
+    tok_s: float = 0.0
+    frames_analyzed: int = 0
+
+
+class WatchInfo(BaseModel):
+    """Info about an active watch (returned by GET /v1/watch)."""
+
+    watch_id: str
+    source: str
+    state: str
+    conditions: list[WatchCondition]
+    uptime_s: int = 0
+    checks: int = 0
+    alerts: int = 0
+
+
 class AnalyzeFrameResponse(BaseModel):
     """Response for POST /analyze-frame (TrioClaw compatibility)."""
 
