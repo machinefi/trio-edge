@@ -497,12 +497,12 @@ def load_processor(model_path: str | Path) -> QwenVLProcessor:
     Returns:
         QwenVLProcessor instance.
     """
-    from transformers import AutoTokenizer
+    from trio_core.tokenizer import ChatTokenizer
 
     model_path = Path(model_path)
 
-    # Load tokenizer (torch-free)
-    tokenizer = AutoTokenizer.from_pretrained(str(model_path))
+    # Load tokenizer (lightweight, no transformers dependency)
+    tokenizer = ChatTokenizer(model_path)
 
     # Read configs
     preprocessor_config = {}

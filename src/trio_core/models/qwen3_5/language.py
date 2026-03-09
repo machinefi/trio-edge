@@ -1,11 +1,16 @@
 """Qwen3.5 Language Model (DeltaNet hybrid, interleaved MRoPE, partial rotary)."""
 
+from functools import partial
 from typing import Any, Optional
 
 import mlx.core as mx
 import mlx.nn as nn
-from mlx_lm.models.activations import swiglu
-from mlx_lm.models.gated_delta import gated_delta_update
+from trio_core.gated_delta import gated_delta_update
+
+
+@partial(mx.compile, shapeless=True)
+def swiglu(gate, x):
+    return nn.silu(gate) * x
 
 from ..base import (
     ArraysCache,

@@ -144,7 +144,7 @@ def make_prompt_cache(
     if hasattr(model, "make_cache"):
         return model.make_cache()
 
-    from mlx_lm.models.cache import KVCache, RotatingKVCache
+    from trio_core.models.base import KVCache, RotatingKVCache
 
     num_layers = len(model.layers)
     if max_kv_size is not None:

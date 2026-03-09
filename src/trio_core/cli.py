@@ -91,13 +91,12 @@ def doctor():
             typer.echo("torch:     ✗ not installed → pip install 'trio-core[transformers]'")
             all_ok = False
 
-    # Core deps
+    # Optional deps
     try:
         import cv2
-        typer.echo(f"opencv:    ✓ {cv2.__version__}")
+        typer.echo(f"opencv:    ✓ {cv2.__version__} (webcam support)")
     except ImportError:
-        typer.echo("opencv:    ✗ not installed")
-        all_ok = False
+        typer.echo("opencv:    - not installed (optional, for webcam: pip install 'trio-core[webcam]')")
 
     try:
         import PIL

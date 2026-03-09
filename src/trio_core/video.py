@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import atexit as _atexit
+import json
 import logging
+import subprocess
 import tempfile
 import threading
 import time as _time
@@ -12,7 +14,6 @@ from pathlib import Path
 from typing import Iterator
 from urllib.parse import urlparse
 
-import cv2
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -151,6 +152,43 @@ def cleanup_temp_files() -> int:
 _atexit.register(cleanup_temp_files)
 
 
+def _probe_video(path: str) -> dict:
+    """Get video metadata using ffprobe."""
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe", "-v", "quiet",
+                "-print_format", "json",
+                "-show_streams", "-show_format",
+                path,
+            ],
+            capture_output=True, text=True, timeout=30,
+        )
+    except FileNotFoundError:
+        raise RuntimeError(
+            "ffmpeg/ffprobe not found. Install ffmpeg: brew install ffmpeg"
+        )
+
+    if result.returncode != 0:
+        raise IOError(f"ffprobe failed on {path}: {result.stderr[:200]}")
+
+    info = json.loads(result.stdout)
+    for stream in info.get("streams", []):
+        if stream.get("codec_type") == "video":
+            # Parse fps from r_frame_rate (e.g. "30/1" or "30000/1001")
+            fps_str = stream.get("r_frame_rate", "30/1")
+            num, den = fps_str.split("/")
+            fps = float(num) / float(den) if float(den) else 30.0
+            return {
+                "width": int(stream["width"]),
+                "height": int(stream["height"]),
+                "fps": fps,
+                "nb_frames": int(stream.get("nb_frames", 0)),
+                "duration": float(stream.get("duration", info.get("format", {}).get("duration", 0))),
+            }
+    raise IOError(f"No video stream found in: {path}")
+
+
 def _extract_frames(
     path: str,
     target_fps: float,
@@ -161,57 +199,70 @@ def _extract_frames(
     min_frames: int = DEFAULT_MIN_FRAMES,
     max_pixels: int = DEFAULT_MAX_PIXELS,
 ) -> np.ndarray:
-    """Extract frames from video file using OpenCV. Returns (T, C, H, W) float32."""
-    cap = cv2.VideoCapture(path)
-    if not cap.isOpened():
-        raise IOError(f"Failed to open video: {path}")
+    """Extract frames from video file using ffmpeg subprocess. Returns (T, C, H, W) float32."""
+    probe = _probe_video(path)
+    width, height = probe["width"], probe["height"]
+    native_fps = probe["fps"] or 30.0
+    total = probe["nb_frames"]
+
+    # If nb_frames is 0 (some containers), estimate from duration
+    if total <= 0:
+        total = max(1, int(probe["duration"] * native_fps))
+
+    nframes = smart_nframes(
+        total, native_fps, target_fps,
+        min_frames=min_frames, max_frames=max_frames, frame_factor=frame_factor,
+    )
+    nframes = min(nframes, max_frames)
+
+    # Compute target size
+    target_h, target_w = smart_resize(
+        height, width, image_factor=image_factor, max_pixels=max_pixels,
+    )
+
+    # Build ffmpeg select filter for evenly-spaced frames
+    indices = np.linspace(0, total - 1, nframes, dtype=int)
+    select_expr = "+".join(f"eq(n\\,{int(idx)})" for idx in indices)
 
     try:
-        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        native_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
-        nframes = smart_nframes(
-            total, native_fps, target_fps,
-            min_frames=min_frames, max_frames=max_frames, frame_factor=frame_factor,
+        result = subprocess.run(
+            [
+                "ffmpeg", "-v", "quiet",
+                "-i", path,
+                "-vf", f"select='{select_expr}',scale={target_w}:{target_h}",
+                "-vsync", "vfr",
+                "-f", "rawvideo",
+                "-pix_fmt", "rgb24",
+                "-",
+            ],
+            capture_output=True, timeout=120,
         )
-        nframes = min(nframes, max_frames)
-
-        # Compute target size using model-aware image_factor
-        target_h, target_w = smart_resize(
-            height, width, image_factor=image_factor, max_pixels=max_pixels,
+    except FileNotFoundError:
+        raise RuntimeError(
+            "ffmpeg not found. Install ffmpeg: brew install ffmpeg"
         )
 
-        # Evenly-spaced frame indices
-        indices = np.linspace(0, total - 1, nframes, dtype=int)
+    if result.returncode != 0:
+        raise IOError(f"ffmpeg failed on {path}: {result.stderr[:200]}")
 
-        frames: list[np.ndarray] = []
-        for idx in indices:
-            cap.set(cv2.CAP_PROP_POS_FRAMES, int(idx))
-            ret, frame = cap.read()
-            if not ret:
-                continue
-            # BGR → RGB
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            # Resize
-            if frame.shape[:2] != (target_h, target_w):
-                frame = cv2.resize(frame, (target_w, target_h))
-            # (H, W, C) → (C, H, W), normalize to [0, 1]
-            frame = frame.transpose(2, 0, 1).astype(np.float32) / 255.0
-            frames.append(frame)
+    raw = result.stdout
+    frame_bytes = target_w * target_h * 3
+    n_extracted = len(raw) // frame_bytes
 
-        if not frames:
-            raise IOError(f"No frames extracted from: {path}")
+    if n_extracted == 0:
+        raise IOError(f"No frames extracted from: {path}")
 
-        logger.info(
-            "Extracted %d/%d frames from %s (%.1f fps → %.1f fps, %dx%d)",
-            len(frames), total, path, native_fps, target_fps, target_w, target_h,
-        )
-        return np.stack(frames)  # (T, C, H, W)
+    # Parse raw RGB bytes into numpy array
+    buf = np.frombuffer(raw[: n_extracted * frame_bytes], dtype=np.uint8)
+    buf = buf.reshape(n_extracted, target_h, target_w, 3)
+    # (T, H, W, C) → (T, C, H, W), normalize to [0, 1]
+    frames = buf.transpose(0, 3, 1, 2).astype(np.float32) / 255.0
 
-    finally:
-        cap.release()
+    logger.info(
+        "Extracted %d/%d frames from %s (%.1f fps → %.1f fps, %dx%d)",
+        n_extracted, total, path, native_fps, target_fps, target_w, target_h,
+    )
+    return frames
 
 
 # ── Temporal Deduplicator ────────────────────────────────────────────────────
@@ -353,10 +404,22 @@ STREAM_BUFFER_CAP = 30
 STREAM_RECONNECT_DELAY = 1.0
 
 
+def _import_cv2():
+    """Lazy import cv2, with helpful error message."""
+    try:
+        import cv2
+        return cv2
+    except ImportError:
+        raise ImportError(
+            "opencv-python is required for stream/webcam capture. "
+            "Install it: pip install 'trio-core[webcam]'"
+        )
+
+
 class StreamCapture:
     """Continuous frame capture from a live stream (RTSP, YouTube, webcam).
 
-    Inspired by ultralytics LoadStreams: daemon thread + dual-mode buffer.
+    Requires opencv-python: pip install 'trio-core[webcam]'
 
     Two modes:
         buffer=False (default): Keep only the latest frame. Best for real-time
@@ -396,7 +459,7 @@ class StreamCapture:
 
         self.running = False
         self.fps: float = 30.0
-        self._cap: cv2.VideoCapture | None = None
+        self._cap = None  # cv2.VideoCapture, lazy loaded
         self._frames: list[np.ndarray] = []
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
@@ -405,8 +468,8 @@ class StreamCapture:
 
     def start(self) -> StreamCapture:
         """Open the stream and start the capture thread."""
+        cv2 = _import_cv2()
         source = self._resolve_source(self.source)
-        # int source = webcam index, str source = URL/file
         self._cap = cv2.VideoCapture(source)
         if not self._cap.isOpened():
             raise IOError(f"Failed to open stream: {self.source}")
@@ -488,7 +551,8 @@ class StreamCapture:
             if not ret:
                 continue
 
-            # BGR → RGB
+            # BGR → RGB (cv2 is already imported if we got here)
+            import cv2
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
             # Resize if requested
@@ -518,6 +582,7 @@ class StreamCapture:
         if self._cap is not None:
             self._cap.release()
         _time.sleep(STREAM_RECONNECT_DELAY)
+        import cv2
         source = self._resolve_source(self.source)
         self._cap = cv2.VideoCapture(source)
         if self._cap.isOpened():
