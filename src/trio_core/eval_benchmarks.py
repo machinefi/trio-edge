@@ -6,6 +6,7 @@ Supports:
   - GQA — Real-world visual reasoning (spatial, attributes, counting)
   - MMBench — Multi-ability benchmark (20 dimensions, multiple choice)
   - MVBench — Video understanding (20 temporal tasks, multiple choice)
+  - SurveillanceVQA — Surveillance video QA (detection, classification, description)
   - Custom QA — user-provided image+question+answer sets
 
 Usage:
@@ -56,6 +57,13 @@ class PredictionResult:
     correct: bool
     latency_ms: float = 0.0
     prompt_tokens: int = 0
+    # Performance metrics (from InferenceMetrics)
+    prompt_tps: float = 0.0        # prefill tokens/sec
+    generation_tps: float = 0.0    # decode tokens/sec
+    prefill_ms: float = 0.0        # prefill latency
+    decode_ms: float = 0.0         # decode latency
+    peak_memory_gb: float = 0.0    # peak metal memory
+    completion_tokens: int = 0     # output token count
     metadata: dict = field(default_factory=dict)
 
 
@@ -104,6 +112,32 @@ class BenchmarkResult:
         return 2 * precision * recall / (precision + recall)
 
     @property
+    def recall(self) -> float:
+        """True positive rate: TP / (TP + FN) for yes/no tasks."""
+        tp = fn = 0
+        for p in self.predictions:
+            gt_yes = "yes" in p.answer_gt.lower()
+            if gt_yes:
+                if "yes" in p.answer_pred.lower():
+                    tp += 1
+                else:
+                    fn += 1
+        return tp / max(tp + fn, 1)
+
+    @property
+    def specificity(self) -> float:
+        """True negative rate: TN / (TN + FP) for yes/no tasks."""
+        tn = fp = 0
+        for p in self.predictions:
+            gt_yes = "yes" in p.answer_gt.lower()
+            if not gt_yes:
+                if "yes" not in p.answer_pred.lower():
+                    tn += 1
+                else:
+                    fp += 1
+        return tn / max(tn + fp, 1)
+
+    @property
     def avg_latency_ms(self) -> float:
         if not self.predictions:
             return 0.0
@@ -114,6 +148,31 @@ class BenchmarkResult:
         if not self.predictions:
             return 0.0
         return sum(p.prompt_tokens for p in self.predictions) / len(self.predictions)
+
+    @property
+    def avg_prompt_tps(self) -> float:
+        vals = [p.prompt_tps for p in self.predictions if p.prompt_tps > 0]
+        return sum(vals) / len(vals) if vals else 0.0
+
+    @property
+    def avg_generation_tps(self) -> float:
+        vals = [p.generation_tps for p in self.predictions if p.generation_tps > 0]
+        return sum(vals) / len(vals) if vals else 0.0
+
+    @property
+    def avg_prefill_ms(self) -> float:
+        vals = [p.prefill_ms for p in self.predictions if p.prefill_ms > 0]
+        return sum(vals) / len(vals) if vals else 0.0
+
+    @property
+    def avg_decode_ms(self) -> float:
+        vals = [p.decode_ms for p in self.predictions if p.decode_ms > 0]
+        return sum(vals) / len(vals) if vals else 0.0
+
+    @property
+    def avg_peak_memory_gb(self) -> float:
+        vals = [p.peak_memory_gb for p in self.predictions if p.peak_memory_gb > 0]
+        return sum(vals) / len(vals) if vals else 0.0
 
     @property
     def per_category_accuracy(self) -> dict[str, tuple[float, int]]:
@@ -135,9 +194,17 @@ class BenchmarkResult:
         print(f"{'='*60}")
         print(f"  Accuracy:         {self.accuracy:.1%}")
         print(f"  F1:               {self.f1:.3f}")
+        print(f"  Recall:           {self.recall:.1%}")
+        print(f"  Specificity:      {self.specificity:.1%}")
         print(f"  Yes Rate:         {self.yes_rate:.1%}")
         print(f"  Avg Latency:      {self.avg_latency_ms:.0f}ms")
         print(f"  Avg Prompt Tokens:{self.avg_prompt_tokens:.0f}")
+        if self.avg_prefill_ms > 0:
+            print(f"  Avg Prefill:      {self.avg_prefill_ms:.0f}ms")
+            print(f"  Avg Decode:       {self.avg_decode_ms:.0f}ms")
+            print(f"  Avg Prompt TPS:   {self.avg_prompt_tps:.0f}")
+            print(f"  Avg Gen TPS:      {self.avg_generation_tps:.0f}")
+            print(f"  Peak Memory:      {self.avg_peak_memory_gb:.2f}GB")
         if self.metadata:
             for k, v in self.metadata.items():
                 print(f"  {k}: {v}")
@@ -156,9 +223,16 @@ class BenchmarkResult:
             "n_samples": self.n_samples,
             "accuracy": self.accuracy,
             "f1": self.f1,
+            "recall": self.recall,
+            "specificity": self.specificity,
             "yes_rate": self.yes_rate,
             "avg_latency_ms": self.avg_latency_ms,
             "avg_prompt_tokens": self.avg_prompt_tokens,
+            "avg_prefill_ms": self.avg_prefill_ms,
+            "avg_decode_ms": self.avg_decode_ms,
+            "avg_prompt_tps": self.avg_prompt_tps,
+            "avg_generation_tps": self.avg_generation_tps,
+            "avg_peak_memory_gb": self.avg_peak_memory_gb,
             "total_time_s": self.total_time_s,
             "metadata": self.metadata,
             "predictions": [
@@ -170,6 +244,12 @@ class BenchmarkResult:
                     "correct": p.correct,
                     "latency_ms": p.latency_ms,
                     "prompt_tokens": p.prompt_tokens,
+                    "prompt_tps": p.prompt_tps,
+                    "generation_tps": p.generation_tps,
+                    "prefill_ms": p.prefill_ms,
+                    "decode_ms": p.decode_ms,
+                    "peak_memory_gb": p.peak_memory_gb,
+                    "completion_tokens": p.completion_tokens,
                     "category": p.metadata.get("category", ""),
                 }
                 for p in self.predictions
@@ -962,6 +1042,380 @@ class MVBenchBenchmark(Benchmark):
         return MVBenchBenchmark.VIDEO_SOURCES.get(source, [])
 
 
+class SurveillanceVQABenchmark(Benchmark):
+    """SurveillanceVQA-589K: Surveillance video question answering benchmark.
+
+    Based on: https://arxiv.org/abs/2505.12589
+    Dataset: https://huggingface.co/datasets/fei213/SurveillanceVQA-589K
+
+    Tests VLM performance on surveillance/monitoring scenarios using QA pairs
+    from 4 video sources (UCF-Crime, MSAD, MEVA, NWPU Campus).
+
+    Question types:
+      Abnormal: detection (yes/no), classification, subject, description, cause, result
+      Normal: summary, generic, temporal, short_temporal, spatial, reasoning
+
+    Requires:
+      - QA annotations: download from HuggingFace (test_datasets.zip)
+      - Source videos: UCF-Crime videos in video_dir/
+      - Category metadata: UCF_qwen_category.json for clip timestamps
+    """
+
+    # QA types for abnormal clips
+    ABNORMAL_QA_TYPES = [
+        "detection_qa_pairs", "classification_qa_pairs", "subject_qa_pairs",
+        "description_qa_pairs", "cause_qa_pairs", "result_qa_pairs",
+    ]
+    # QA types for normal clips
+    NORMAL_QA_TYPES = [
+        "summary_qa_pairs", "generic_qa_pairs", "temporal_qa_pairs",
+        "spatial_qa_pairs", "reasoning_qa_pairs", "short_temporal_qa_pairs",
+    ]
+
+    # Per-category prompt suffixes to constrain model output format
+    _PROMPT_SUFFIX = {
+        "detection": " Answer with only yes or no.",
+        "classification": " Answer with the anomaly type in a few words.",
+        "subject": " Answer briefly.",
+        "description": " Describe briefly.",
+        "cause": " Answer briefly.",
+        "result": " Answer briefly.",
+        "summary": " Summarize briefly.",
+        "generic": "",
+        "temporal": " Answer briefly.",
+        "short_temporal": " Answer briefly.",
+        "spatial": " Answer briefly.",
+        "reasoning": " Answer briefly.",
+    }
+
+    def __init__(
+        self,
+        data_dir: str,
+        video_dir: str | None = None,
+        qa_type: str = "detection",
+        sources: list[str] | None = None,
+        max_samples: int | None = None,
+        max_frames: int = 8,
+    ):
+        """
+        Args:
+            data_dir: Directory containing test_datasets/ and category JSONs.
+            video_dir: Directory containing source video files. If None, uses
+                       data_dir/videos/.
+            qa_type: Which QA type to evaluate. Options:
+                     "detection" — yes/no anomaly detection (fastest, POPE-like)
+                     "classification" — anomaly type classification
+                     "description" — scene description (open-ended)
+                     "all_abnormal" — all 6 abnormal QA types
+                     "all" — all 12 QA types (abnormal + normal)
+            sources: Video sources to include. Default: ["UCF"].
+                     Options: "UCF", "MSAD", "MEVA", "NWPU_Test", "NWPU_Train"
+            max_samples: Max total samples to load.
+            max_frames: Max frames to extract per video clip.
+        """
+        self.data_dir = Path(data_dir)
+        self.video_dir = Path(video_dir) if video_dir else self.data_dir / "videos"
+        self.qa_type = qa_type
+        self.sources = sources or ["UCF"]
+        self.max_samples = max_samples
+        self.max_frames = max_frames
+
+    @property
+    def name(self) -> str:
+        n = f" (n={self.max_samples})" if self.max_samples else ""
+        src = "+".join(self.sources)
+        return f"SurveillanceVQA-{self.qa_type}-{src}{n}"
+
+    def _get_qa_type_keys(self) -> list[str]:
+        """Return list of QA type keys to extract based on self.qa_type."""
+        if self.qa_type == "detection":
+            return ["detection_qa_pairs"]
+        elif self.qa_type == "classification":
+            return ["classification_qa_pairs"]
+        elif self.qa_type == "description":
+            return ["description_qa_pairs"]
+        elif self.qa_type == "all_abnormal":
+            return self.ABNORMAL_QA_TYPES
+        elif self.qa_type == "all":
+            return self.ABNORMAL_QA_TYPES + self.NORMAL_QA_TYPES
+        else:
+            return [f"{self.qa_type}_qa_pairs"]
+
+    def _load_category_metadata(self, source: str) -> dict:
+        """Load timestamp/caption metadata for video clips."""
+        # Try multiple possible locations for category JSON
+        candidates = [
+            self.data_dir / f"{source}_qwen_category.json",
+            self.data_dir / "output" / f"{source}_qwen_category.json",
+            self.data_dir / "github" / "6_find_normal_abnormal" / "output" / f"{source}_qwen_category.json",
+        ]
+        for path in candidates:
+            if path.exists():
+                with open(path) as f:
+                    return json.load(f)
+        logger.warning("Category metadata not found for %s (tried %s)", source, candidates)
+        return {}
+
+    def _find_video_file(self, video_name: str) -> Path | None:
+        """Find the video file for a given video name."""
+        # UCF-Crime videos are organized as Category/VideoName.mp4
+        # e.g., Abuse/Abuse002_x264.mp4
+        # Extract category from video name (e.g., "Abuse" from "Abuse002_x264")
+        category = re.match(r"([A-Za-z_]+?)(\d|_Videos)", video_name)
+        if category:
+            cat_name = category.group(1).rstrip("_")
+        else:
+            cat_name = ""
+
+        candidates = [
+            self.video_dir / f"{video_name}.mp4",
+            self.video_dir / cat_name / f"{video_name}.mp4",
+            self.video_dir / "Anomaly-Videos-Part-1" / cat_name / f"{video_name}.mp4",
+            self.video_dir / "Anomaly-Videos-Part-2" / cat_name / f"{video_name}.mp4",
+            self.video_dir / "Anomaly-Videos-Part-3" / cat_name / f"{video_name}.mp4",
+            self.video_dir / "Anomaly-Videos-Part-4" / cat_name / f"{video_name}.mp4",
+        ]
+        # Also try Normal_Videos subfolders
+        if "Normal" in video_name:
+            candidates.extend([
+                self.video_dir / "Normal_Videos_of_Events" / f"{video_name}.mp4",
+                self.video_dir / "Testing_Normal_Videos" / f"{video_name}.mp4",
+                self.video_dir / "Testing_Normal_Videos_Anomaly" / f"{video_name}.mp4",
+            ])
+
+        for path in candidates:
+            if path.exists():
+                return path
+        return None
+
+    def _extract_clip_frames(
+        self, video_path: Path, start: float | None, end: float | None
+    ) -> np.ndarray | None:
+        """Extract frames from a video clip, returning (T, C, H, W) float32."""
+        import cv2
+
+        cap = cv2.VideoCapture(str(video_path))
+        if not cap.isOpened():
+            return None
+
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+
+        if start is not None and end is not None:
+            start_frame = int(start * fps)
+            end_frame = int(end * fps)
+        else:
+            start_frame = 0
+            end_frame = total_frames
+
+        end_frame = min(end_frame, total_frames)
+        duration = max(end_frame - start_frame, 1)
+        n_frames = min(self.max_frames, duration)
+
+        if n_frames <= 0:
+            cap.release()
+            return None
+
+        indices = np.linspace(start_frame, end_frame - 1, n_frames, dtype=int)
+        frames = []
+
+        for idx in indices:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, int(idx))
+            ret, frame = cap.read()
+            if ret:
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                frames.append(frame)
+
+        cap.release()
+
+        if not frames:
+            return None
+
+        # Convert to (T, C, H, W) float32
+        arr = np.stack(frames)  # (T, H, W, C)
+        arr = arr.transpose(0, 3, 1, 2).astype(np.float32) / 255.0
+        return arr
+
+    # Standard detection question for synthesizing "No" samples from normal clips
+    _DETECTION_QUESTION = "Does this video contain any potentially violent or criminal activities?"
+
+    def load(self) -> list[BenchmarkSample]:
+        qa_type_keys = self._get_qa_type_keys()
+        # Determine which subdirectories to scan
+        include_abnormal = any(k in self.ABNORMAL_QA_TYPES for k in qa_type_keys)
+        include_normal = any(k in self.NORMAL_QA_TYPES for k in qa_type_keys)
+
+        # For detection mode: also include normal clips with "No" answers
+        # to create a balanced yes/no benchmark (like POPE)
+        add_normal_detection = (self.qa_type == "detection")
+
+        all_samples = []
+        skipped_no_video = 0
+        skipped_no_frames = 0
+
+        for source in self.sources:
+            # Load category metadata for timestamps
+            cat_meta = self._load_category_metadata(source)
+
+            # Scan test subdirectories (abnormal first for balanced sampling)
+            subdirs = []
+            if include_abnormal:
+                subdirs.append(f"{source}_abnormal")
+            if include_normal or add_normal_detection:
+                subdirs.append(f"{source}_normal")
+
+            # For detection mode with max_samples: reserve half for each class
+            normal_budget = None
+            if add_normal_detection and self.max_samples:
+                abnormal_budget = self.max_samples // 2
+                normal_budget = self.max_samples - abnormal_budget
+
+            for subdir_name in subdirs:
+                subdir = self.data_dir / "test_datasets" / subdir_name
+                if not subdir.exists():
+                    logger.warning("Directory not found: %s", subdir)
+                    continue
+
+                is_normal_dir = subdir_name.endswith("_normal")
+                # Apply per-class budget for balanced detection
+                subdir_count = 0
+                if add_normal_detection and self.max_samples:
+                    budget = normal_budget if is_normal_dir else abnormal_budget
+                else:
+                    budget = self.max_samples
+
+                json_files = sorted(subdir.glob("*.json"))
+                for json_file in json_files:
+                    if budget and subdir_count >= budget:
+                        break
+                    if self.max_samples and len(all_samples) >= self.max_samples:
+                        break
+
+                    with open(json_file) as f:
+                        qa_data = json.load(f)
+
+                    # Parse filename: VideoName_clipIndex.json
+                    stem = json_file.stem  # e.g., "Abuse002_x264_18"
+                    parts = stem.rsplit("_", 1)
+                    video_name = parts[0]  # "Abuse002_x264"
+                    clip_idx = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
+
+                    # Get clip timestamps from category metadata
+                    start_time, end_time = None, None
+                    if video_name in cat_meta:
+                        timestamps = cat_meta[video_name].get("timestamps", [])
+                        if clip_idx < len(timestamps):
+                            start_time, end_time = timestamps[clip_idx]
+
+                    # Find and load video
+                    video_path = self._find_video_file(video_name)
+                    if video_path is None:
+                        skipped_no_video += 1
+                        continue
+
+                    frames = self._extract_clip_frames(video_path, start_time, end_time)
+                    if frames is None:
+                        skipped_no_frames += 1
+                        continue
+
+                    # For normal clips in detection mode: synthesize "No" answer
+                    if is_normal_dir and add_normal_detection:
+                        q = self._DETECTION_QUESTION + self._PROMPT_SUFFIX.get("detection", "")
+                        all_samples.append(BenchmarkSample(
+                            id=f"{source}_{stem}_detection_0",
+                            image=frames,
+                            question=q,
+                            answer="No",
+                            category="detection",
+                            metadata={
+                                "source": source,
+                                "video": video_name,
+                                "clip_idx": clip_idx,
+                                "anomaly_type": "normal",
+                                "subdir": subdir_name,
+                            },
+                        ))
+                        subdir_count += 1
+                        continue  # skip QA extraction for normal clips in detection mode
+
+                    # Extract QA pairs of requested types
+                    for qa_key in qa_type_keys:
+                        if qa_key not in qa_data:
+                            continue
+                        for qi, qa_pair in enumerate(qa_data[qa_key]):
+                            if self.max_samples and len(all_samples) >= self.max_samples:
+                                break
+                            # Determine category label
+                            qa_category = qa_key.replace("_qa_pairs", "")
+                            anomaly_type = ""
+                            if "classification" in qa_key:
+                                anomaly_type = qa_pair["A"]
+                            elif "detection" in qa_key:
+                                anomaly_type = "abnormal" if qa_pair["A"].lower() == "yes" else "normal"
+
+                            # Apply per-category prompt suffix
+                            q = qa_pair["Q"] + self._PROMPT_SUFFIX.get(qa_category, "")
+
+                            all_samples.append(BenchmarkSample(
+                                id=f"{source}_{stem}_{qa_category}_{qi}",
+                                image=frames,
+                                question=q,
+                                answer=qa_pair["A"],
+                                category=qa_category,
+                                metadata={
+                                    "source": source,
+                                    "video": video_name,
+                                    "clip_idx": clip_idx,
+                                    "anomaly_type": anomaly_type,
+                                    "subdir": subdir_name,
+                                },
+                            ))
+                    subdir_count += 1
+
+                if self.max_samples and len(all_samples) >= self.max_samples:
+                    break
+
+        if skipped_no_video:
+            logger.warning(
+                "Skipped %d clips (video not found in %s). "
+                "Download UCF-Crime videos to video_dir.",
+                skipped_no_video, self.video_dir,
+            )
+        if skipped_no_frames:
+            logger.warning("Skipped %d clips (frame extraction failed).", skipped_no_frames)
+
+        logger.info("Loaded %d SurveillanceVQA samples", len(all_samples))
+        return all_samples
+
+    def judge(self, sample: BenchmarkSample, prediction: str) -> bool:
+        """Judge prediction against ground truth."""
+        category = sample.category
+        if category == "detection":
+            # Yes/No matching (same as POPE)
+            return self._normalize(prediction) == self._normalize(sample.answer)
+        elif category == "classification":
+            # Check if predicted anomaly type is in the ground truth
+            # GT can be "Traffic Accident, People Falling" (multiple types)
+            pred_norm = self._normalize(prediction).lower()
+            gt_types = [t.strip().lower() for t in sample.answer.split(",")]
+            return any(t in pred_norm for t in gt_types)
+        else:
+            # Open-ended: basic containment check for short answers,
+            # or first-word match. Full eval would use LLM judge.
+            pred_norm = self._normalize(prediction).lower()
+            gt_norm = sample.answer.lower().strip()
+            # For very short answers, do exact match
+            if len(gt_norm.split()) <= 3:
+                return pred_norm == gt_norm or gt_norm in pred_norm
+            # For longer answers, check key phrase overlap
+            gt_words = set(gt_norm.split())
+            pred_words = set(pred_norm.split())
+            if not gt_words:
+                return False
+            overlap = len(gt_words & pred_words) / len(gt_words)
+            return overlap > 0.3
+
+
 class CustomBenchmark(Benchmark):
     """Load a custom benchmark from a JSON file.
 
@@ -1080,6 +1534,12 @@ class BenchmarkRunner:
                 correct=correct,
                 latency_ms=latency,
                 prompt_tokens=out.metrics.prompt_tokens,
+                prompt_tps=out.metrics.prompt_tps,
+                generation_tps=out.metrics.tokens_per_sec,
+                prefill_ms=out.metrics.prefill_ms,
+                decode_ms=out.metrics.decode_ms,
+                peak_memory_gb=out.metrics.peak_memory_gb,
+                completion_tokens=out.metrics.completion_tokens,
                 metadata={"category": sample.category},
             ))
 

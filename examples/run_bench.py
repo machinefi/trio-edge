@@ -125,6 +125,14 @@ def cmd_run(args):
         bm_kwargs["mvbench_tasks"] = parse_csv(args.mvbench_tasks)
     if args.split:
         bm_kwargs["split"] = args.split
+    if args.surveillance_dir:
+        bm_kwargs["surveillance_dir"] = args.surveillance_dir
+    if args.surveillance_video_dir:
+        bm_kwargs["surveillance_video_dir"] = args.surveillance_video_dir
+    if args.surveillance_qa_type:
+        bm_kwargs["surveillance_qa_type"] = args.surveillance_qa_type
+    if args.surveillance_sources:
+        bm_kwargs["surveillance_sources"] = parse_csv(args.surveillance_sources)
 
     sweep = BenchSweep(
         models=models,
@@ -189,6 +197,12 @@ def main():
     parser.add_argument("--split", default=None, help="POPE split (random/popular/adversarial)")
     parser.add_argument("--mvbench-dir", default=None, help="MVBench video directory")
     parser.add_argument("--mvbench-tasks", default=None, help="Comma-separated MVBench tasks")
+    parser.add_argument("--surveillance-dir", default=None, help="SurveillanceVQA data directory")
+    parser.add_argument("--surveillance-video-dir", default=None, help="SurveillanceVQA video directory")
+    parser.add_argument("--surveillance-qa-type", default=None,
+                        help="SurveillanceVQA QA type (detection/classification/description/all_abnormal/all)")
+    parser.add_argument("--surveillance-sources", default=None,
+                        help="Comma-separated video sources (UCF/MSAD/MEVA/NWPU_Test)")
 
     args = parser.parse_args()
 

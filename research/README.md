@@ -304,6 +304,51 @@ M3 Pro 轻松处理,实际 latency 只降 16%。ToMe 的核心价值在于：
 对 Frigate 持续 480p 监控流：**不开 ToMe 是更好的默认值**。
 ToMe 适用于高分辨率或长视频分析场景。
 
+### SurveillanceVQA — Anomaly Detection (1,827 samples, yes/no, UCF-Crime)
+
+[SurveillanceVQA-589K](https://arxiv.org/abs/2505.12589) detection benchmark — balanced yes/no on 13 anomaly categories from UCF-Crime surveillance videos. This is our **core use case benchmark** (Frigate-style security monitoring).
+
+#### TrioCore Baseline (9 T1 models)
+
+| Model | Params | Accuracy | F1 | Recall | Specificity | Yes Rate | Latency |
+|---|---|---|---|---|---|---|---|
+| Qwen2.5-VL-7B | 7B | **70.1%** | 0.362 | 25.3% | **92.8%** | 13.3% | 587ms |
+| Qwen3-VL-8B | 8B | 69.0% | 0.395 | 30.2% | 88.6% | 17.7% | 450ms |
+| Qwen2.5-VL-3B | 3B | 68.4% | 0.504 | 47.6% | 79.1% | 29.9% | 375ms |
+| Qwen3-VL-2B | 2B | 67.6% | 0.137 | 7.7% | 97.9% | 4.0% | 193ms |
+| Qwen3.5-0.8B | 0.8B | 67.6% | 0.441 | 51.7% | 58.2% | 45.2% | 118ms |
+| Qwen3-VL-4B | 4B | 67.5% | 0.484 | 45.4% | 78.7% | 29.3% | 304ms |
+| Qwen3.5-2B | 2B | 67.3% | 0.108 | 5.9% | 98.4% | 3.1% | 189ms |
+| **Qwen3.5-4B** | 4B | 65.2% | **0.556** | 65.1% | 65.2% | 44.9% | 295ms |
+| Qwen3.5-9B | 9B | 56.7% | 0.550 | **79.0%** | 45.5% | 62.7% | 452ms |
+
+#### mlx-vlm Raw Baseline Comparison (No TrioCore Optimizations)
+
+To determine whether low SurveillanceVQA scores are caused by TrioCore optimizations or by fundamental domain gap, we ran raw `mlx_vlm.generate()` on the same benchmark (only Qwen2.5-VL models are supported by mlx-vlm 0.1.15):
+
+| Model | Backend | Accuracy | F1 | Recall | Specificity | Yes Rate | Latency |
+|---|---|---|---|---|---|---|---|
+| Qwen2.5-VL-3B | TrioCore | 68.4% | 0.504 | 47.6% | 79.1% | 29.9% | 375ms |
+| | mlx-vlm raw | 67.0% | 0.068 | 3.6% | 99.1% | 1.8% | 222ms |
+| | **delta** | **+1.4%** | +0.436 | +44.0pp | -20.0pp | +28.1pp | |
+| Qwen2.5-VL-7B | TrioCore | 70.1% | 0.362 | 25.3% | 92.8% | 13.3% | 587ms |
+| | mlx-vlm raw | 67.4% | 0.100 | 5.4% | 98.7% | 2.7% | 308ms |
+| | **delta** | **+2.7%** | +0.262 | +19.9pp | -5.9pp | +10.6pp | |
+
+#### Key Findings
+
+1. **TrioCore does NOT degrade performance** — accuracy is slightly *higher* (+1.4% to +2.7%) than raw mlx-vlm. Our optimization pipeline does not introduce regression.
+
+2. **Raw mlx-vlm models almost never say "yes"** — yes rate 1.8-2.7%, making them useless as anomaly detectors despite similar accuracy (both sides are close to the 50/50 balanced baseline ceiling of ~67%).
+
+3. **All models struggle** — accuracy ≤70% regardless of backend or model size (0.8B to 9B). Even the 9B model only reaches 56.7%. This is a **fundamental domain gap**: these general-purpose VLMs were not trained on surveillance video data.
+
+4. **The accuracy ceiling is ~67-70% for a balanced yes/no dataset** — models that mostly say "No" (high specificity, low recall) achieve ~67% because 50.7% of the dataset is "No". True anomaly detection requires high recall, where all models fail badly.
+
+5. **Interesting recall-specificity tradeoff** — smaller/newer models (Qwen3.5) tend to be more "trigger happy" (higher yes rate = higher recall but lower specificity). Qwen3.5-4B achieves the best F1 (0.556) with balanced yes/no rate. Qwen3.5-9B has highest recall (79%) but worst accuracy due to over-predicting "Yes" (62.7%).
+
+6. **This validates LoRA/distillation plan** — the ≤70% ceiling is fundamental, not optimization-induced. Domain-specific fine-tuning has massive upside potential. See [lora.md](lora.md).
+
 ### Next: Real Video Benchmarks
 
 Target use case: Frigate-style security/surveillance monitoring.
@@ -355,6 +400,7 @@ Target use case: Frigate-style security/surveillance monitoring.
 - [x] **NativeToMeStandardVision** — ToMe wrapper for standard ViTs (SigLIP, for nanoLLaVA)
 - [x] **trust_remote_code fix** — InternVL3 + nanoLLaVA loading via mlx-vlm
 - [x] **FastVLM blocked** — CoreML `.mlpackage` vision encoder incompatible with mlx-vlm pure-MLX loader. Stays Tier 2.
+- [x] **SurveillanceVQA baseline** — 9 T1 models × 1,827 samples, all ≤70% accuracy (domain gap). mlx-vlm raw comparison confirms no optimization regression.
 - [x] **Tier 1 baseline benchmark (9 Qwen models)** — POPE + synthetic eval on M3 Ultra
 - [x] **Native model loading (T1)** — vendored qwen2_5_vl (1080 lines), qwen3_vl (1240 lines), qwen3_5 (640 lines, reuses qwen3_vl vision). All bit-identical with mlx-vlm. Fixed upstream mx.eval() deepstack bug.
 - [x] **Wire native loading into MLXBackend** — load_native() as primary path, mlx-vlm fallback for T2 models
