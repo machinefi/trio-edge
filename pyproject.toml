@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "trio-core"
-version = "0.4.1"
+version = "0.4.2"
 description = "Local VLM inference engine for video — Apple Silicon, NVIDIA, and CPU"
 readme = "README.md"
 license = "Apache-2.0"

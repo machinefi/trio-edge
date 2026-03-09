@@ -501,7 +501,12 @@ def webcam(
 
     # Set compression env vars for speed
     os.environ.setdefault("TRIO_COMPRESS_ENABLED", "1")
-    os.environ.setdefault("TRIO_COMPRESS_RATIO", "0.3")
+    os.environ.setdefault("TRIO_COMPRESS_RATIO", "0.5")
+
+    # Default to Qwen3.5-2B — best accuracy under compression for real-time use
+    # (Qwen2.5-VL-3B loses -19% POPE under compression, avoid for webcam)
+    if not model:
+        model = "mlx-community/Qwen3.5-2B-MLX-4bit"
 
     # Build args
     sys.argv = [
@@ -512,9 +517,8 @@ def webcam(
         "--max-tokens", str(max_tokens),
         "--interval", "0",
         "--resolution", str(resolution),
+        "--model", model,
     ]
-    if model:
-        sys.argv += ["--model", model]
     if backend:
         sys.argv += ["--backend", backend]
     if no_sound:
