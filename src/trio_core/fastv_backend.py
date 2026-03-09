@@ -309,7 +309,7 @@ class FastVMLXBackend(MLXBackend):
             importance scores.
         """
         import mlx.core as mx
-        from mlx_vlm.models.base import create_attention_mask
+        from trio_core.mlx_utils import create_attention_mask
 
         h = embeds
         layers = language_model.model.layers
@@ -461,7 +461,7 @@ class FastVMLXBackend(MLXBackend):
         Returns:
             Normalized hidden state (after final RMSNorm).
         """
-        from mlx_vlm.models.base import create_attention_mask
+        from trio_core.mlx_utils import create_attention_mask
 
         layers = language_model.model.layers
 

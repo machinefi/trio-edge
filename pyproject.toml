@@ -40,7 +40,8 @@ Repository = "https://github.com/machinefi/trio-core"
 Issues = "https://github.com/machinefi/trio-core/issues"
 
 [project.optional-dependencies]
-mlx = ["mlx>=0.16", "mlx-vlm>=0.3.12"]
+mlx = ["mlx>=0.16", "mlx-lm>=0.30.7", "transformers>=4.40", "huggingface-hub", "safetensors", "jinja2"]
+mlx-vlm = ["mlx-vlm>=0.3.12"]
 transformers = ["transformers>=4.40", "torch", "accelerate", "qwen-vl-utils"]
 gui = ["opencv-python>=4.8"]
 all = ["trio-core[mlx,transformers]"]

@@ -239,8 +239,14 @@ class MLXBackend(BaseBackend):
             self._config = load_config_native(self.model_name)
             logger.info("[MLX] Loaded via native path")
         except ValueError:
-            from mlx_vlm import load
-            from mlx_vlm.utils import load_config
+            try:
+                from mlx_vlm import load
+                from mlx_vlm.utils import load_config
+            except ImportError:
+                raise ImportError(
+                    f"Model '{self.model_name}' is not natively supported. "
+                    f"Install mlx-vlm for T2 model support: pip install 'trio-core[mlx-vlm]'"
+                )
             self._model, self._processor = load(
                 self.model_name, trust_remote_code=True,
             )
@@ -690,10 +696,14 @@ class MLXBackend(BaseBackend):
                     text_messages, tokenize=False, add_generation_prompt=True,
                 )
             except Exception:
-                from mlx_vlm.prompt_utils import apply_chat_template
-                formatted = apply_chat_template(
-                    self._processor, self._config, prompt, num_images=len(images),
-                )
+                try:
+                    from mlx_vlm.prompt_utils import apply_chat_template
+                    formatted = apply_chat_template(
+                        self._processor, self._config, prompt, num_images=len(images),
+                    )
+                except ImportError:
+                    # Last resort: plain text without template
+                    formatted = f"{image_tokens}{prompt}"
 
         # Disable thinking mode (Qwen3.5 appends <think>\n by default)
         if formatted.endswith("<think>\n"):
