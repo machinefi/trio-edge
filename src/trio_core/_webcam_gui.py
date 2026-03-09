@@ -191,6 +191,9 @@ def main():
         if not shutil.which("ffmpeg"):
             print("Error: ffmpeg not found — install with: brew install ffmpeg")
             return
+        # Auto-proxy for Tailscale on macOS
+        from trio_core._rtsp_proxy import ensure_rtsp_url
+        source = ensure_rtsp_url(source)
         probe = subprocess.run(
             ["ffprobe", "-v", "error", "-rtsp_transport", "tcp",
              "-select_streams", "v:0",
@@ -323,10 +326,13 @@ def main():
                                               max_tokens=args.max_tokens)
                 elapsed = time.monotonic() - t0
                 text = result.text.strip().replace("\n", " ")
+                # Strip Qwen3.5 thinking tags: <think>...</think> YES → YES
+                import re
+                answer = re.sub(r"</?think>", "", text).strip()
 
                 with lock:
-                    description = text
-                    prev_description = text
+                    description = answer
+                    prev_description = answer
                     metrics_text = (
                         f"[{elapsed:.1f}s | "
                         f"preprocess {result.metrics.preprocess_ms:.0f}ms | "
@@ -336,14 +342,14 @@ def main():
 
                     # Watch mode: check if triggered
                     if watch_mode:
-                        upper = text.upper()
+                        upper = answer.upper()
                         is_alert = upper.startswith("YES")
                         if is_alert:
                             was_triggered = triggered
                             triggered = True
                             triggered_until = time.monotonic() + 2.0
                             ts = datetime.now().strftime("%H:%M:%S")
-                            reason = text[3:].lstrip(".,!: ") if len(text) > 3 else text
+                            reason = answer[3:].lstrip(".,!: ") if len(answer) > 3 else answer
                             events.append({
                                 "text": f"[{ts}] {reason[:55]}",
                                 "triggered": True,
@@ -352,7 +358,7 @@ def main():
                             if not was_triggered:
                                 _alert(f"Alert: {args.watch}")
 
-                print(f"\n> {text}")
+                print(f"\n> {answer}")
                 print(f"  {metrics_text}")
             except Exception as e:
                 with lock:

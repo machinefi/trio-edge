@@ -30,12 +30,9 @@ from __future__ import annotations
 
 import argparse
 import atexit
-import os
 import shutil
-import signal
 import subprocess
 import sys
-import threading
 import time
 from urllib.parse import quote, urlparse
 
@@ -145,107 +142,15 @@ def get_rtsp_uri(host: str, port: int, user: str, password: str) -> str | None:
         return fallback
 
 
-# ── TCP Proxy (Tailscale workaround) ────────────────────────────────────────
+try:
+    from trio_core._rtsp_proxy import ensure_rtsp_url, stop_proxy
+except ImportError:
+    # Running standalone without trio-core installed — inline minimal proxy
+    def ensure_rtsp_url(url: str) -> str:
+        return url
 
-_proxy_proc = None
-
-
-def _start_tcp_proxy(remote_host: str, remote_port: int, local_port: int = 15554) -> int:
-    """Start a TCP proxy using /usr/bin/python3 (system-signed, bypasses Tailscale).
-
-    Tailscale's network extension on macOS blocks unsigned binaries (Homebrew Python,
-    ffmpeg) from accessing LAN devices. System Python (/usr/bin/python3) is Apple-signed
-    and allowed through. This proxy forwards localhost:local_port → remote_host:remote_port.
-
-    Returns the local port the proxy is listening on.
-    """
-    global _proxy_proc
-
-    proxy_code = f'''
-import socket, threading, sys, os
-def proxy(src, dst):
-    try:
-        while True:
-            data = src.recv(65536)
-            if not data: break
-            dst.sendall(data)
-    except: pass
-    try: src.close()
-    except: pass
-    try: dst.close()
-    except: pass
-
-server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-server.bind(("127.0.0.1", {local_port}))
-server.listen(5)
-sys.stdout.write("READY\\n")
-sys.stdout.flush()
-while True:
-    client, _ = server.accept()
-    remote = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    remote.settimeout(10)
-    try:
-        remote.connect(("{remote_host}", {remote_port}))
-    except Exception as e:
-        sys.stderr.write(f"proxy connect error: {{e}}\\n")
-        client.close()
-        continue
-    remote.settimeout(None)
-    threading.Thread(target=proxy, args=(client, remote), daemon=True).start()
-    threading.Thread(target=proxy, args=(remote, client), daemon=True).start()
-'''
-    _proxy_proc = subprocess.Popen(
-        ["/usr/bin/python3", "-c", proxy_code],
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-    )
-    # Wait for "READY"
-    line = _proxy_proc.stdout.readline()
-    if b"READY" not in line:
-        raise RuntimeError("TCP proxy failed to start")
-
-    atexit.register(_stop_tcp_proxy)
-    return local_port
-
-
-def _stop_tcp_proxy():
-    global _proxy_proc
-    if _proxy_proc:
-        _proxy_proc.terminate()
-        try:
-            _proxy_proc.wait(timeout=3)
-        except subprocess.TimeoutExpired:
-            _proxy_proc.kill()
-        _proxy_proc = None
-
-
-def _needs_proxy(host: str, port: int) -> bool:
-    """Check if we need a TCP proxy (Tailscale blocking Homebrew Python)."""
-    import socket as _socket
-
-    # Try direct connection from current Python
-    try:
-        s = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
-        s.settimeout(3)
-        s.connect((host, port))
-        s.close()
-        return False  # Direct works, no proxy needed
-    except OSError:
+    def stop_proxy():
         pass
-
-    # Check if nc (system binary) can reach it
-    if shutil.which("nc"):
-        try:
-            r = subprocess.run(
-                ["nc", "-z", "-w", "3", host, str(port)],
-                capture_output=True, timeout=5,
-            )
-            if r.returncode == 0:
-                return True  # Reachable via system binary, need proxy
-        except Exception:
-            pass
-
-    return False  # Not reachable at all
 
 
 # ── RTSP Frame Reader ────────────────────────────────────────────────────────
@@ -269,26 +174,9 @@ class RTSPReader:
         self._frame_interval = 0
         self._frame_count = 0
 
-    def _get_effective_url(self) -> str:
-        """Return the RTSP URL, possibly rewritten to go through a local TCP proxy."""
-        parsed = urlparse(self.url)
-        host = parsed.hostname
-        port = parsed.port or 554
-
-        if not _needs_proxy(host, port):
-            return self.url
-
-        print("  Tailscale detected — starting TCP proxy via system Python...")
-        local_port = _start_tcp_proxy(host, port)
-        # Rewrite URL to use localhost proxy
-        proxy_url = self.url.replace(f"{host}:{port}", f"127.0.0.1:{local_port}")
-        proxy_url = proxy_url.replace(f"{host}/", f"127.0.0.1:{local_port}/")
-        print(f"  Proxy: 127.0.0.1:{local_port} → {host}:{port}")
-        return proxy_url
-
     def start(self) -> RTSPReader:
         """Open the RTSP stream."""
-        effective_url = self._get_effective_url()
+        effective_url = ensure_rtsp_url(self.url)
 
         # Try PyAV first
         try:
@@ -391,7 +279,7 @@ class RTSPReader:
             except subprocess.TimeoutExpired:
                 self._proc.kill()
             self._proc = None
-        _stop_tcp_proxy()
+        stop_proxy()
 
     def __enter__(self):
         return self.start()

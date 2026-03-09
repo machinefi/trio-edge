@@ -543,6 +543,110 @@ def webcam(
         pass
 
 
+@app.command()
+def cam(
+    host: str = typer.Option(None, "--host", "-h", help="Camera IP address (skip discovery)"),
+    port: int = typer.Option(8000, "--port", help="ONVIF port (default: 8000)"),
+    user: str = typer.Option("admin", "--user", "-u", help="Camera username"),
+    password: str = typer.Option("", "--password", "-p", help="Camera password"),
+    rtsp: str = typer.Option(None, "--rtsp", help="Direct RTSP URL (skip discovery + ONVIF)"),
+    watch: str = typer.Option(
+        "a person is visible",
+        "--watch", "-w", help="Watch condition in natural language"),
+    model: str = typer.Option(None, "--model", "-m", help="Override model"),
+    backend: str = typer.Option(None, "--backend", "-b", help="Force backend: mlx, transformers"),
+    max_tokens: int = typer.Option(10, "--max-tokens", help="Max generation tokens"),
+    resolution: int = typer.Option(240, "--resolution", help="Max resolution (lower=faster)"),
+    discover: bool = typer.Option(False, "--discover", help="Discover cameras and exit"),
+    no_sound: bool = typer.Option(False, "--no-sound", help="Disable audio alerts"),
+):
+    """IP camera monitor with ONVIF discovery and AI analysis.
+
+    Auto-discovers ONVIF cameras on the LAN, connects via RTSP, and runs
+    live VLM analysis with a GUI preview window. Works through Tailscale.
+
+    Examples:
+        trio cam --discover                                    # list cameras on LAN
+        trio cam --host 192.168.1.100 -p pass                  # known IP
+        trio cam --rtsp "rtsp://admin:pass@IP:554/stream"      # direct RTSP
+        trio cam -w "someone at the door" --host 192.168.1.100 -p pass
+    """
+    import os
+    import sys
+    from urllib.parse import quote
+
+    os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
+    os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+    os.environ.setdefault("TRIO_COMPRESS_ENABLED", "1")
+    os.environ.setdefault("TRIO_COMPRESS_RATIO", "0.5")
+
+    # Resolve RTSP URL
+    rtsp_url = rtsp
+    if not rtsp_url:
+        if host:
+            enc_pw = quote(password, safe="")
+            rtsp_url = f"rtsp://{user}:{enc_pw}@{host}:554/h264Preview_01_sub"
+            typer.echo(f"Using RTSP: {rtsp_url}")
+        else:
+            # Try ONVIF discovery
+            try:
+                sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "examples"))
+                from onvif_monitor import discover_cameras, get_rtsp_uri
+            except ImportError:
+                typer.echo("For auto-discovery: pip install WSDiscovery onvif-zeep")
+                typer.echo("Or use: trio cam --host <IP> --password <pass>")
+                raise typer.Exit(1)
+
+            cameras = discover_cameras()
+            if not cameras:
+                typer.echo("No ONVIF cameras found. Try: trio cam --host <IP> -p <pass>")
+                raise typer.Exit(1)
+
+            typer.echo(f"\nFound {len(cameras)} camera(s):\n")
+            for i, c in enumerate(cameras):
+                typer.echo(f"  [{i}] {c['name']}  IP: {c['ip']}:{c['port']}")
+            if discover:
+                return
+
+            if not password:
+                typer.echo("\nPassword required: trio cam --password <pass>")
+                raise typer.Exit(1)
+
+            c = cameras[0]
+            rtsp_url = get_rtsp_uri(c["ip"], c["port"], user, password)
+            if not rtsp_url:
+                typer.echo("Failed to get RTSP URI.")
+                raise typer.Exit(1)
+
+    if discover:
+        return
+
+    if not model:
+        model = "mlx-community/Qwen3.5-2B-MLX-4bit"
+
+    # Launch webcam GUI with RTSP source
+    sys.argv = [
+        "webcam_gui",
+        "--source", rtsp_url,
+        "--watch", watch,
+        "--frames", "1",
+        "--max-tokens", str(max_tokens),
+        "--interval", "0",
+        "--resolution", str(resolution),
+        "--model", model,
+    ]
+    if backend:
+        sys.argv += ["--backend", backend]
+    if no_sound:
+        sys.argv += ["--no-sound"]
+
+    try:
+        from trio_core._webcam_gui import main
+        main()
+    except KeyboardInterrupt:
+        pass
+
+
 def _die_load_error(e: Exception, model: str) -> None:
     """Print a friendly error message for model loading failures and exit."""
     msg = str(e)
