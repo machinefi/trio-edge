@@ -238,11 +238,11 @@ def is_compatible(model: ModelEntry, config: OptimConfig) -> bool:
 def get_benchmark(name: str, max_samples: int | None = None, **kwargs):
     """Create a benchmark instance by name.
 
-    Supported: pope, textvqa, gqa, mmbench, mvbench
+    Supported: pope, textvqa, gqa, mmbench, mvbench, surveillance_vqa
     """
     from trio_core.eval_benchmarks import (
         POPEBenchmark, TextVQABenchmark, GQABenchmark,
-        MMBenchBenchmark, MVBenchBenchmark,
+        MMBenchBenchmark, MVBenchBenchmark, SurveillanceVQABenchmark,
     )
 
     factories = {
@@ -259,6 +259,14 @@ def get_benchmark(name: str, max_samples: int | None = None, **kwargs):
             max_samples_per_task=max_samples,
             max_frames=kwargs.get("max_frames", 16),
         ),
+        "surveillance_vqa": lambda: SurveillanceVQABenchmark(
+            data_dir=kwargs.get("surveillance_dir", "./surveillance_vqa"),
+            video_dir=kwargs.get("surveillance_video_dir"),
+            qa_type=kwargs.get("surveillance_qa_type", "detection"),
+            sources=kwargs.get("surveillance_sources"),
+            max_samples=max_samples,
+            max_frames=kwargs.get("max_frames", 8),
+        ),
     }
 
     if name not in factories:
@@ -266,7 +274,7 @@ def get_benchmark(name: str, max_samples: int | None = None, **kwargs):
     return factories[name]()
 
 
-BENCHMARKS = ["pope", "textvqa", "gqa", "mmbench", "mvbench"]
+BENCHMARKS = ["pope", "textvqa", "gqa", "mmbench", "mvbench", "surveillance_vqa"]
 
 # ---------------------------------------------------------------------------
 # 4. Anomaly Detector
@@ -364,6 +372,12 @@ class ResultStore:
             "accuracy": result.accuracy,
             "f1": result.f1,
             "avg_latency_ms": result.avg_latency_ms,
+            "avg_prompt_tokens": getattr(result, "avg_prompt_tokens", 0),
+            "avg_prefill_ms": getattr(result, "avg_prefill_ms", 0),
+            "avg_decode_ms": getattr(result, "avg_decode_ms", 0),
+            "avg_prompt_tps": getattr(result, "avg_prompt_tps", 0),
+            "avg_generation_tps": getattr(result, "avg_generation_tps", 0),
+            "avg_peak_memory_gb": getattr(result, "avg_peak_memory_gb", 0),
             "n_samples": result.n_samples,
             "anomalies": anomalies,
             "yes_rate": getattr(result, "yes_rate", None),
@@ -429,6 +443,13 @@ def build_engine(model: ModelEntry, config: OptimConfig, *, max_tokens: int = 16
         # Raw mlx-vlm baseline — return (model, processor)
         from mlx_vlm import load
         vlm_model, processor = load(model.hf_id, trust_remote_code=True)
+        # Fix: transformers 4.57+ loads Qwen2VLImageProcessor as "fast" by default,
+        # which only supports PyTorch tensors. Replace only image_processor (not the
+        # whole processor) to preserve mlx_vlm's detokenizer attribute.
+        if hasattr(processor, 'image_processor') and 'Fast' in type(processor.image_processor).__name__:
+            from transformers import AutoImageProcessor
+            slow_ip = AutoImageProcessor.from_pretrained(model.hf_id, trust_remote_code=True, use_fast=False)
+            processor.image_processor = slow_ip
         return (vlm_model, processor), True
 
     # Build EngineConfig with non-special kwargs
