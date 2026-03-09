@@ -43,8 +43,6 @@ def load_native(
         ValueError: If model type is not supported natively.
     """
     import huggingface_hub
-    from transformers import AutoProcessor
-
     # Download model files
     model_path = Path(huggingface_hub.snapshot_download(path_or_hf_repo))
     logger.info("Loading native model from %s", model_path)
@@ -144,12 +142,9 @@ def load_native(
 
     model.eval()
 
-    # Load processor (from transformers, not mlx-vlm)
-    # Try fast processor first, fall back to slow if torchvision not available
-    try:
-        processor = AutoProcessor.from_pretrained(str(model_path), use_fast=True)
-    except ImportError:
-        processor = AutoProcessor.from_pretrained(str(model_path), use_fast=False)
+    # Load processor (torch-free custom implementation)
+    from trio_core.processors.qwen_vl import load_processor
+    processor = load_processor(model_path)
 
     logger.info(
         "Native model loaded: type=%s, quantization=%s",

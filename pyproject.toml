@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "trio-core"
-version = "0.4.4"
+version = "0.5.0"
 description = "Local VLM inference engine for video — Apple Silicon, NVIDIA, and CPU"
 readme = "README.md"
 license = "Apache-2.0"
@@ -40,7 +40,7 @@ Repository = "https://github.com/machinefi/trio-core"
 Issues = "https://github.com/machinefi/trio-core/issues"
 
 [project.optional-dependencies]
-mlx = ["mlx>=0.16", "mlx-vlm>=0.3.12", "torch", "torchvision"]
+mlx = ["mlx>=0.16", "mlx-vlm>=0.3.12"]
 transformers = ["transformers>=4.40", "torch", "accelerate", "qwen-vl-utils"]
 gui = ["opencv-python>=4.8"]
 all = ["trio-core[mlx,transformers]"]
