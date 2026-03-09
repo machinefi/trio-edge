@@ -68,7 +68,7 @@ class _WatchState:
     checks: int = 0
     alerts: int = 0
     stop_event: asyncio.Event | None = None
-    resolution: str = ""
+    resolution: str = "672x448"
     error: str | None = None
 
 
@@ -222,7 +222,7 @@ def _register_routes(app: FastAPI) -> None:
         )
 
         latency_ms = int((_time.monotonic() - t0) * 1000)
-        answer = result.text.strip()
+        answer = _strip_think_tags(result.text)
 
         # Auto-detect triggered from answer semantics
         triggered = _detect_triggered(answer)
@@ -386,6 +386,7 @@ def _register_routes(app: FastAPI) -> None:
             fps=request.fps,
             started_at=_time.time(),
             stop_event=stop_event,
+            resolution=request.resolution,
         )
         _watches[watch_id] = ws
 
@@ -591,12 +592,49 @@ async def _stream_frames_analyze(
     yield "data: [DONE]\n\n"
 
 
+_WATCH_HEARTBEAT_INTERVAL = 30  # seconds between heartbeat events
+_WATCH_MAX_RECONNECTS = 5
+_WATCH_RECONNECT_DELAY = 3  # seconds
+
+
+def _parse_resolution(resolution: str) -> tuple[int, int]:
+    """Parse 'WxH' string into (width, height). Returns (672, 448) on error."""
+    try:
+        w, h = resolution.lower().split("x")
+        return int(w), int(h)
+    except (ValueError, AttributeError):
+        return 672, 448
+
+
+def _start_ffmpeg(effective_url: str, fps: float, frame_w: int, frame_h: int):
+    """Start ffmpeg subprocess for RTSP frame reading."""
+    import subprocess
+
+    cmd = [
+        "ffmpeg", "-v", "quiet",
+        "-rtsp_transport", "tcp",
+        "-i", effective_url,
+        "-vf", f"fps={fps},scale={frame_w}:{frame_h}",
+        "-f", "rawvideo",
+        "-pix_fmt", "rgb24",
+        "-",
+    ]
+    return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+
 async def _watch_sse_stream(
     engine: TrioCore, ws: _WatchState
 ) -> AsyncIterator[str]:
-    """Core watch loop: RTSP → frames → motion gate → inference → SSE events."""
+    """Core watch loop: RTSP → frames → motion gate → inference → SSE events.
+
+    Features:
+    - Configurable frame resolution via WatchRequest.resolution
+    - Heartbeat events every 30s so the client knows the connection is alive
+    - Auto-reconnect on RTSP stream failure (up to 5 retries)
+    """
     import base64
     import io
+    import subprocess
 
     from PIL import Image
 
@@ -605,6 +643,8 @@ async def _watch_sse_stream(
 
     watch_id = ws.watch_id
     motion_gate = MotionGate()
+    frame_w, frame_h = _parse_resolution(ws.resolution)
+    frame_bytes = frame_w * frame_h * 3
 
     # Emit connecting status
     yield _sse_event("status", {"watch_id": watch_id, "state": "connecting"})
@@ -620,26 +660,10 @@ async def _watch_sse_stream(
         _watches.pop(watch_id, None)
         return
 
-    # Start ffmpeg process to read RTSP frames
-    import subprocess
-
-    ffmpeg_cmd = [
-        "ffmpeg", "-v", "quiet",
-        "-rtsp_transport", "tcp",
-        "-i", effective_url,
-        "-vf", f"fps={ws.fps},scale=672:448",
-        "-f", "rawvideo",
-        "-pix_fmt", "rgb24",
-        "-",
-    ]
-
+    # Start ffmpeg
     try:
         proc = await asyncio.to_thread(
-            lambda: subprocess.Popen(
-                ffmpeg_cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
+            lambda: _start_ffmpeg(effective_url, ws.fps, frame_w, frame_h)
         )
     except Exception as e:
         ws.state = "error"
@@ -648,8 +672,6 @@ async def _watch_sse_stream(
         _watches.pop(watch_id, None)
         return
 
-    frame_w, frame_h = 672, 448
-    frame_bytes = frame_w * frame_h * 3
     model_name = engine.config.model.split("/")[-1] if "/" in engine.config.model else engine.config.model
 
     ws.state = "running"
@@ -661,20 +683,75 @@ async def _watch_sse_stream(
         "model": model_name,
     })
 
+    reconnect_count = 0
+    last_heartbeat = _time.monotonic()
+
     try:
         while not ws.stop_event.is_set():
+            # Heartbeat — emit periodically even during static scenes
+            now = _time.monotonic()
+            if now - last_heartbeat >= _WATCH_HEARTBEAT_INTERVAL:
+                last_heartbeat = now
+                yield _sse_event("heartbeat", {
+                    "watch_id": watch_id,
+                    "ts": _iso_now(),
+                    "uptime_s": int(_time.time() - ws.started_at),
+                    "checks": ws.checks,
+                    "alerts": ws.alerts,
+                })
+
             # Read one frame from ffmpeg
             raw = await loop.run_in_executor(
                 None, lambda: proc.stdout.read(frame_bytes) if proc.stdout else b""
             )
             if len(raw) < frame_bytes:
-                # Stream ended or error
                 if ws.stop_event.is_set():
                     break
-                ws.state = "error"
-                ws.error = "RTSP stream ended"
-                yield _sse_event("error", {"watch_id": watch_id, "error": "RTSP stream ended"})
-                break
+                # ── Auto-reconnect ──
+                if reconnect_count < _WATCH_MAX_RECONNECTS:
+                    reconnect_count += 1
+                    logger.warning("Watch %s: RTSP stream lost, reconnecting (%d/%d)...",
+                                   watch_id, reconnect_count, _WATCH_MAX_RECONNECTS)
+                    yield _sse_event("status", {
+                        "watch_id": watch_id,
+                        "state": "reconnecting",
+                        "attempt": reconnect_count,
+                        "max_attempts": _WATCH_MAX_RECONNECTS,
+                    })
+                    # Kill old ffmpeg
+                    if proc.poll() is None:
+                        proc.terminate()
+                        try:
+                            proc.wait(timeout=3)
+                        except subprocess.TimeoutExpired:
+                            proc.kill()
+                    await asyncio.sleep(_WATCH_RECONNECT_DELAY)
+                    if ws.stop_event.is_set():
+                        break
+                    try:
+                        proc = await asyncio.to_thread(
+                            lambda: _start_ffmpeg(effective_url, ws.fps, frame_w, frame_h)
+                        )
+                        motion_gate.reset()
+                        ws.state = "running"
+                        yield _sse_event("status", {
+                            "watch_id": watch_id,
+                            "state": "running",
+                            "resolution": ws.resolution,
+                            "reconnected": True,
+                        })
+                        continue
+                    except Exception as e:
+                        logger.error("Watch %s: reconnect failed: %s", watch_id, e)
+                        continue  # will retry on next loop iteration
+                else:
+                    ws.state = "error"
+                    ws.error = f"RTSP stream lost after {_WATCH_MAX_RECONNECTS} reconnect attempts"
+                    yield _sse_event("error", {"watch_id": watch_id, "error": ws.error})
+                    break
+
+            # Successful read resets reconnect counter
+            reconnect_count = 0
 
             # Parse frame: (H, W, 3) uint8 → (C, H, W) float32
             frame = np.frombuffer(raw, dtype=np.uint8).reshape(frame_h, frame_w, 3)
@@ -709,6 +786,7 @@ async def _watch_sse_stream(
             latency_ms = int((_time.monotonic() - t0) * 1000)
             tok_s = last_result.metrics.tokens_per_sec if last_result else 0.0
             ws.checks += 1
+            last_heartbeat = _time.monotonic()  # inference counts as activity
 
             metrics = WatchMetrics(
                 latency_ms=latency_ms,
