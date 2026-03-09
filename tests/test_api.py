@@ -575,3 +575,105 @@ class TestLifespan:
                 mock_instance.load.assert_called_once()
         finally:
             server_mod._engine = saved
+
+
+class TestMetricsEndpoint:
+    """Test GET /metrics returns operational stats."""
+
+    def test_metrics(self, client):
+        resp = client.get("/metrics")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "uptime_s" in data
+        assert "process" in data
+        assert "rss_mb" in data["process"]
+        assert "requests" in data
+        assert data["requests"]["total"] >= 1  # this request counts
+        assert "inference" in data
+        assert "watches" in data
+        assert "engine" in data
+        assert data["engine"]["loaded"] is True
+
+
+class TestBodySizeLimit:
+    """Test request body size limit (413 on oversized payload)."""
+
+    def test_oversized_body_rejected(self):
+        from trio_core.api.server import create_app, _MAX_BODY_BYTES
+        import trio_core.api.server as server_mod
+
+        app = create_app()
+        app.router.lifespan_context = _noop_lifespan
+
+        mock_engine = MagicMock()
+        mock_engine._loaded = True
+        mock_engine.config.model = "test-model"
+        server_mod._engine = mock_engine
+
+        try:
+            with TestClient(app) as c:
+                # Send a Content-Length header that exceeds the limit
+                resp = c.post(
+                    "/analyze-frame",
+                    json={"frame_b64": "x", "question": "test"},
+                    headers={"Content-Length": str(_MAX_BODY_BYTES + 1)},
+                )
+                assert resp.status_code == 413
+                assert "payload_too_large" in resp.json()["error"]
+        finally:
+            server_mod._engine = None
+
+
+class TestReloadEndpoint:
+    """Test POST /v1/admin/reload hot-reloads the engine."""
+
+    def test_reload_same_model(self, client):
+        import trio_core.api.server as server_mod
+
+        with patch("trio_core.api.server.TrioCore") as MockTrioCore:
+            new_engine = MagicMock()
+            new_engine._loaded = True
+            new_engine._backend.backend_name = "mock"
+            MockTrioCore.return_value = new_engine
+
+            resp = client.post("/v1/admin/reload")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["status"] == "reloaded"
+
+    def test_reload_failure_rolls_back(self, client):
+        import trio_core.api.server as server_mod
+
+        old_engine = server_mod._engine
+
+        with patch("trio_core.api.server.TrioCore") as MockTrioCore:
+            new_engine = MagicMock()
+            new_engine.load.side_effect = RuntimeError("OOM")
+            MockTrioCore.return_value = new_engine
+
+            resp = client.post("/v1/admin/reload")
+            assert resp.status_code == 500
+            assert "OOM" in resp.json()["detail"]
+
+            # Old engine should be restored
+            assert server_mod._engine is old_engine
+
+
+class TestStructuredLogging:
+    """Test JSON log formatter."""
+
+    def test_json_formatter(self):
+        import json
+        import logging
+        from trio_core.cli import _JSONFormatter
+
+        formatter = _JSONFormatter()
+        record = logging.LogRecord(
+            name="test", level=logging.INFO, pathname="", lineno=0,
+            msg="hello %s", args=("world",), exc_info=None,
+        )
+        output = formatter.format(record)
+        data = json.loads(output)
+        assert data["level"] == "info"
+        assert data["msg"] == "hello world"
+        assert "ts" in data

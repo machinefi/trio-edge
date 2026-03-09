@@ -51,6 +51,20 @@ _engine: TrioCore | None = None
 _active_requests: int = 0
 _active_lock = asyncio.Lock()
 _shutdown_event: asyncio.Event | None = None
+_start_time: float = _time.monotonic()
+_total_requests: int = 0
+_total_inference_ms: float = 0.0
+_total_inferences: int = 0
+
+# Request body size limit (10 MB) — prevents OOM from oversized base64 payloads
+_MAX_BODY_BYTES = 10 * 1024 * 1024
+
+
+def _track_inference(latency_ms: float) -> None:
+    """Record an inference for /metrics aggregation."""
+    global _total_inference_ms, _total_inferences
+    _total_inferences += 1
+    _total_inference_ms += latency_ms
 
 # ── Watch State ──────────────────────────────────────────────────────────────
 
@@ -83,8 +97,9 @@ def get_engine() -> TrioCore:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _engine, _shutdown_event
+    global _engine, _shutdown_event, _start_time
     _shutdown_event = asyncio.Event()
+    _start_time = _time.monotonic()
     config = app.state.config if hasattr(app.state, "config") else EngineConfig()
     backend = getattr(app.state, "backend", None)
     _engine = TrioCore(config, backend=backend)
@@ -95,6 +110,21 @@ async def lifespan(app: FastAPI):
         logger.error("Failed to load model %s: %s", config.model, e)
         raise
     logger.info("Engine ready: backend=%s", _engine._backend.backend_name if _engine._backend else "none")
+
+    # SIGHUP → reload model (same as POST /v1/admin/reload)
+    import signal
+
+    def _sighup_handler(signum, frame):
+        logger.info("SIGHUP received — scheduling model reload")
+        asyncio.get_event_loop().call_soon_threadsafe(
+            lambda: asyncio.ensure_future(_reload_engine())
+        )
+
+    try:
+        signal.signal(signal.SIGHUP, _sighup_handler)
+    except (OSError, AttributeError):
+        pass  # SIGHUP not available on Windows
+
     yield
     # Stop all active watches
     for ws in list(_watches.values()):
@@ -113,14 +143,24 @@ async def lifespan(app: FastAPI):
 
 
 class _RequestIDMiddleware(BaseHTTPMiddleware):
-    """Add X-Request-ID header and track active requests for graceful shutdown."""
+    """Add X-Request-ID header, enforce body size limit, and track requests."""
 
     async def dispatch(self, request: Request, call_next):
-        global _active_requests
+        global _active_requests, _total_requests
+
+        # Reject oversized request bodies early
+        content_length = request.headers.get("content-length")
+        if content_length and int(content_length) > _MAX_BODY_BYTES:
+            return JSONResponse(
+                status_code=413,
+                content={"error": "payload_too_large", "message": f"Request body exceeds {_MAX_BODY_BYTES // (1024*1024)}MB limit"},
+            )
+
         request_id = request.headers.get("X-Request-ID", uuid.uuid4().hex[:12])
         request.state.request_id = request_id
         async with _active_lock:
             _active_requests += 1
+            _total_requests += 1
         try:
             logger.info("[%s] %s %s", request_id, request.method, request.url.path)
             response = await call_next(request)
@@ -212,7 +252,7 @@ def _register_routes(app: FastAPI) -> None:
         frames = np.expand_dims(frame, axis=0)  # (1, C, H, W)
 
         # Run VLM inference
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(
             None,
             lambda: engine.analyze_video(
@@ -222,6 +262,7 @@ def _register_routes(app: FastAPI) -> None:
         )
 
         latency_ms = int((_time.monotonic() - t0) * 1000)
+        _track_inference(latency_ms)
         answer = _strip_think_tags(result.text)
 
         # Auto-detect triggered from answer semantics
@@ -250,7 +291,7 @@ def _register_routes(app: FastAPI) -> None:
                 media_type="text/event-stream",
             )
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(
             None,
             lambda: engine.analyze_video(
@@ -298,7 +339,7 @@ def _register_routes(app: FastAPI) -> None:
                 media_type="text/event-stream",
             )
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(
             None,
             lambda: engine.analyze_video(
@@ -344,7 +385,7 @@ def _register_routes(app: FastAPI) -> None:
             )
 
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(
                 None,
                 lambda: engine.analyze_video(
@@ -432,6 +473,138 @@ def _register_routes(app: FastAPI) -> None:
         }
         _watches.pop(watch_id, None)
         return result
+
+    # ── Metrics & Admin ───────────────────────────────────────────────
+
+    @app.get("/metrics")
+    async def metrics():
+        """Operational metrics for monitoring."""
+        import os
+        import resource
+
+        now = _time.monotonic()
+        uptime_s = now - _start_time
+
+        # Process memory (RSS)
+        rusage = resource.getrusage(resource.RUSAGE_SELF)
+        rss_mb = rusage.ru_maxrss / (1024 * 1024)  # macOS returns bytes
+        if os.uname().sysname == "Linux":
+            rss_mb = rusage.ru_maxrss / 1024  # Linux returns KB
+
+        # MLX metal memory (if available)
+        metal_mb = 0.0
+        try:
+            import mlx.core as mx
+            metal_mb = mx.metal.get_active_memory() / (1024 * 1024)
+        except Exception:
+            pass
+
+        # Engine stats
+        engine_info = {}
+        if _engine is not None and _engine._loaded:
+            engine_info = {
+                "model": _engine.config.model,
+                "backend": _engine._backend.backend_name if _engine._backend else "none",
+                "loaded": True,
+            }
+        else:
+            engine_info = {"model": "none", "backend": "none", "loaded": False}
+
+        # Watch stats
+        active_watches = len(_watches)
+        total_watch_checks = sum(ws.checks for ws in _watches.values())
+        total_watch_alerts = sum(ws.alerts for ws in _watches.values())
+
+        return {
+            "uptime_s": int(uptime_s),
+            "process": {
+                "rss_mb": round(rss_mb, 1),
+                "metal_mb": round(metal_mb, 1),
+                "pid": os.getpid(),
+            },
+            "requests": {
+                "active": _active_requests,
+                "total": _total_requests,
+            },
+            "inference": {
+                "total": _total_inferences,
+                "avg_ms": round(_total_inference_ms / max(_total_inferences, 1), 1),
+            },
+            "watches": {
+                "active": active_watches,
+                "total_checks": total_watch_checks,
+                "total_alerts": total_watch_alerts,
+            },
+            "engine": engine_info,
+        }
+
+    @app.post("/v1/admin/reload")
+    async def reload_model(
+        model: str | None = None,
+    ):
+        """Hot-reload the engine with a new (or same) model.
+
+        Waits for in-flight requests to drain, then reloads.
+        """
+        global _engine
+        if _engine is None:
+            raise HTTPException(503, "Engine not initialized")
+
+        new_model = model or _engine.config.model
+        logger.info("Reload requested: %s → %s", _engine.config.model, new_model)
+
+        # Wait for in-flight inference to finish (up to 30s)
+        for _ in range(300):
+            if _active_requests <= 1:  # 1 = this reload request itself
+                break
+            await asyncio.sleep(0.1)
+
+        config = _engine.config
+        backend_name = _engine._backend_override
+        config.model = new_model
+
+        # Release old engine
+        _engine._loaded = False
+        old_engine = _engine
+
+        # Create and load new engine
+        _engine = TrioCore(config, backend=backend_name)
+        try:
+            _engine.load()
+        except Exception as e:
+            # Rollback on failure
+            _engine = old_engine
+            _engine._loaded = True
+            logger.error("Reload failed, rolling back: %s", e)
+            raise HTTPException(500, f"Reload failed: {e}")
+
+        logger.info("Reload complete: %s", new_model)
+        return {
+            "status": "reloaded",
+            "model": new_model,
+            "backend": _engine._backend.backend_name if _engine._backend else "none",
+        }
+
+
+async def _reload_engine() -> None:
+    """Reload the current model (used by SIGHUP handler)."""
+    global _engine
+    if _engine is None:
+        return
+    model = _engine.config.model
+    logger.info("Reloading model: %s", model)
+    config = _engine.config
+    backend_name = _engine._backend_override
+    _engine._loaded = False
+    old_engine = _engine
+    _engine = TrioCore(config, backend=backend_name)
+    try:
+        await asyncio.get_running_loop().run_in_executor(None, _engine.load)
+        logger.info("Reload complete: %s", model)
+    except Exception as e:
+        _engine = old_engine
+        _engine._loaded = True
+        logger.error("Reload failed, rolled back: %s", e)
 
 
 def _strip_think_tags(text: str) -> str:
@@ -597,11 +770,20 @@ _WATCH_MAX_RECONNECTS = 5
 _WATCH_RECONNECT_DELAY = 3  # seconds
 
 
+_MAX_RESOLUTION = 3840  # 4K UHD — anything larger is almost certainly a mistake
+
+
 def _parse_resolution(resolution: str) -> tuple[int, int]:
-    """Parse 'WxH' string into (width, height). Returns (672, 448) on error."""
+    """Parse 'WxH' string into (width, height). Returns (672, 448) on error.
+
+    Clamps each dimension to _MAX_RESOLUTION to prevent OOM from absurd values.
+    """
     try:
         w, h = resolution.lower().split("x")
-        return int(w), int(h)
+        w_int, h_int = int(w), int(h)
+        if w_int <= 0 or h_int <= 0:
+            return 672, 448
+        return min(w_int, _MAX_RESOLUTION), min(h_int, _MAX_RESOLUTION)
     except (ValueError, AttributeError):
         return 672, 448
 
@@ -620,6 +802,26 @@ def _start_ffmpeg(effective_url: str, fps: float, frame_w: int, frame_h: int):
         "-",
     ]
     return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+
+def _kill_ffmpeg(proc) -> None:
+    """Terminate an ffmpeg subprocess, close its pipes, and reap the process."""
+    try:
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except Exception:
+                proc.kill()
+                proc.wait(timeout=2)
+    except Exception:
+        pass
+    for pipe in (proc.stdout, proc.stderr):
+        try:
+            if pipe is not None:
+                pipe.close()
+        except Exception:
+            pass
 
 
 async def _watch_sse_stream(
@@ -650,7 +852,7 @@ async def _watch_sse_stream(
     yield _sse_event("status", {"watch_id": watch_id, "state": "connecting"})
 
     # Resolve RTSP URL (handles Tailscale proxy if needed)
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     try:
         effective_url = await loop.run_in_executor(None, ensure_rtsp_url, ws.source)
     except Exception as e:
@@ -734,13 +936,17 @@ async def _watch_sse_stream(
                         "attempt": reconnect_count,
                         "max_attempts": _WATCH_MAX_RECONNECTS,
                     })
-                    # Kill old ffmpeg
-                    if proc.poll() is None:
-                        proc.terminate()
+                    # Kill old ffmpeg — terminate but don't close pipes yet,
+                    # so that if reconnect fails, the retry loop reads EOF
+                    # (b"") instead of raising on closed pipe.
+                    old_proc = proc
+                    if old_proc.poll() is None:
+                        old_proc.terminate()
                         try:
-                            proc.wait(timeout=3)
-                        except subprocess.TimeoutExpired:
-                            proc.kill()
+                            old_proc.wait(timeout=3)
+                        except Exception:
+                            old_proc.kill()
+                            old_proc.wait(timeout=2)
                     await asyncio.sleep(_WATCH_RECONNECT_DELAY)
                     if ws.stop_event.is_set():
                         break
@@ -748,6 +954,13 @@ async def _watch_sse_stream(
                         proc = await asyncio.to_thread(
                             lambda: _start_ffmpeg(effective_url, ws.fps, frame_w, frame_h)
                         )
+                        # New proc succeeded — now safe to close old pipes
+                        for pipe in (old_proc.stdout, old_proc.stderr):
+                            try:
+                                if pipe is not None:
+                                    pipe.close()
+                            except Exception:
+                                pass
                         motion_gate.reset()
                         ws.state = "running"
                         yield _sse_event("status", {
@@ -800,6 +1013,7 @@ async def _watch_sse_stream(
                     any_triggered = True
 
             latency_ms = int((_time.monotonic() - t0) * 1000)
+            _track_inference(latency_ms)
             tok_s = last_result.metrics.tokens_per_sec if last_result else 0.0
             ws.checks += 1
             last_heartbeat = _time.monotonic()  # inference counts as activity
@@ -840,12 +1054,7 @@ async def _watch_sse_stream(
         yield _sse_event("error", {"watch_id": watch_id, "error": str(e)})
     finally:
         # Cleanup
-        if proc.poll() is None:
-            proc.terminate()
-            try:
-                proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                proc.kill()
+        _kill_ffmpeg(proc)
         ws.state = "stopped"
         _watches.pop(watch_id, None)
 

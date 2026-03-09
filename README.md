@@ -9,13 +9,55 @@
 </p>
 
 <p align="center">
+  <img src="assets/pipeline.svg" alt="TrioCore Pipeline" width="800"/>
+</p>
+
+<p align="center">
+  <a href="#30-second-demo">Demo</a> |
   <a href="#install">Install</a> |
-  <a href="#quick-start">Quick Start</a> |
+  <a href="#use-cases">Use Cases</a> |
   <a href="#api-server">API Server</a> |
   <a href="#how-it-works">How It Works</a> |
-  <a href="#benchmarks">Benchmarks</a> |
-  <a href="#supported-models">Models</a>
+  <a href="#benchmarks">Benchmarks</a>
 </p>
+
+---
+
+## 30-Second Demo
+
+```bash
+# Install (Apple Silicon)
+pipx install 'trio-core[mlx,webcam]'
+
+# Point your webcam and describe what to watch — that's it
+trio webcam -w "a person is waving"
+```
+
+Your Mac becomes a smart camera. Green = all clear. Red = alert with audio notification. **No model training, no cloud API keys, no Docker.** Works on any M1-M4 Mac.
+
+```bash
+# Or monitor an IP camera
+trio cam --host 192.168.1.100 -p mypassword -w "someone at the door"
+
+# Or analyze any video
+trio analyze video.mp4 -q "What is happening?"
+
+# Or run as an API server (OpenAI-compatible)
+trio serve
+```
+
+---
+
+## Why TrioCore?
+
+|  | TrioCore | Ollama + LLaVA | Cloud VLM APIs |
+|---|---|---|---|
+| **Latency** | ~250ms (2B, M3) | ~2s | ~3s + network |
+| **Privacy** | 100% local | 100% local | Data leaves device |
+| **Camera support** | Webcam, RTSP, ONVIF | None built-in | None built-in |
+| **Watch mode** | Built-in ("person at door") | DIY scripting | DIY scripting |
+| **Visual optimization** | ToMe + FastV + KV reuse | None | N/A |
+| **Setup** | `pipx install trio-core` | Install + pull model | API key + billing |
 
 ---
 
@@ -28,7 +70,6 @@ pip install 'trio-core[mlx]'          # or as library in your project
 
 # NVIDIA / CPU
 pipx install 'trio-core[transformers]'
-pip install 'trio-core[transformers]'
 
 # With webcam/camera support (opencv for local webcam)
 pipx install 'trio-core[mlx,webcam]'
@@ -37,63 +78,37 @@ pipx install 'trio-core[mlx,webcam]'
 brew install ffmpeg
 ```
 
-## Quick Start
+## Use Cases
 
-### CLI
-
-```bash
-# Check your hardware
-trio device
-
-# Analyze a video
-trio analyze video.mp4 -q "What is happening?"
-
-# Live webcam monitor — define what to watch in plain English
-trio webcam -w "a person is waving"
-
-# IP camera monitor (ONVIF / RTSP)
-trio cam --host 192.168.1.100 -p mypassword -w "someone at the door"
-
-# Start the API server
-trio serve
-```
-
-### IP Camera Monitor (`trio cam`)
+### Home Security — Watch Mode
 
 ```bash
-# Auto-discover ONVIF cameras on your LAN
-trio cam --discover
-
-# Connect to a camera by IP (auto-generates Reolink RTSP URL)
-trio cam --host 192.168.1.100 -p mypassword
-
-# Direct RTSP URL (any camera brand)
-trio cam --rtsp "rtsp://admin:pass@192.168.1.100:554/stream" -w "intruder detected"
-
-# Custom watch condition
-trio cam --host 192.168.1.100 -p pass -w "package on the doorstep"
-trio cam --host 192.168.1.100 -p pass -w "car in the driveway"
-```
-
-GUI window with live feed, AI analysis overlay, and audio alerts. Works through Tailscale (auto TCP proxy for macOS network extensions). Requires `ffmpeg` (`brew install ffmpeg`).
-
-### Webcam Monitor (`trio webcam`)
-
-```bash
-# Built-in webcam (default)
+# Built-in webcam
 trio webcam -w "a person is waving"
 
 # iPhone as camera (macOS Continuity Camera)
 trio webcam -s 1 -w "someone at the door"
 
-# Custom conditions
-trio webcam -w "no safety helmet"
-trio webcam -w "package missing from doorstep"
+# IP camera (auto-discovers Reolink RTSP URL)
+trio cam --host 192.168.1.100 -p mypassword -w "package on the doorstep"
+
+# Direct RTSP URL (any camera brand)
+trio cam --rtsp "rtsp://admin:pass@192.168.1.100:554/stream" -w "intruder detected"
+
+# Auto-discover ONVIF cameras on your LAN
+trio cam --discover
 ```
 
 Auto-calibrates resolution for ~500ms inference on any Mac. Green = clear, red = alert with audio notification. No ML training needed — just describe what to monitor.
 
-### Python
+### Video Analysis
+
+```bash
+trio analyze video.mp4 -q "What is happening?"
+trio analyze photo.jpg -q "Describe this image"
+```
+
+### Python SDK
 
 ```python
 from trio_core import TrioCore
@@ -106,18 +121,7 @@ print(result.text)  # "A person is walking through the parking lot..."
 print(f"{result.metrics.latency_ms:.0f}ms, {result.metrics.tokens_per_sec:.0f} tok/s")
 ```
 
-### Auto-optimize (default)
-
-TrioCore automatically applies benchmark-proven optimizations based on the loaded model. No configuration needed — just load and go.
-
-```python
-engine = TrioCore()
-engine.load()  # auto-applies optimal compression for your model
-```
-
-To disable: `EngineConfig(auto_optimize=False)`
-
-### Manual optimizations
+TrioCore automatically applies benchmark-proven optimizations. No configuration needed — just load and go. To customize:
 
 ```python
 from trio_core import TrioCore, EngineConfig
@@ -149,14 +153,6 @@ curl -X POST http://localhost:8000/analyze-frame \
 {"answer": "Yes, there is a person standing at the door.", "triggered": true, "latency_ms": 487}
 ```
 
-### Analyze a video
-
-```bash
-curl -X POST http://localhost:8000/v1/video/analyze \
-  -H "Content-Type: application/json" \
-  -d '{"video": "video.mp4", "prompt": "What is happening?"}'
-```
-
 ### OpenAI-compatible chat
 
 ```bash
@@ -172,10 +168,9 @@ curl -X POST http://localhost:8000/v1/chat/completions \
 
 ### Watch API — continuous RTSP monitoring
 
-Stream real-time analysis of an RTSP camera. trio-core handles the video pipeline (RTSP, frame sampling, motion gate, inference) and returns results as Server-Sent Events.
+Stream real-time analysis of an RTSP camera via Server-Sent Events:
 
 ```bash
-# Start watching a camera with conditions
 curl -N -X POST http://localhost:8000/v1/watch \
   -H "Content-Type: application/json" \
   -d '{
@@ -189,19 +184,33 @@ curl -N -X POST http://localhost:8000/v1/watch \
   }'
 ```
 
-SSE events: `status` (connecting/running/reconnecting), `result` (each inference cycle), `alert` (condition triggered, includes `frame_b64`), `heartbeat` (every 30s), `error`.
+SSE events: `status`, `result`, `alert` (condition triggered, includes `frame_b64`), `heartbeat`, `error`.
 
 ```bash
-# List active watches
-curl http://localhost:8000/v1/watch
-
-# Stop a watch
-curl -X DELETE http://localhost:8000/v1/watch/w_abc123
+curl http://localhost:8000/v1/watch              # List active watches
+curl -X DELETE http://localhost:8000/v1/watch/w_abc123  # Stop a watch
 ```
 
-Features: auto-reconnect on RTSP failure (5 retries), motion gate (skip inference on static scenes), `<think>` tag stripping (Qwen3.5), configurable resolution, heartbeat for connection health.
+Features: auto-reconnect on RTSP failure, motion gate (skip inference on static scenes), `<think>` tag stripping, configurable resolution, heartbeat for connection health. See [`examples/watch_camera.py`](examples/watch_camera.py) for a complete SSE client.
 
-See [`examples/watch_camera.py`](examples/watch_camera.py) for a complete SSE client.
+### Operations
+
+```bash
+# Metrics — uptime, memory, request counts, inference stats
+curl http://localhost:8000/metrics
+
+# Hot reload model without downtime (drains in-flight requests first)
+curl -X POST http://localhost:8000/v1/admin/reload
+
+# Or reload via signal
+kill -HUP $(pgrep -f "trio serve")
+
+# Structured JSON logging (for log aggregation)
+trio serve --json-logs
+# or: TRIO_LOG_JSON=1 trio serve
+```
+
+Request body size is capped at 10 MB. Resolutions are clamped to 4K max to prevent OOM.
 
 ### All endpoints
 
@@ -209,6 +218,7 @@ See [`examples/watch_camera.py`](examples/watch_camera.py) for a complete SSE cl
 |---|---|---|
 | `/healthz` | GET | Health check |
 | `/health` | GET | Detailed status + config |
+| `/metrics` | GET | Uptime, memory (RSS + Metal), request/inference stats |
 | `/analyze-frame` | POST | Single frame: `{frame_b64, question}` → `{answer, triggered, latency_ms}` |
 | `/v1/watch` | POST | Start watching RTSP stream → SSE events |
 | `/v1/watch` | GET | List active watches |
@@ -217,16 +227,11 @@ See [`examples/watch_camera.py`](examples/watch_camera.py) for a complete SSE cl
 | `/v1/frames/analyze` | POST | Multi-frame upload (multipart) |
 | `/v1/chat/completions` | POST | OpenAI-compatible (streaming SSE) |
 | `/v1/models` | GET | Loaded model info |
+| `/v1/admin/reload` | POST | Hot reload model (with rollback on failure) |
 
 ## How It Works
 
 TrioCore optimizes **every stage** of VLM inference. Each technique is independent and they compound:
-
-```
-Video → [Dedup] → [Motion Gate] → [ViT + ToMe] → [LLM + FastV] → [KV Reuse] → Answer
-         -50%       -80% calls     -68% tokens    -50% tokens     1.7x reuse
-        frames      when static    in encoder      in LLM         across frames
-```
 
 | Stage | Technique | What it does | Speedup |
 |---|---|---|---|
@@ -237,9 +242,41 @@ Video → [Dedup] → [Motion Gate] → [ViT + ToMe] → [LLM + FastV] → [KV R
 | Cross-frame | **KV Reuse** | Reuse KV cache when frames are visually similar | **1.7x speedup** |
 | Long video | **StreamMem** | Bounded KV cache with saliency eviction | constant memory |
 
+## Supported Models
+
+### Tier 1 — Full optimization (native loading, all 4 stages)
+
+| Model | Size | 4-bit VRAM | ToMe | FastV | Compressed | KV Reuse |
+|---|---|---|---|---|---|---|
+| Qwen2.5-VL 3B | 3B | 1.8G | ✓ | ✓ | ✓ | ✓ |
+| Qwen2.5-VL 7B | 7B | 4.5G | ✓ | ✗ | ✓ | ✓ |
+| Qwen3-VL 2B/4B/8B | 2-8B | 1.5-5.0G | — | ✓ | ✓ | ✓ |
+| Qwen3.5 0.8B/2B/4B/9B | 0.8-9B | 0.5-5.0G | ✓ | — | ✓ | ✓ (DeltaNet) |
+| InternVL3 1B/2B | 1-2B | 1.0-1.6G | — | — | ✓ | ✓ |
+
+### Tier 2 — Inference only (mlx-vlm, no optimization)
+
+Gemma 3n, SmolVLM2, Phi-4, Gemma 3, FastVLM, and any model supported by mlx-vlm.
+
+## Configuration
+
+All settings via `TRIO_` environment variables or `EngineConfig`:
+
+```bash
+TRIO_MODEL=mlx-community/Qwen2.5-VL-3B-Instruct-4bit
+TRIO_TOME_ENABLED=true
+TRIO_TOME_R=4
+TRIO_PORT=8000
+```
+
+See [`trio_core/config.py`](src/trio_core/config.py) for all options.
+
 ## Benchmarks
 
-Apple M3 Ultra, 4-bit quantized. Accuracy is hardware-independent (bit-identical output on any Apple Silicon). Latency scales proportionally across devices.
+<details>
+<summary><strong>Accuracy & latency benchmarks</strong> (Apple M3 Ultra, 4-bit quantized)</summary>
+
+Accuracy is hardware-independent (bit-identical output on any Apple Silicon). Latency scales proportionally across devices.
 
 ### POPE — Object Hallucination (100 samples, yes/no)
 
@@ -354,34 +391,7 @@ Apple M3 Ultra, 4-bit quantized. Accuracy is hardware-independent (bit-identical
 | Decode | 524ms | 513ms (-2.1%) |
 | Output | — | **bit-identical** |
 
-## Supported Models
-
-### Tier 1 — Full optimization (native loading, all 4 stages)
-
-| Model | Size | 4-bit | ToMe | FastV | Compressed | KV Reuse |
-|---|---|---|---|---|---|---|
-| Qwen2.5-VL 3B | 3B | 1.8G | ✓ | ✓ | ✓ | ✓ |
-| Qwen2.5-VL 7B | 7B | 4.5G | ✓ | ✗ | ✓ | ✓ |
-| Qwen3-VL 2B/4B/8B | 2-8B | 1.5-5.0G | — | ✓ | ✓ | ✓ |
-| Qwen3.5 0.8B/2B/4B/9B | 0.8-9B | 0.5-5.0G | ✓ | — | ✓ | ✓ (DeltaNet) |
-| InternVL3 1B/2B | 1-2B | 1.0-1.6G | — | — | ✓ | ✓ |
-
-### Tier 2 — Inference only (mlx-vlm, no optimization)
-
-Gemma 3n, SmolVLM2, Phi-4, Gemma 3, FastVLM, and any model supported by mlx-vlm.
-
-## Configuration
-
-All settings via `TRIO_` environment variables or `EngineConfig`:
-
-```bash
-TRIO_MODEL=mlx-community/Qwen2.5-VL-3B-Instruct-4bit
-TRIO_TOME_ENABLED=true
-TRIO_TOME_R=4
-TRIO_PORT=8000
-```
-
-See [`trio_core/config.py`](src/trio_core/config.py) for all options.
+</details>
 
 ## License
 
