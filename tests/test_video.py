@@ -97,9 +97,8 @@ class TestLoadVideo:
 
 from unittest.mock import patch, MagicMock, PropertyMock
 import subprocess
+import sys
 import threading
-
-import cv2
 
 from trio_core.video import (
     _is_url,
@@ -215,72 +214,62 @@ class TestLoadVideoWithUrl:
         assert mock_extract.call_args[0][0] == "/tmp/local.mp4"
 
 
-def _make_mock_cap(total_frames=30, fps=30.0, width=640, height=480, num_readable=None):
-    """Create a mock cv2.VideoCapture that returns dummy frames."""
-    if num_readable is None:
-        num_readable = total_frames
+def _make_mock_cap(fps=30.0):
+    """Create a mock cv2.VideoCapture."""
     cap = MagicMock()
     cap.isOpened.return_value = True
-
-    def get_prop(prop):
-        props = {
-            cv2.CAP_PROP_FRAME_COUNT: total_frames,
-            cv2.CAP_PROP_FPS: fps,
-            cv2.CAP_PROP_FRAME_WIDTH: width,
-            cv2.CAP_PROP_FRAME_HEIGHT: height,
-        }
-        return props.get(prop, 0)
-
-    cap.get.side_effect = get_prop
-
-    read_count = [0]
-    def mock_read():
-        read_count[0] += 1
-        if read_count[0] <= num_readable:
-            frame = np.random.randint(0, 255, (height, width, 3), dtype=np.uint8)
-            return True, frame
-        return False, None
-
-    cap.read.side_effect = mock_read
+    cap.get.return_value = fps
     return cap
 
 
+def _make_ffmpeg_probe(width=112, height=112, fps=30.0, nb_frames=30, duration=1.0):
+    """Create a mock probe result dict for _probe_video."""
+    return {"width": width, "height": height, "fps": fps, "nb_frames": nb_frames, "duration": duration}
+
+
+def _make_ffmpeg_output(n_frames, width, height):
+    """Create raw RGB24 bytes as ffmpeg would output."""
+    return np.random.randint(0, 255, n_frames * height * width * 3, dtype=np.uint8).tobytes()
+
+
 class TestExtractFrames:
-    @patch("trio_core.video.cv2.VideoCapture")
-    def test_extracts_frames(self, mock_vc_cls):
-        mock_cap = _make_mock_cap(total_frames=30, fps=30.0, width=112, height=112)
-        mock_vc_cls.return_value = mock_cap
+    @patch("trio_core.video._probe_video")
+    @patch("trio_core.video.subprocess.run")
+    def test_extracts_frames(self, mock_run, mock_probe):
+        mock_probe.return_value = _make_ffmpeg_probe(width=112, height=112, fps=30.0, nb_frames=30)
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=_make_ffmpeg_output(4, 112, 112),
+            stderr=b"",
+        )
         result = _extract_frames("/fake/video.mp4", 2.0, 128)
         assert result.ndim == 4
         assert result.shape[1] == 3  # C dimension
         assert result.dtype == np.float32
-        mock_cap.release.assert_called_once()
 
-    @patch("trio_core.video.cv2.VideoCapture")
-    def test_failed_open_raises(self, mock_vc_cls):
-        mock_cap = MagicMock()
-        mock_cap.isOpened.return_value = False
-        mock_vc_cls.return_value = mock_cap
-        with pytest.raises(IOError, match="Failed to open video"):
+    @patch("trio_core.video._probe_video")
+    @patch("trio_core.video.subprocess.run")
+    def test_ffmpeg_not_found_raises(self, mock_run, mock_probe):
+        mock_probe.return_value = _make_ffmpeg_probe()
+        mock_run.side_effect = FileNotFoundError
+        with pytest.raises(RuntimeError, match="ffmpeg not found"):
             _extract_frames("/fake/video.mp4", 2.0, 128)
 
-    @patch("trio_core.video.cv2.VideoCapture")
-    def test_no_frames_raises(self, mock_vc_cls):
-        mock_cap = _make_mock_cap(total_frames=30, num_readable=0)
-        # Override read to always fail
-        mock_cap.read.side_effect = lambda: (False, None)
-        mock_vc_cls.return_value = mock_cap
+    @patch("trio_core.video._probe_video")
+    @patch("trio_core.video.subprocess.run")
+    def test_no_frames_raises(self, mock_run, mock_probe):
+        mock_probe.return_value = _make_ffmpeg_probe()
+        mock_run.return_value = MagicMock(returncode=0, stdout=b"", stderr=b"")
         with pytest.raises(IOError, match="No frames extracted"):
             _extract_frames("/fake/video.mp4", 2.0, 128)
 
-    @patch("trio_core.video.cv2.VideoCapture")
-    def test_release_called_on_error(self, mock_vc_cls):
-        mock_cap = _make_mock_cap(total_frames=30, num_readable=0)
-        mock_cap.read.side_effect = lambda: (False, None)
-        mock_vc_cls.return_value = mock_cap
-        with pytest.raises(IOError):
+    @patch("trio_core.video._probe_video")
+    @patch("trio_core.video.subprocess.run")
+    def test_ffmpeg_failure_raises(self, mock_run, mock_probe):
+        mock_probe.return_value = _make_ffmpeg_probe()
+        mock_run.return_value = MagicMock(returncode=1, stdout=b"", stderr=b"error msg")
+        with pytest.raises(IOError, match="ffmpeg failed"):
             _extract_frames("/fake/video.mp4", 2.0, 128)
-        mock_cap.release.assert_called_once()
 
 
 class TestDeduplicationResultRatio:
@@ -341,48 +330,55 @@ class TestStreamCaptureInit:
         assert cap.max_reconnects == 10
 
 
+def _patch_cv2():
+    """Patch cv2 in sys.modules so lazy imports get the mock."""
+    import sys
+    mock_cv2 = MagicMock()
+    mock_cv2.COLOR_BGR2RGB = 4
+    return patch.dict(sys.modules, {"cv2": mock_cv2}), mock_cv2
+
+
 class TestStreamCaptureStartStop:
-    @patch("trio_core.video.cv2.VideoCapture")
-    def test_start_opens_stream(self, mock_vc_cls):
-        mock_cap = MagicMock()
-        mock_cap.isOpened.return_value = True
-        mock_cap.get.return_value = 25.0
-        mock_cap.grab.return_value = False  # stop immediately
-        mock_vc_cls.return_value = mock_cap
+    def test_start_opens_stream(self):
+        patcher, mock_cv2 = _patch_cv2()
+        with patcher:
+            mock_cap = _make_mock_cap()
+            mock_cap.grab.return_value = False  # stop immediately
+            mock_cv2.VideoCapture.return_value = mock_cap
 
-        sc = StreamCapture("rtsp://example.com/stream")
-        sc.start()
-        assert sc.running is True
-        assert sc._thread is not None
-        sc.stop()
-        assert sc.running is False
-        assert sc._cap is None
-        assert sc._thread is None
-
-    @patch("trio_core.video.cv2.VideoCapture")
-    def test_start_failed_raises(self, mock_vc_cls):
-        mock_cap = MagicMock()
-        mock_cap.isOpened.return_value = False
-        mock_vc_cls.return_value = mock_cap
-
-        sc = StreamCapture("rtsp://bad")
-        with pytest.raises(IOError, match="Failed to open stream"):
+            sc = StreamCapture("rtsp://example.com/stream")
             sc.start()
+            assert sc.running is True
+            assert sc._thread is not None
+            sc.stop()
+            assert sc.running is False
+            assert sc._cap is None
+            assert sc._thread is None
+
+    def test_start_failed_raises(self):
+        patcher, mock_cv2 = _patch_cv2()
+        with patcher:
+            mock_cap = MagicMock()
+            mock_cap.isOpened.return_value = False
+            mock_cv2.VideoCapture.return_value = mock_cap
+
+            sc = StreamCapture("rtsp://bad")
+            with pytest.raises(IOError, match="Failed to open stream"):
+                sc.start()
 
 
 class TestStreamCaptureContextManager:
-    @patch("trio_core.video.cv2.VideoCapture")
-    def test_context_manager(self, mock_vc_cls):
-        mock_cap = MagicMock()
-        mock_cap.isOpened.return_value = True
-        mock_cap.get.return_value = 30.0
-        mock_cap.grab.return_value = False
-        mock_vc_cls.return_value = mock_cap
+    def test_context_manager(self):
+        patcher, mock_cv2 = _patch_cv2()
+        with patcher:
+            mock_cap = _make_mock_cap()
+            mock_cap.grab.return_value = False
+            mock_cv2.VideoCapture.return_value = mock_cap
 
-        with StreamCapture("rtsp://example.com/stream") as sc:
-            assert sc.running is True
-        assert sc.running is False
-        assert sc._cap is None
+            with StreamCapture("rtsp://example.com/stream") as sc:
+                assert sc.running is True
+            assert sc.running is False
+            assert sc._cap is None
 
 
 class TestStreamCaptureIter:
@@ -412,145 +408,141 @@ class TestStreamCaptureIter:
 
 
 class TestStreamCaptureCaptureLoop:
-    @patch("trio_core.video.cv2")
-    def test_capture_loop_grabs_frames(self, mock_cv2):
+    def test_capture_loop_grabs_frames(self):
         """Test _capture_loop processes frames with stride."""
-        mock_cap = MagicMock()
-        grab_count = [0]
+        patcher, mock_cv2 = _patch_cv2()
+        with patcher:
+            mock_cap = MagicMock()
+            grab_count = [0]
 
-        def mock_grab():
-            grab_count[0] += 1
-            if grab_count[0] > 6:
-                return False
-            return True
+            def mock_grab():
+                grab_count[0] += 1
+                return grab_count[0] <= 6
 
-        mock_cap.grab.side_effect = mock_grab
-        fake_frame = np.random.randint(0, 255, (64, 64, 3), dtype=np.uint8)
-        mock_cap.retrieve.return_value = (True, fake_frame)
+            mock_cap.grab.side_effect = mock_grab
+            fake_frame = np.random.randint(0, 255, (64, 64, 3), dtype=np.uint8)
+            mock_cap.retrieve.return_value = (True, fake_frame)
+            mock_cv2.cvtColor.return_value = fake_frame
 
-        mock_cv2.cvtColor.return_value = fake_frame
-        mock_cv2.COLOR_BGR2RGB = 4
+            sc = StreamCapture("fake", vid_stride=2, reconnect=False)
+            sc._cap = mock_cap
+            sc.running = True
 
-        sc = StreamCapture("fake", vid_stride=2, reconnect=False)
-        sc._cap = mock_cap
-        sc.running = True
+            sc._capture_loop()
 
-        sc._capture_loop()
+            assert sc._frame_count == 3  # frames 2, 4, 6
+            assert sc.running is False
 
-        assert sc._frame_count == 3  # frames 2, 4, 6
-        assert sc.running is False
-
-    @patch("trio_core.video.cv2")
-    def test_capture_loop_buffer_mode(self, mock_cv2):
+    def test_capture_loop_buffer_mode(self):
         """Test buffer mode queues frames."""
-        mock_cap = MagicMock()
-        grab_count = [0]
+        patcher, mock_cv2 = _patch_cv2()
+        with patcher:
+            mock_cap = MagicMock()
+            grab_count = [0]
 
-        def mock_grab():
-            grab_count[0] += 1
-            return grab_count[0] <= 3
+            def mock_grab():
+                grab_count[0] += 1
+                return grab_count[0] <= 3
 
-        mock_cap.grab.side_effect = mock_grab
-        fake_frame = np.random.randint(0, 255, (64, 64, 3), dtype=np.uint8)
-        mock_cap.retrieve.return_value = (True, fake_frame)
+            mock_cap.grab.side_effect = mock_grab
+            fake_frame = np.random.randint(0, 255, (64, 64, 3), dtype=np.uint8)
+            mock_cap.retrieve.return_value = (True, fake_frame)
+            mock_cv2.cvtColor.return_value = fake_frame
 
-        mock_cv2.cvtColor.return_value = fake_frame
-        mock_cv2.COLOR_BGR2RGB = 4
+            sc = StreamCapture("fake", vid_stride=1, buffer=True, reconnect=False)
+            sc._cap = mock_cap
+            sc.running = True
 
-        sc = StreamCapture("fake", vid_stride=1, buffer=True, reconnect=False)
-        sc._cap = mock_cap
-        sc.running = True
+            sc._capture_loop()
 
-        sc._capture_loop()
+            assert len(sc._frames) == 3
 
-        assert len(sc._frames) == 3
-
-    @patch("trio_core.video.cv2")
-    def test_capture_loop_latest_mode(self, mock_cv2):
+    def test_capture_loop_latest_mode(self):
         """Test non-buffer mode keeps only latest frame."""
-        mock_cap = MagicMock()
-        grab_count = [0]
+        patcher, mock_cv2 = _patch_cv2()
+        with patcher:
+            mock_cap = MagicMock()
+            grab_count = [0]
 
-        def mock_grab():
-            grab_count[0] += 1
-            return grab_count[0] <= 3
+            def mock_grab():
+                grab_count[0] += 1
+                return grab_count[0] <= 3
 
-        mock_cap.grab.side_effect = mock_grab
-        fake_frame = np.random.randint(0, 255, (64, 64, 3), dtype=np.uint8)
-        mock_cap.retrieve.return_value = (True, fake_frame)
+            mock_cap.grab.side_effect = mock_grab
+            fake_frame = np.random.randint(0, 255, (64, 64, 3), dtype=np.uint8)
+            mock_cap.retrieve.return_value = (True, fake_frame)
+            mock_cv2.cvtColor.return_value = fake_frame
 
-        mock_cv2.cvtColor.return_value = fake_frame
-        mock_cv2.COLOR_BGR2RGB = 4
+            sc = StreamCapture("fake", vid_stride=1, buffer=False, reconnect=False)
+            sc._cap = mock_cap
+            sc.running = True
 
-        sc = StreamCapture("fake", vid_stride=1, buffer=False, reconnect=False)
-        sc._cap = mock_cap
-        sc.running = True
+            sc._capture_loop()
 
-        sc._capture_loop()
+            assert len(sc._frames) == 1  # only latest
 
-        assert len(sc._frames) == 1  # only latest
-
-    @patch("trio_core.video.cv2")
-    def test_capture_loop_with_resize(self, mock_cv2):
+    def test_capture_loop_with_resize(self):
         """Test resize is applied."""
-        mock_cap = MagicMock()
-        grab_count = [0]
+        patcher, mock_cv2 = _patch_cv2()
+        with patcher:
+            mock_cap = MagicMock()
+            grab_count = [0]
 
-        def mock_grab():
-            grab_count[0] += 1
-            return grab_count[0] <= 1
+            def mock_grab():
+                grab_count[0] += 1
+                return grab_count[0] <= 1
 
-        mock_cap.grab.side_effect = mock_grab
-        fake_frame = np.random.randint(0, 255, (64, 64, 3), dtype=np.uint8)
-        resized_frame = np.random.randint(0, 255, (32, 48, 3), dtype=np.uint8)
-        mock_cap.retrieve.return_value = (True, fake_frame)
+            mock_cap.grab.side_effect = mock_grab
+            fake_frame = np.random.randint(0, 255, (64, 64, 3), dtype=np.uint8)
+            resized_frame = np.random.randint(0, 255, (32, 48, 3), dtype=np.uint8)
+            mock_cap.retrieve.return_value = (True, fake_frame)
+            mock_cv2.cvtColor.return_value = fake_frame
+            mock_cv2.resize.return_value = resized_frame
 
-        mock_cv2.cvtColor.return_value = fake_frame
-        mock_cv2.resize.return_value = resized_frame
-        mock_cv2.COLOR_BGR2RGB = 4
+            sc = StreamCapture("fake", vid_stride=1, resize=(32, 48), reconnect=False)
+            sc._cap = mock_cap
+            sc.running = True
 
-        sc = StreamCapture("fake", vid_stride=1, resize=(32, 48), reconnect=False)
-        sc._cap = mock_cap
-        sc.running = True
+            sc._capture_loop()
 
-        sc._capture_loop()
-
-        mock_cv2.resize.assert_called()
+            mock_cv2.resize.assert_called()
 
 
 class TestStreamCaptureTryReconnect:
     @patch("trio_core.video._time.sleep")
-    @patch("trio_core.video.cv2.VideoCapture")
-    def test_reconnect_success(self, mock_vc_cls, mock_sleep):
-        new_cap = MagicMock()
-        new_cap.isOpened.return_value = True
-        mock_vc_cls.return_value = new_cap
+    def test_reconnect_success(self, mock_sleep):
+        patcher, mock_cv2 = _patch_cv2()
+        with patcher:
+            new_cap = MagicMock()
+            new_cap.isOpened.return_value = True
+            mock_cv2.VideoCapture.return_value = new_cap
 
-        sc = StreamCapture("rtsp://example.com/stream")
-        old_cap = MagicMock()
-        sc._cap = old_cap
-        sc._reconnect_count = 0
+            sc = StreamCapture("rtsp://example.com/stream")
+            old_cap = MagicMock()
+            sc._cap = old_cap
+            sc._reconnect_count = 0
 
-        sc._try_reconnect()
+            sc._try_reconnect()
 
-        old_cap.release.assert_called_once()
-        assert sc._cap is new_cap
-        assert sc._reconnect_count == 0  # reset on success
+            old_cap.release.assert_called_once()
+            assert sc._cap is new_cap
+            assert sc._reconnect_count == 0  # reset on success
 
     @patch("trio_core.video._time.sleep")
-    @patch("trio_core.video.cv2.VideoCapture")
-    def test_reconnect_failure(self, mock_vc_cls, mock_sleep):
-        new_cap = MagicMock()
-        new_cap.isOpened.return_value = False
-        mock_vc_cls.return_value = new_cap
+    def test_reconnect_failure(self, mock_sleep):
+        patcher, mock_cv2 = _patch_cv2()
+        with patcher:
+            new_cap = MagicMock()
+            new_cap.isOpened.return_value = False
+            mock_cv2.VideoCapture.return_value = new_cap
 
-        sc = StreamCapture("rtsp://example.com/stream")
-        sc._cap = MagicMock()
-        sc._reconnect_count = 2
+            sc = StreamCapture("rtsp://example.com/stream")
+            sc._cap = MagicMock()
+            sc._reconnect_count = 2
 
-        sc._try_reconnect()
+            sc._try_reconnect()
 
-        assert sc._reconnect_count == 3  # incremented, not reset
+            assert sc._reconnect_count == 3  # incremented, not reset
 
 
 class TestResolveSource:

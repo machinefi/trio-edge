@@ -448,6 +448,24 @@ class TestParseResolution:
     def test_case_insensitive(self):
         assert _parse_resolution("1280X720") == (1280, 720)
 
+    def test_huge_resolution_clamped(self):
+        """Absurdly large resolution is clamped to _MAX_RESOLUTION to prevent OOM."""
+        w, h = _parse_resolution("999999x999999")
+        assert w <= 3840
+        assert h <= 3840
+
+    def test_4k_allowed(self):
+        """4K resolution (3840x2160) should be allowed."""
+        assert _parse_resolution("3840x2160") == (3840, 2160)
+
+    def test_negative_falls_back(self):
+        """Negative dimensions fall back to default."""
+        assert _parse_resolution("-1x-1") == (672, 448)
+
+    def test_zero_falls_back(self):
+        """Zero dimensions fall back to default."""
+        assert _parse_resolution("0x0") == (672, 448)
+
 
 # ── Custom Resolution Test ───────────────────────────────────────────────
 
@@ -593,6 +611,61 @@ class TestWatchReconnect:
         errors = [e for e in events if e["type"] == "error"]
         assert len(errors) >= 1
         assert "reconnect" in errors[0]["data"]["error"].lower()
+
+
+# ── Kill ffmpeg cleanup ──────────────────────────────────────────────────
+
+
+class TestKillFfmpeg:
+    def test_closes_pipes(self):
+        """_kill_ffmpeg closes stdout and stderr pipes to prevent FD leaks."""
+        from trio_core.api.server import _kill_ffmpeg
+
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None
+        mock_proc.terminate = MagicMock()
+        mock_proc.wait = MagicMock()
+        mock_proc.stdout = MagicMock()
+        mock_proc.stderr = MagicMock()
+
+        _kill_ffmpeg(mock_proc)
+
+        mock_proc.terminate.assert_called_once()
+        mock_proc.stdout.close.assert_called_once()
+        mock_proc.stderr.close.assert_called_once()
+
+    def test_handles_already_dead_proc(self):
+        """_kill_ffmpeg handles processes that already exited."""
+        from trio_core.api.server import _kill_ffmpeg
+
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = 0  # already dead
+        mock_proc.stdout = MagicMock()
+        mock_proc.stderr = MagicMock()
+
+        _kill_ffmpeg(mock_proc)
+
+        mock_proc.terminate.assert_not_called()
+        mock_proc.stdout.close.assert_called_once()
+        mock_proc.stderr.close.assert_called_once()
+
+    def test_kills_on_timeout(self):
+        """_kill_ffmpeg escalates to kill if terminate times out."""
+        import subprocess
+        from trio_core.api.server import _kill_ffmpeg
+
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None
+        mock_proc.terminate = MagicMock()
+        mock_proc.wait = MagicMock(side_effect=subprocess.TimeoutExpired("ffmpeg", 5))
+        mock_proc.kill = MagicMock()
+        mock_proc.stdout = MagicMock()
+        mock_proc.stderr = MagicMock()
+
+        _kill_ffmpeg(mock_proc)
+
+        mock_proc.terminate.assert_called_once()
+        mock_proc.kill.assert_called_once()
 
 
 # ── Analyze Frame Think Tag Stripping ─────────────────────────────────────
