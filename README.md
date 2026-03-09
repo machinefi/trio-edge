@@ -170,6 +170,39 @@ curl -X POST http://localhost:8000/v1/chat/completions \
   }'
 ```
 
+### Watch API — continuous RTSP monitoring
+
+Stream real-time analysis of an RTSP camera. trio-core handles the video pipeline (RTSP, frame sampling, motion gate, inference) and returns results as Server-Sent Events.
+
+```bash
+# Start watching a camera with conditions
+curl -N -X POST http://localhost:8000/v1/watch \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source": "rtsp://admin:pass@192.168.1.100:554/stream",
+    "conditions": [
+      {"id": "person", "question": "Is there a person?"},
+      {"id": "package", "question": "Is there a package on the doorstep?"}
+    ],
+    "fps": 1,
+    "resolution": "672x448"
+  }'
+```
+
+SSE events: `status` (connecting/running/reconnecting), `result` (each inference cycle), `alert` (condition triggered, includes `frame_b64`), `heartbeat` (every 30s), `error`.
+
+```bash
+# List active watches
+curl http://localhost:8000/v1/watch
+
+# Stop a watch
+curl -X DELETE http://localhost:8000/v1/watch/w_abc123
+```
+
+Features: auto-reconnect on RTSP failure (5 retries), motion gate (skip inference on static scenes), `<think>` tag stripping (Qwen3.5), configurable resolution, heartbeat for connection health.
+
+See [`examples/watch_camera.py`](examples/watch_camera.py) for a complete SSE client.
+
 ### All endpoints
 
 | Endpoint | Method | Description |
@@ -177,6 +210,9 @@ curl -X POST http://localhost:8000/v1/chat/completions \
 | `/healthz` | GET | Health check |
 | `/health` | GET | Detailed status + config |
 | `/analyze-frame` | POST | Single frame: `{frame_b64, question}` → `{answer, triggered, latency_ms}` |
+| `/v1/watch` | POST | Start watching RTSP stream → SSE events |
+| `/v1/watch` | GET | List active watches |
+| `/v1/watch/{id}` | DELETE | Stop a watch |
 | `/v1/video/analyze` | POST | Video file analysis with metrics |
 | `/v1/frames/analyze` | POST | Multi-frame upload (multipart) |
 | `/v1/chat/completions` | POST | OpenAI-compatible (streaming SSE) |
