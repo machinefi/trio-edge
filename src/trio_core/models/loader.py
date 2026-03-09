@@ -37,7 +37,7 @@ def load_native(
         lazy: If True, don't evaluate parameters immediately.
 
     Returns:
-        (model, processor) tuple. Processor is from transformers AutoProcessor.
+        (model, processor) tuple. Processor is torch-free QwenVLProcessor.
 
     Raises:
         ValueError: If model type is not supported natively.

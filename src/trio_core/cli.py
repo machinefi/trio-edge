@@ -16,12 +16,20 @@ app = typer.Typer(
 
 
 def _setup_logging(verbose: bool = False) -> None:
-    level = logging.DEBUG if verbose else logging.INFO
+    import os
+    level = logging.DEBUG if verbose else logging.WARNING
     logging.basicConfig(
         level=level,
         format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
         datefmt="%H:%M:%S",
     )
+    if not verbose:
+        # Suppress noisy "PyTorch was not found" warning from transformers
+        os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
+        # Suppress httpx INFO logs
+        logging.getLogger("httpx").setLevel(logging.WARNING)
+        # Suppress huggingface_hub "Fetching N files" progress bars
+        os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
 
 
 def _version_callback(value: bool):
@@ -170,7 +178,8 @@ def serve(
     config.port = port
 
     app_instance = create_app(config, backend=backend)
-    uvicorn.run(app_instance, host=host, port=port, log_level="info")
+    uv_level = "debug" if verbose else "info"
+    uvicorn.run(app_instance, host=host, port=port, log_level=uv_level)
 
 
 @app.command()
@@ -498,6 +507,10 @@ def webcam(
     """
     import os
     import sys
+
+    # Suppress noisy logs in webcam mode
+    os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
+    os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
 
     # Set compression env vars for speed
     os.environ.setdefault("TRIO_COMPRESS_ENABLED", "1")
