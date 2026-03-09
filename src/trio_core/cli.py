@@ -184,6 +184,7 @@ def doctor():
 @app.command()
 def serve(
     model: str = typer.Option(None, "--model", "-m", help="HuggingFace model ID or local path"),
+    adapter: str = typer.Option(None, "--adapter", "-a", help="LoRA adapter directory path"),
     backend: str = typer.Option(None, "--backend", "-b", help="Force backend: mlx, transformers"),
     host: str = typer.Option("0.0.0.0", "--host", help="Bind host"),
     port: int = typer.Option(8000, "--port", "-p", help="Bind port"),
@@ -199,6 +200,8 @@ def serve(
     config = EngineConfig()
     if model:
         config.model = model
+    if adapter:
+        config.adapter_path = adapter
     config.host = host
     config.port = port
 
@@ -216,6 +219,7 @@ def analyze(
         help="Question or instruction",
     ),
     model: str = typer.Option(None, "--model", "-m", help="Override model"),
+    adapter: str = typer.Option(None, "--adapter", "-a", help="LoRA adapter directory path"),
     backend: str = typer.Option(None, "--backend", "-b", help="Force backend: mlx, transformers"),
     max_tokens: int = typer.Option(512, "--max-tokens", help="Max generation tokens"),
     temperature: float = typer.Option(0.0, "--temperature", "-t", help="Sampling temperature"),
@@ -230,6 +234,8 @@ def analyze(
     config = EngineConfig()
     if model:
         config.model = model
+    if adapter:
+        config.adapter_path = adapter
 
     engine = TrioCore(config, backend=backend)
 

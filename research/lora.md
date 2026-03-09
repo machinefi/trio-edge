@@ -7,7 +7,9 @@ Fine-tune Qwen3.5-2B on surveillance anomaly detection data using LoRA, to impro
 ## Status
 
 - **Phase A: Baseline** — DONE (2026-03-09). 9 models benchmarked, domain gap confirmed.
-- **Phase B: LoRA** — READY. Environment verified: `.venv-lora` (Python 3.12 + mlx-vlm 0.4.0 + torch 2.10). Qwen3.5-VL-2B loads OK, 12 LoRA target layers found.
+- **Phase B: LoRA Smoke Test** — DONE (2026-03-09). Pipeline validated: 85% accuracy on training data (vs 15% baseline) with 241 samples, 1 epoch, 4 min on M3 Ultra.
+  - Required 3 patches to mlx-vlm 0.4.0 (see B.3 below)
+  - **Phase B Full**: TODO — scale to 1,200+ clips, 3+ epochs, validate on held-out test set
 
 ---
 
@@ -157,85 +159,75 @@ Qwen2.5-VL-3B is the fallback if Qwen3.5-2B LoRA doesn't work with mlx-vlm v0.4.
 
 ### B.2 Training Data
 
-#### Approach: Binary Detection (same as MDPI paper)
+#### Approach: All 12 QA Types (not just binary detection)
 
-Use UCF-Crime clips (already downloaded, ~15GB) with binary yes/no labels:
-- **Abnormal clips**: 633 clips → "Yes" (13 crime categories)
-- **Normal clips**: ~633 clips (balanced subset) → "No"
-- **Total**: ~1,266 training clips (the MDPI paper used 1,610 — similar scale)
+Use UCF-Crime clips (already downloaded, ~15GB) with **all QA types** from SurveillanceVQA-589K annotations, not just binary detection. This gives ~5x more training samples per clip and teaches the model richer surveillance understanding.
 
-This is a **much simpler** data problem than the full SurveillanceVQA-589K conversion.
+- **Abnormal clips**: 633 clips × ~5 QA types each → ~3,000 samples
+- **Normal clips**: ~633 clips (balanced subset) → "No" for detection
+- **12 QA types**: detection, classification, subject, description, cause, temporal, spatial, consequence, prevention, contextual, counterfactual, ethical
+
+**Smoke test (2026-03-09)**: 100 clips → 267 samples (241 train, 26 valid). Detection questions get "Answer Yes/No" instruction appended.
 
 #### Data Format for mlx-vlm v0.4.0
 
-```python
-# Each sample in HuggingFace dataset format:
-{
-    "images": [frame_pil],  # single extracted frame from video
-    "messages": [
-        {
-            "role": "user",
-            "content": [
-                {"type": "image", "image": "frame.jpg"},
-                {"type": "text", "text": "Does this surveillance video frame contain any abnormal or potentially dangerous activity? Answer with only yes or no."}
-            ]
-        },
-        {
-            "role": "assistant",
-            "content": [
-                {"type": "text", "text": "Yes"}  # or "No"
-            ]
-        }
-    ]
-}
+```jsonl
+# surveillance_vqa/lora_dataset/jsonl/train.jsonl
+{"question": "Does this video contain any violent activities?\nAnswer Yes or No, followed by a brief reason.\nBe concise.", "answer": "Yes", "image": "/abs/path/00000_0.jpg"}
+{"question": "Who is the main person involved?\nBe concise.", "answer": "The woman in the white shirt", "image": "/abs/path/00001_0.jpg"}
 ```
+
+**Critical**: Use `question`/`answer`/`image` columns (flat strings), NOT pre-built `messages` with nested content. mlx-vlm's `transform_dataset_to_messages` builds the Qwen chat format internally. Must use `--custom-prompt-format` to avoid PyArrow mixed-type errors.
 
 #### Conversion Script: `scripts/prepare_surveillance_lora.py`
 
-```
-For each UCF-Crime video clip:
-  1. Load video → extract 1 representative frame (middle frame)
-  2. Determine label from directory (Anomaly-Videos-Part-* = Yes, Normal = No)
-  3. Create HF dataset sample with frame + yes/no message
-  4. Balance: undersample normal to match abnormal count
-  5. Save as HF dataset to disk
+```bash
+source .venv-lora/bin/activate
+python scripts/prepare_surveillance_lora.py --max-samples 100  # smoke test (267 samples)
+python scripts/prepare_surveillance_lora.py                     # full dataset
 ```
 
-**Single frame vs multi-frame**: Start with single frame for speed. The MDPI paper used 8-frame sequences but single frame is sufficient for pilot — Trio's live monitoring captures individual frames anyway.
-
-### B.3 Training Configuration (REVISED)
+### B.3 Training Configuration (VALIDATED)
 
 ```bash
-# QLoRA on 4-bit Qwen3.5-2B (mlx-vlm v0.4.0)
+PROMPT_FMT='[{"role":"user","content":[{"type":"image","image":"{image}"},{"type":"text","text":"{question}"}]},{"role":"assistant","content":"{answer}"}]'
+
 python -m mlx_vlm.lora \
   --model-path mlx-community/Qwen3.5-2B-4bit \
-  --dataset ./surveillance_vqa/lora_dataset \
-  --epochs 1 \
+  --dataset surveillance_vqa/lora_dataset/jsonl \
+  --split train \
+  --epochs 3 \
   --batch-size 1 \
-  --lora-rank 8 \
-  --lora-alpha 16 \
-  --learning-rate 2e-5 \
-  --lora-dropout 0.0 \
-  --train-on-completions \
-  --grad-checkpoint \
-  --steps-per-eval 100 \
-  --steps-per-save 200 \
+  --lora-rank 8 --lora-alpha 16 --learning-rate 1e-5 \
+  --train-on-completions --grad-checkpoint \
+  --steps-per-report 40 --steps-per-save 200 \
+  --custom-prompt-format "$PROMPT_FMT" \
   --output-path adapters/surveillance-qwen35-2b
-
-# Fallback: Qwen2.5-VL-3B (if Qwen3.5 LoRA doesn't work)
-# python -m mlx_vlm.lora \
-#   --model-path mlx-community/Qwen2.5-VL-3B-Instruct-4bit \
-#   ... (same params) \
-#   --output-path adapters/surveillance-qwen25vl-3b
 ```
 
-Key changes from original plan:
-- **lr: 2e-5** (not 1e-4) — mlx-vlm v0.4.0 default, more conservative
-- **rank: 8** (not 16) — MDPI paper used rank=8 successfully
-- **alpha: 16** (2x rank)
-- **dropout: 0.0** — standard for QLoRA
-- **`--train-on-completions`** — loss only on assistant tokens (critical!)
-- **`--grad-checkpoint`** — saves memory for 3B model with images
+#### mlx-vlm 0.4.0 Patches Required (3 bugs found)
+
+**Bug 1: Fast processor incompatibility** (`utils.py:479`)
+- `AutoProcessor.from_pretrained(..., use_fast=True)` → Qwen2VLImageProcessorFast rejects MLX tensors
+- **Fix**: Change to `use_fast=False`
+
+**Bug 2: VisionDataset doesn't load images for Qwen** (`trainer/datasets.py:101-109`)
+- `use_embedded_images=True` → `images=None` → training runs text-only with no pixel_values!
+- **Fix**: Always load images from file paths and pass to `prepare_inputs`
+
+**Bug 3: iterate_batches truncates input_ids** (`trainer/sft_trainer.py:181`)
+- `len(input_ids)` where `input_ids.shape=(1, N)` returns 1 instead of N → pads to 32 → truncates image tokens
+- **Fix**: Squeeze leading batch dim before computing length
+
+#### Smoke Test Results (2026-03-09)
+
+| Config | Samples | Epochs | Time | Loss | Peak Mem | Train Acc |
+|--------|---------|--------|------|------|----------|-----------|
+| v2 (text-only, no images) | 241 | 1 | 1 min | 0.025 | 2.0 GB | 0% (broken output) |
+| **v4 (with images, 50 iters)** | 50 | ~0.2 | 1 min | 1.43 | 3.7 GB | **67%** (vs 20% baseline) |
+| **v4-full (with images, 1 epoch)** | 241 | 1 | 4 min | 0.58 | 3.9 GB | **85%** (vs 15% baseline) |
+
+**Key finding**: Without the 3 patches above, mlx-vlm 0.4.0 trains text-only — the adapter learns garbage. With patches, image-aware training produces +70pp improvement on training data.
 
 ### B.4 Training Time Estimates (CORRECTED)
 

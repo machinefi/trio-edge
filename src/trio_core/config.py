@@ -16,6 +16,10 @@ class EngineConfig(BaseSettings):
         default="mlx-community/Qwen2.5-VL-3B-Instruct-4bit",
         description="HuggingFace model ID or local path",
     )
+    adapter_path: str | None = Field(
+        default=None,
+        description="Path to LoRA adapter directory (contains adapters.safetensors + adapter_config.json)",
+    )
 
     # Server
     host: str = Field(default="0.0.0.0", description="API bind host")
