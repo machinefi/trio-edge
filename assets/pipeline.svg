@@ -1,0 +1,140 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 320" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f172a"/>
+      <stop offset="100%" style="stop-color:#1e293b"/>
+    </linearGradient>
+    <linearGradient id="stage1" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1"/>
+      <stop offset="100%" style="stop-color:#4f46e5"/>
+    </linearGradient>
+    <linearGradient id="stage2" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#8b5cf6"/>
+      <stop offset="100%" style="stop-color:#7c3aed"/>
+    </linearGradient>
+    <linearGradient id="stage3" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ec4899"/>
+      <stop offset="100%" style="stop-color:#db2777"/>
+    </linearGradient>
+    <linearGradient id="stage4" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#f43f5e"/>
+      <stop offset="100%" style="stop-color:#e11d48"/>
+    </linearGradient>
+    <linearGradient id="stage5" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#f97316"/>
+      <stop offset="100%" style="stop-color:#ea580c"/>
+    </linearGradient>
+    <linearGradient id="result" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#10b981"/>
+      <stop offset="100%" style="stop-color:#059669"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="320" rx="12" fill="url(#bg)"/>
+
+  <!-- Title -->
+  <text x="450" y="38" text-anchor="middle" fill="#e2e8f0" font-size="15" font-weight="600" letter-spacing="0.5">TrioCore Inference Pipeline</text>
+
+  <!-- Input -->
+  <g transform="translate(30, 65)">
+    <rect width="100" height="80" rx="10" fill="url(#stage1)" opacity="0.9"/>
+    <text x="50" y="30" text-anchor="middle" fill="white" font-size="22">📹</text>
+    <text x="50" y="52" text-anchor="middle" fill="white" font-size="12" font-weight="600">Video</text>
+    <text x="50" y="68" text-anchor="middle" fill="#c7d2fe" font-size="10">RTSP / file</text>
+  </g>
+
+  <!-- Arrow 1 -->
+  <path d="M135 105 L155 105" stroke="#6366f1" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/></marker></defs>
+
+  <!-- Stage 1: Dedup -->
+  <g transform="translate(160, 65)">
+    <rect width="110" height="80" rx="10" fill="url(#stage2)" opacity="0.9"/>
+    <text x="55" y="28" text-anchor="middle" fill="white" font-size="12" font-weight="600">Temporal</text>
+    <text x="55" y="44" text-anchor="middle" fill="white" font-size="12" font-weight="600">Dedup</text>
+    <rect x="15" y="52" width="80" height="20" rx="4" fill="rgba(0,0,0,0.3)"/>
+    <text x="55" y="66" text-anchor="middle" fill="#fbbf24" font-size="11" font-weight="700">-50% frames</text>
+  </g>
+
+  <!-- Arrow 2 -->
+  <path d="M275 105 L295 105" stroke="#8b5cf6" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- Stage 2: Motion Gate -->
+  <g transform="translate(300, 65)">
+    <rect width="110" height="80" rx="10" fill="url(#stage3)" opacity="0.9"/>
+    <text x="55" y="28" text-anchor="middle" fill="white" font-size="12" font-weight="600">Motion</text>
+    <text x="55" y="44" text-anchor="middle" fill="white" font-size="12" font-weight="600">Gate</text>
+    <rect x="15" y="52" width="80" height="20" rx="4" fill="rgba(0,0,0,0.3)"/>
+    <text x="55" y="66" text-anchor="middle" fill="#fbbf24" font-size="11" font-weight="700">-80% calls</text>
+  </g>
+
+  <!-- Arrow 3 -->
+  <path d="M415 105 L435 105" stroke="#ec4899" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- Stage 3: ViT + ToMe -->
+  <g transform="translate(440, 65)">
+    <rect width="120" height="80" rx="10" fill="url(#stage4)" opacity="0.9" filter="url(#glow)"/>
+    <text x="60" y="28" text-anchor="middle" fill="white" font-size="12" font-weight="600">ViT + ToMe</text>
+    <text x="60" y="44" text-anchor="middle" fill="#fecdd3" font-size="10">token merging</text>
+    <rect x="15" y="52" width="90" height="20" rx="4" fill="rgba(0,0,0,0.3)"/>
+    <text x="60" y="66" text-anchor="middle" fill="#fbbf24" font-size="11" font-weight="700">-68% tokens</text>
+  </g>
+
+  <!-- Arrow 4 -->
+  <path d="M565 105 L585 105" stroke="#f43f5e" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- Stage 4: LLM + FastV -->
+  <g transform="translate(590, 65)">
+    <rect width="120" height="80" rx="10" fill="url(#stage5)" opacity="0.9" filter="url(#glow)"/>
+    <text x="60" y="28" text-anchor="middle" fill="white" font-size="12" font-weight="600">LLM + FastV</text>
+    <text x="60" y="44" text-anchor="middle" fill="#fed7aa" font-size="10">KV pruning</text>
+    <rect x="15" y="52" width="90" height="20" rx="4" fill="rgba(0,0,0,0.3)"/>
+    <text x="60" y="66" text-anchor="middle" fill="#fbbf24" font-size="11" font-weight="700">-50% tokens</text>
+  </g>
+
+  <!-- Arrow 5 -->
+  <path d="M715 105 L735 105" stroke="#f97316" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- Result -->
+  <g transform="translate(740, 65)">
+    <rect width="130" height="80" rx="10" fill="url(#result)" opacity="0.9"/>
+    <text x="65" y="30" text-anchor="middle" fill="white" font-size="18">✅</text>
+    <text x="65" y="50" text-anchor="middle" fill="white" font-size="11" font-weight="600">"Person at door"</text>
+    <text x="65" y="66" text-anchor="middle" fill="#a7f3d0" font-size="10">487ms on M3</text>
+  </g>
+
+  <!-- Bottom section: Use cases -->
+  <line x1="30" y1="170" x2="870" y2="170" stroke="#334155" stroke-width="1"/>
+
+  <!-- Use case 1: Security -->
+  <g transform="translate(50, 190)">
+    <rect width="240" height="100" rx="10" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+    <text x="20" y="30" fill="#e2e8f0" font-size="13" font-weight="600">🏠 Home Security</text>
+    <text x="20" y="52" fill="#94a3b8" font-size="11">trio webcam -w "person at the door"</text>
+    <text x="20" y="72" fill="#94a3b8" font-size="11">trio cam --host 192.168.1.100</text>
+    <text x="20" y="90" fill="#6ee7b7" font-size="10">Real-time alerts · Audio notification</text>
+  </g>
+
+  <!-- Use case 2: API -->
+  <g transform="translate(330, 190)">
+    <rect width="240" height="100" rx="10" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+    <text x="20" y="30" fill="#e2e8f0" font-size="13" font-weight="600">🔌 API Server</text>
+    <text x="20" y="52" fill="#94a3b8" font-size="11">trio serve --port 8000</text>
+    <text x="20" y="72" fill="#94a3b8" font-size="11">OpenAI-compatible · SSE streaming</text>
+    <text x="20" y="90" fill="#6ee7b7" font-size="10">Drop-in replacement for cloud VLMs</text>
+  </g>
+
+  <!-- Use case 3: Video -->
+  <g transform="translate(610, 190)">
+    <rect width="240" height="100" rx="10" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+    <text x="20" y="30" fill="#e2e8f0" font-size="13" font-weight="600">🎬 Video Analysis</text>
+    <text x="20" y="52" fill="#94a3b8" font-size="11">trio analyze video.mp4 -q "..."</text>
+    <text x="20" y="72" fill="#94a3b8" font-size="11">Python SDK · Batch processing</text>
+    <text x="20" y="90" fill="#6ee7b7" font-size="10">100% local · Zero cloud dependency</text>
+  </g>
+</svg>

@@ -15,14 +15,39 @@ app = typer.Typer(
 )
 
 
-def _setup_logging(verbose: bool = False) -> None:
+class _JSONFormatter(logging.Formatter):
+    """Structured JSON log formatter for production use."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        import json as _json
+        import time as _t
+        entry = {
+            "ts": _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime(record.created)),
+            "level": record.levelname.lower(),
+            "logger": record.name,
+            "msg": record.getMessage(),
+        }
+        if record.exc_info and record.exc_info[0] is not None:
+            entry["error"] = self.formatException(record.exc_info)
+        return _json.dumps(entry, ensure_ascii=False)
+
+
+def _setup_logging(verbose: bool = False, json_logs: bool = False) -> None:
     import os
     level = logging.DEBUG if verbose else logging.WARNING
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
-        datefmt="%H:%M:%S",
-    )
+
+    if json_logs or os.environ.get("TRIO_LOG_JSON", "").lower() in ("1", "true"):
+        handler = logging.StreamHandler()
+        handler.setFormatter(_JSONFormatter())
+        logging.root.handlers.clear()
+        logging.root.addHandler(handler)
+        logging.root.setLevel(level)
+    else:
+        logging.basicConfig(
+            level=level,
+            format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+            datefmt="%H:%M:%S",
+        )
     if not verbose:
         # Suppress noisy "PyTorch was not found" warning from transformers
         os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
@@ -163,9 +188,10 @@ def serve(
     host: str = typer.Option("0.0.0.0", "--host", help="Bind host"),
     port: int = typer.Option(8000, "--port", "-p", help="Bind port"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Debug logging"),
+    json_logs: bool = typer.Option(False, "--json-logs", help="Structured JSON logging (or set TRIO_LOG_JSON=1)"),
 ):
     """Start the API server."""
-    _setup_logging(verbose)
+    _setup_logging(verbose, json_logs=json_logs)
     import uvicorn
     from trio_core.config import EngineConfig
     from trio_core.api.server import create_app
