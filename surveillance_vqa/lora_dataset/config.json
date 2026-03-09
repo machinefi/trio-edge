@@ -1,0 +1,7 @@
+{
+  "total_samples": 3246,
+  "train_samples": 2922,
+  "val_samples": 324,
+  "abnormal_count": 3060,
+  "normal_count": 186
+}

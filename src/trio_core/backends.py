@@ -56,9 +56,10 @@ class BaseBackend(ABC):
     The engine calls these methods — it never touches mlx or torch directly.
     """
 
-    def __init__(self, model_name: str, device_info: DeviceInfo | None = None):
+    def __init__(self, model_name: str, device_info: DeviceInfo | None = None, adapter_path: str | None = None):
         self.model_name = model_name
         self.device_info = device_info or detect_device()
+        self.adapter_path = adapter_path
         self._loaded = False
 
     @property
@@ -230,15 +231,23 @@ class MLXBackend(BaseBackend):
 
     def load(self) -> None:
         logger.info("[MLX] Loading model: %s", self.model_name)
+        if self.adapter_path:
+            logger.info("[MLX] LoRA adapter: %s", self.adapter_path)
         t0 = time.monotonic()
 
         # Try native loading first (T1 models), fall back to mlx-vlm (T2)
-        try:
-            from trio_core.models.loader import load_native, load_config_native
-            self._model, self._processor = load_native(self.model_name)
-            self._config = load_config_native(self.model_name)
-            logger.info("[MLX] Loaded via native path")
-        except ValueError:
+        # If adapter_path is set, skip native loader and use mlx-vlm which has
+        # built-in LoRA support via apply_lora_layers().
+        if not self.adapter_path:
+            try:
+                from trio_core.models.loader import load_native, load_config_native
+                self._model, self._processor = load_native(self.model_name)
+                self._config = load_config_native(self.model_name)
+                logger.info("[MLX] Loaded via native path")
+            except ValueError:
+                self._model = None  # Fall through to mlx-vlm
+
+        if not hasattr(self, '_model') or self._model is None:
             try:
                 from mlx_vlm import load
                 from mlx_vlm.utils import load_config
@@ -247,11 +256,17 @@ class MLXBackend(BaseBackend):
                     f"Model '{self.model_name}' is not natively supported. "
                     f"Install mlx-vlm for T2 model support: pip install 'trio-core[mlx-vlm]'"
                 )
+            load_kwargs = {"trust_remote_code": True}
+            if self.adapter_path:
+                load_kwargs["adapter_path"] = self.adapter_path
             self._model, self._processor = load(
-                self.model_name, trust_remote_code=True,
+                self.model_name, **load_kwargs,
             )
             self._config = load_config(self.model_name)
-            logger.info("[MLX] Loaded via mlx-vlm fallback")
+            if self.adapter_path:
+                logger.info("[MLX] Loaded via mlx-vlm with LoRA adapter")
+            else:
+                logger.info("[MLX] Loaded via mlx-vlm fallback")
         self._prompt_cache = None  # Lazily created on first generate
         self._early_stop = None   # Set via set_early_stop() after load
         self._visual_similarity_threshold = 0.0  # Set via set_visual_similarity() after load
@@ -919,6 +934,7 @@ def auto_backend(
     *,
     backend: str | None = None,
     device_info: DeviceInfo | None = None,
+    adapter_path: str | None = None,
 ) -> BaseBackend:
     """Create the best backend for the current hardware.
 
@@ -927,6 +943,7 @@ def auto_backend(
         backend: Force a specific backend ("mlx" or "transformers").
                  If None, auto-detect from hardware.
         device_info: Pre-detected device info. If None, auto-detect.
+        adapter_path: Path to LoRA adapter directory (optional).
 
     Returns:
         Configured (but not loaded) backend instance.
@@ -945,7 +962,7 @@ def auto_backend(
         "Auto-selected backend: %s (device=%s, accelerator=%s, memory=%.1fGB)",
         chosen, device_info.device_name, device_info.accelerator, device_info.memory_gb,
     )
-    return cls(model_name, device_info=device_info)
+    return cls(model_name, device_info=device_info, adapter_path=adapter_path)
 
 
 def resolve_backend(config, *, backend_override: str | None = None) -> BaseBackend:
@@ -961,7 +978,7 @@ def resolve_backend(config, *, backend_override: str | None = None) -> BaseBacke
     Returns:
         Configured (but not loaded) backend instance.
     """
-    base = auto_backend(config.model, backend=backend_override)
+    base = auto_backend(config.model, backend=backend_override, adapter_path=getattr(config, 'adapter_path', None))
 
     if base.backend_name != "mlx":
         return base
@@ -992,6 +1009,7 @@ def resolve_backend(config, *, backend_override: str | None = None) -> BaseBacke
             prune_ratio=config.fastv_ratio,
             prune_after_layer=config.fastv_layer,
             device_info=base.device_info,
+            adapter_path=base.adapter_path,
             **tome_kwargs,
         )
 
@@ -1007,6 +1025,7 @@ def resolve_backend(config, *, backend_override: str | None = None) -> BaseBacke
             adaptive=config.tome_adaptive,
             content_aware=config.tome_content_aware,
             device_info=base.device_info,
+            adapter_path=base.adapter_path,
         )
 
     # Compressed visual tokens
@@ -1019,6 +1038,7 @@ def resolve_backend(config, *, backend_override: str | None = None) -> BaseBacke
         )
         return CompressedMLXBackend(
             config.model, compressor, device_info=base.device_info,
+            adapter_path=base.adapter_path,
         )
 
     return base
