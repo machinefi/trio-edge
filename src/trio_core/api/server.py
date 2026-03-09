@@ -688,7 +688,27 @@ async def _watch_sse_stream(
 
     try:
         while not ws.stop_event.is_set():
-            # Heartbeat — emit periodically even during static scenes
+            # Read one frame from ffmpeg with timeout so heartbeats can fire
+            try:
+                raw = await asyncio.wait_for(
+                    loop.run_in_executor(
+                        None, lambda: proc.stdout.read(frame_bytes) if proc.stdout else b""
+                    ),
+                    timeout=_WATCH_HEARTBEAT_INTERVAL,
+                )
+            except asyncio.TimeoutError:
+                # Read timed out — emit heartbeat and retry
+                last_heartbeat = _time.monotonic()
+                yield _sse_event("heartbeat", {
+                    "watch_id": watch_id,
+                    "ts": _iso_now(),
+                    "uptime_s": int(_time.time() - ws.started_at),
+                    "checks": ws.checks,
+                    "alerts": ws.alerts,
+                })
+                continue
+
+            # Emit heartbeat if enough time passed during normal operation
             now = _time.monotonic()
             if now - last_heartbeat >= _WATCH_HEARTBEAT_INTERVAL:
                 last_heartbeat = now
@@ -700,10 +720,6 @@ async def _watch_sse_stream(
                     "alerts": ws.alerts,
                 })
 
-            # Read one frame from ffmpeg
-            raw = await loop.run_in_executor(
-                None, lambda: proc.stdout.read(frame_bytes) if proc.stdout else b""
-            )
             if len(raw) < frame_bytes:
                 if ws.stop_event.is_set():
                     break
