@@ -145,7 +145,11 @@ def load_native(
     model.eval()
 
     # Load processor (from transformers, not mlx-vlm)
-    processor = AutoProcessor.from_pretrained(str(model_path), use_fast=True)
+    # Try fast processor first, fall back to slow if torchvision not available
+    try:
+        processor = AutoProcessor.from_pretrained(str(model_path), use_fast=True)
+    except ImportError:
+        processor = AutoProcessor.from_pretrained(str(model_path), use_fast=False)
 
     logger.info(
         "Native model loaded: type=%s, quantization=%s",
