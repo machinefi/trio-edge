@@ -151,8 +151,8 @@ PROFILES: dict[str, ModelProfile] = {
         model_size_gb=0.5,
         inference_memory_gb=0.8,
         supports_fastv=False,   # DeltaNet layers incompatible with FastV
-        # POPE: 93% baseline → 93% compressed_50 (0% drop, 1.09x speedup)
-        recommended_optims={"compress_enabled": True, "compress_ratio": 0.5},
+        # Too small to compress: only 1.02x speedup, TextVQA -18%, GQA -6%
+        recommended_optims={},
     ),
     "qwen3.5-2b": ModelProfile(
         family="qwen3.5",
@@ -217,8 +217,9 @@ PROFILES: dict[str, ModelProfile] = {
         model_size_gb=5.0,
         inference_memory_gb=7.0,
         supports_fastv=False,   # DeltaNet layers incompatible with FastV
-        # POPE: 92%→91% (-1). TextVQA: 56%→62% (+6). ToMe cleans noisy ViT tokens.
-        recommended_optims={"tome_enabled": True, "tome_r": 4, "tome_metric": "hidden"},
+        # ToMe gives +6% TextVQA/GQA but 0.95x E2E speed (ViT overhead).
+        # Compressed 50% gives 1.21x speedup, +6% GQA, 0% TextVQA — better E2E.
+        recommended_optims={"compress_enabled": True, "compress_ratio": 0.5},
     ),
     "qwen2.5-vl-3b": ModelProfile(
         family="qwen2.5-vl",
@@ -510,8 +511,8 @@ PROFILES: dict[str, ModelProfile] = {
         supports_fastv=False,   # Different architecture, not validated
         model_size_gb=0.6,
         inference_memory_gb=1.0,
-        # POPE: 93% baseline → 94% compressed_50 (+1%!, 1.17x speedup)
-        recommended_optims={"compress_enabled": True, "compress_ratio": 0.5},
+        # Only 1.06x speedup, +21% memory overhead — not worth it for 1B model
+        recommended_optims={},
     ),
     "internvl3-2b": ModelProfile(
         family="internvl",

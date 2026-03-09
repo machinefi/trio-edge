@@ -17,3 +17,16 @@ venv/
 .coverage
 mvbench_videos/
 test_videos/
+.venv-lora/
+
+# LoRA adapter weights (large binary files)
+adapters/**/*.safetensors
+
+# Surveillance VQA data (videos, images, datasets)
+surveillance_vqa/videos/
+surveillance_vqa/lora_dataset/train/
+surveillance_vqa/lora_dataset/valid/
+surveillance_vqa/*.zip
+surveillance_vqa/baseline_results.json
+surveillance_vqa/github/
+surveillance_vqa/test_data/

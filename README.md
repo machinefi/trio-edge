@@ -237,10 +237,10 @@ TrioCore optimizes **every stage** of VLM inference. Each technique is independe
 |---|---|---|---|
 | Pre-inference | Temporal dedup | Skip near-identical frames (L2 on 64x64) | -50% frames |
 | Pre-inference | Motion gate | Skip VLM entirely when scene is static | -80% calls |
-| Vision encoder | **ToMe** | Merge similar visual tokens between ViT blocks | **-73% prefill** |
-| LLM layers | **FastV** | Prune low-attention visual tokens from KV cache | -50% tokens |
+| Vision encoder | **[ToMe](https://arxiv.org/abs/2210.09461)** | Merge similar visual tokens between ViT blocks | **-73% prefill** |
+| LLM layers | **[FastV](https://arxiv.org/abs/2403.06764)** | Prune low-attention visual tokens from KV cache | -50% tokens |
 | Cross-frame | **KV Reuse** | Reuse KV cache when frames are visually similar | **1.7x speedup** |
-| Long video | **StreamMem** | Bounded KV cache with saliency eviction | constant memory |
+| Long video | **[StreamMem](https://arxiv.org/abs/2504.08498)** | Bounded KV cache with saliency eviction | constant memory |
 
 ## Supported Models
 
@@ -342,22 +342,49 @@ Accuracy is hardware-independent (bit-identical output on any Apple Silicon). La
 | Qwen3.5-0.8B | 0.8B | 58% | **62% (+4)** | 54% (-4) | — |
 | Qwen3.5-4B | 4B | 46% | 44% (-2) | 36% (-10) | — |
 
-### MVBench — Video Understanding (12 tasks, 5 samples/task)
+### MVBench — Video Understanding (19 tasks, 5 samples/task)
 
 | Model | Params | Baseline | Compressed 50% |
 |---|---|---|---|
-| Qwen3-VL-8B | 8B | **69%** | 57% (-12) |
-| Qwen3.5-2B | 2B | 65% | 57% (-8) |
-| Qwen2.5-VL-7B | 7B | 63% | 61% (-2) |
-| Qwen3-VL-2B | 2B | 63% | 54% (-9) |
-| Qwen3-VL-4B | 4B | 63% | 54% (-9) |
-| Qwen2.5-VL-3B | 3B | 61% | 59% (-2) |
-| Qwen3.5-0.8B | 0.8B | 50% | 46% (-4) |
-| Qwen3.5-9B | 9B | 37% | 37% (0) |
-| Qwen3.5-4B | 4B | 2% | 2% (0) |
+| Qwen3-VL-8B | 8B | **65%** | 61% (-4) |
+| Qwen2.5-VL-3B | 3B | 64% | 60% (-4) |
+| Qwen3.5-2B | 2B | 64% | 61% (-3) |
+| Qwen2.5-VL-7B | 7B | 62% | 60% (-2) |
+| Qwen3-VL-4B | 4B | 61% | 58% (-3) |
+| Qwen3-VL-2B | 2B | 57% | 53% (-4) |
+| Qwen3.5-0.8B | 0.8B | 57% | 53% (-4) |
+| Qwen3.5-9B | 9B | 49% | 48% (-1) |
+| Qwen3.5-4B | 4B | 1% | 2% (+1) |
 | InternVL3 | 1-2B | — | — |
 
 `—` = architecturally incompatible (auto-skipped). `✗` = produces garbage output. ToMe incompatible with Qwen3-VL (deepstack) and InternVL3 (pixel shuffle). FastV incompatible with Qwen3.5 (DeltaNet), InternVL3, Qwen2.5-VL-7B (over-prunes), and Qwen3-VL-2B (garbage output). InternVL3 does not support multi-image/video inference (MVBench). Qwen3.5-4B: known 4-bit quantization issue on MCQ/video benchmarks (official FP16: MMBench 89%, our 4-bit: 46%).
+
+### SurveillanceVQA — Anomaly Detection (1,827 samples, yes/no)
+
+[SurveillanceVQA-589K](https://arxiv.org/abs/2505.12589) detection benchmark on UCF-Crime surveillance videos (13 anomaly categories + normal clips).
+
+| Model | Params | Accuracy | F1 | Recall | Specificity | Yes Rate | Latency |
+|---|---|---|---|---|---|---|---|
+| Qwen2.5-VL-7B | 7B | **70.1%** | 0.362 | 25.3% | **92.8%** | 13.3% | 587ms |
+| Qwen3-VL-8B | 8B | 69.0% | 0.395 | 30.2% | 88.6% | 17.7% | 450ms |
+| Qwen2.5-VL-3B | 3B | 68.4% | 0.504 | 47.6% | 79.1% | 29.9% | 375ms |
+| Qwen3-VL-2B | 2B | 67.6% | 0.137 | 7.7% | 97.9% | 4.0% | 193ms |
+| Qwen3.5-0.8B | 0.8B | 67.6% | 0.441 | 51.7% | 58.2% | 45.2% | 118ms |
+| Qwen3-VL-4B | 4B | 67.5% | 0.484 | 45.4% | 78.7% | 29.3% | 304ms |
+| Qwen3.5-2B | 2B | 67.3% | 0.108 | 5.9% | 98.4% | 3.1% | 189ms |
+| **Qwen3.5-4B** | 4B | 65.2% | **0.556** | 65.1% | 65.2% | 44.9% | 295ms |
+| Qwen3.5-9B | 9B | 56.7% | 0.550 | **79.0%** | 45.5% | 62.7% | 452ms |
+
+**mlx-vlm raw baseline comparison** (no TrioCore optimizations):
+
+| Model | Backend | Accuracy | F1 | Recall | Yes Rate |
+|---|---|---|---|---|---|
+| Qwen2.5-VL-3B | TrioCore | 68.4% | 0.504 | 47.6% | 29.9% |
+| | mlx-vlm raw | 67.0% | 0.068 | 3.6% | 1.8% |
+| Qwen2.5-VL-7B | TrioCore | 70.1% | 0.362 | 25.3% | 13.3% |
+| | mlx-vlm raw | 67.4% | 0.100 | 5.4% | 2.7% |
+
+Key findings: **TrioCore optimizations do NOT cause regression** — TrioCore is slightly *better* than raw mlx-vlm (+1.4% to +2.7% accuracy). All models struggle with surveillance anomaly detection regardless of backend — accuracy ≤70%, confirming this is a fundamental domain gap, not an optimization issue. Most models are extremely conservative (very low recall, high specificity). The best-balanced models are Qwen3.5-4B (F1=0.556) and Qwen3.5-9B (F1=0.550). This validates the need for domain-specific LoRA fine-tuning (see [research/lora.md](research/lora.md)).
 
 ### Latency — ms/sample (POPE)
 
@@ -383,6 +410,42 @@ Accuracy is hardware-independent (bit-identical output on any Apple Silicon). La
 | Qwen3-VL-4B | **1.71x** | KV cache reuse |
 | Qwen3.5-0.8B | **1.35x** | DeltaNet state snapshot |
 
+### Optimization Guide — Best Performance vs Accuracy Balance
+
+Based on our [full benchmark analysis](research/benchmark-analysis.md) (11 models x 5 benchmarks x 4 configs):
+
+#### Per-model recommendation
+
+| Model | Best Config | Speedup | Avg Accuracy Delta | Verdict |
+|---|---|---|---|---|
+| Qwen2.5-VL-7B | Compressed 50% | **1.33x** | 0% to +2% | **Best tradeoff** — accuracy improves on some tasks |
+| Qwen3-VL-8B | Compressed 50% | **1.20x** | +2% POPE, +6% GQA | **Best tradeoff** — compression acts as regularization |
+| Qwen3.5-9B | Compressed 50% | **1.21x** | +6% GQA, 0% TextVQA | **Best tradeoff** — over-parameterized, benefits from compression |
+| Qwen3.5-4B | Compressed 50% | **1.17x** | +6% GQA, 0% TextVQA | **Best tradeoff** — same regularization effect |
+| Qwen3-VL-4B | Compressed 50% | 1.16x | -2% to -3% | Good |
+| Qwen3.5-2B | Compressed 50% | 1.09x | -1% to -3% | Good |
+| InternVL3-2B | Compressed 50% | 1.26x | -1% to -2% | Good |
+| Qwen3-VL-2B | Compressed 50% | 1.10x | 0% to -4% | Good |
+| Qwen3.5-0.8B | Baseline | — | — | Too small to compress (TextVQA -18%) |
+| Qwen2.5-VL-3B | Baseline | — | — | Anomalously sensitive (POPE -19%) |
+| InternVL3-1B | Baseline | 1.06x | Marginal gain | Not worth the memory overhead |
+
+#### Per-scenario recommendation
+
+| Scenario | Best Strategy | Why |
+|---|---|---|
+| Independent frames | Compressed 50% (4B+ models) | 1.1-1.3x speedup, -1% to -3% accuracy |
+| Sequential video (surveillance) | **Baseline (no compression)** | MLX prompt cache gives 2.25x automatic speedup; compression breaks this cache and is 2.9x slower |
+| OCR / text reading | Baseline or minimal compression | TextVQA most sensitive to token loss |
+| Detection / monitoring | Compressed 50% aggressively | POPE tolerates compression well (-1% avg) |
+| High resolution (1080p+) | Compressed 50% | ToMe gives 4x prefill speedup but ViT overhead negates E2E gain |
+
+#### Key insight
+
+> **4B+ models: use Compressed 50%. Under 2B: use Baseline. Sequential frames: always Baseline.**
+>
+> Compressed 50% on over-parameterized models (4B+) acts as regularization — it forces the LLM to rely on the most informative visual features, often *improving* accuracy on reasoning tasks while delivering 1.2-1.3x speedup. For sequential video, MLX's built-in prompt cache already provides 2.25x frame-over-frame speedup for free.
+
 ### Overhead vs mlx-vlm (raw generate loop)
 
 | Metric | mlx-vlm | trio-core |
@@ -392,6 +455,23 @@ Accuracy is hardware-independent (bit-identical output on any Apple Silicon). La
 | Output | — | **bit-identical** |
 
 </details>
+
+## References
+
+Optimization techniques used in TrioCore:
+
+- **ToMe** (Token Merging) — Bolya et al., "Token Merging: Your ViT But Faster", ICLR 2023. [arXiv:2210.09461](https://arxiv.org/abs/2210.09461)
+- **FastV** — Chen et al., "An Image is Worth 1/2 Tokens After Layer 2: Plug-and-Play Inference Acceleration for Large Vision-Language Models", ECCV 2024. [arXiv:2403.06764](https://arxiv.org/abs/2403.06764)
+- **StreamingLLM / StreamMem** — Xiao et al., "Efficient Streaming Language Models with Attention Sinks", ICLR 2024. [arXiv:2309.17453](https://arxiv.org/abs/2309.17453); Du et al., "StreamMem: Streaming KV Cache Management for Video Understanding", 2025. [arXiv:2504.08498](https://arxiv.org/abs/2504.08498)
+
+Evaluation benchmarks:
+
+- **POPE** — Li et al., "Evaluating Object Hallucination in Large Vision-Language Models", EMNLP 2023. [arXiv:2305.10355](https://arxiv.org/abs/2305.10355)
+- **TextVQA** — Singh et al., "Towards VQA Models That Can Read", CVPR 2019. [arXiv:1904.08920](https://arxiv.org/abs/1904.08920)
+- **GQA** — Hudson & Manning, "GQA: A New Dataset for Real-World Visual Reasoning", CVPR 2019. [arXiv:1902.09506](https://arxiv.org/abs/1902.09506)
+- **MMBench** — Liu et al., "MMBench: Is Your Multi-modal Model an All-around Player?", ECCV 2024. [arXiv:2307.06281](https://arxiv.org/abs/2307.06281)
+- **MVBench** — Li et al., "MVBench: A Comprehensive Multi-modal Video Understanding Benchmark", CVPR 2024. [arXiv:2311.17005](https://arxiv.org/abs/2311.17005)
+- **SurveillanceVQA-589K** — Zheng et al., "SurveillanceVQA: Towards Comprehensive and Diversified Surveillance Video Question Answering", 2025. [arXiv:2505.12589](https://arxiv.org/abs/2505.12589)
 
 ## License
 

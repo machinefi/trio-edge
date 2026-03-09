@@ -102,7 +102,7 @@ class Qwen3_5RMSNormGated(nn.Module):
         self.weight = mx.ones(hidden_size)
 
     def __call__(
-        self, hidden_states: mx.array, gate: mx.array | None = None
+        self, hidden_states: mx.array, gate: Optional[mx.array] = None
     ) -> mx.array:
         x = mx.fast.rms_norm(hidden_states, self.weight, self.eps)
         if gate is not None:
