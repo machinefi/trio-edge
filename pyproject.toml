@@ -9,7 +9,7 @@ description = "Local VLM inference engine for video — Apple Silicon, NVIDIA, a
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10,<3.14"
-# Note: torch has no Python 3.14 wheels yet, use Python 3.12 or 3.13
+# Note: mlx requires Python <3.14; use Python 3.12 or 3.13
 authors = [{name = "Trio Team"}]
 keywords = ["vlm", "video", "inference", "vision-language-model", "apple-silicon", "trioclaw", "openclaw"]
 classifiers = [

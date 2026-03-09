@@ -549,7 +549,7 @@ class MLXBackend(BaseBackend):
         budget = info.get("max_recommended_working_set_size", 0)
         if budget <= 0:
             return
-        active = mx.metal.get_active_memory()
+        active = mx.get_active_memory() if hasattr(mx, "get_active_memory") else mx.metal.get_active_memory()
         available = budget - active
 
         # Rough estimate: prefill needs ~6x pixel_values (forward + intermediates)

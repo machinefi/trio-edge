@@ -221,8 +221,34 @@ class QwenVLProcessor:
     # ── Chat template ────────────────────────────────────────────────────
 
     def apply_chat_template(self, messages, **kwargs):
-        """Delegate to tokenizer's chat template."""
-        return self.tokenizer.apply_chat_template(messages, **kwargs)
+        """Apply chat template, preprocessing multimodal content blocks.
+
+        Converts [{"type": "video", ...}, {"type": "text", ...}] content
+        blocks into plain text with vision tokens, since some tokenizers
+        (e.g. Qwen2.5-VL) don't handle content blocks natively.
+        """
+        processed = []
+        for msg in messages:
+            content = msg.get("content", "")
+            if isinstance(content, list):
+                # Convert content blocks to text
+                text_parts = []
+                for block in content:
+                    btype = block.get("type", "")
+                    if btype == "image":
+                        text_parts.append(
+                            f"{self.vision_start_token}{self.image_token}{self.vision_end_token}"
+                        )
+                    elif btype == "video":
+                        text_parts.append(
+                            f"{self.vision_start_token}{self.video_token}{self.vision_end_token}"
+                        )
+                    elif btype == "text":
+                        text_parts.append(block.get("text", ""))
+                processed.append({**msg, "content": "".join(text_parts)})
+            else:
+                processed.append(msg)
+        return self.tokenizer.apply_chat_template(processed, **kwargs)
 
     # ── Image Processing ─────────────────────────────────────────────────
 
