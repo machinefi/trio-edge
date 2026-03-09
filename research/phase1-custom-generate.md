@@ -108,10 +108,9 @@ use cases.
 
 `stream_generate()` already uses our generate loop with `prompt_cache_manager`.
 
-### Step 5: Benchmarks and Validation ⬜ TODO
+### Step 5: Benchmarks and Validation ✅ DONE
 
-Full regression across all models after Phase 1 complete. Re-run baselines
-from eval-baseline-plan.md with new generate path.
+Full regression completed: 11 models × 5 benchmarks (POPE/TextVQA/GQA/MMBench/MVBench) × multiple optimization combos. Results in README.
 
 ## What We Replace vs What We Keep
 
