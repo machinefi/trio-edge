@@ -5,8 +5,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
+import time as _time
 import uuid
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from typing import AsyncIterator
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -33,6 +36,11 @@ from trio_core.api.models import (
     Usage,
     VideoAnalyzeRequest,
     VideoAnalyzeResponse,
+    WatchCondition,
+    WatchConditionResult,
+    WatchInfo,
+    WatchMetrics,
+    WatchRequest,
 )
 from trio_core.config import EngineConfig
 from trio_core.engine import TrioCore
@@ -43,6 +51,28 @@ _engine: TrioCore | None = None
 _active_requests: int = 0
 _active_lock = asyncio.Lock()
 _shutdown_event: asyncio.Event | None = None
+
+# ── Watch State ──────────────────────────────────────────────────────────────
+
+
+@dataclass
+class _WatchState:
+    """Internal state for an active watch."""
+
+    watch_id: str
+    source: str
+    conditions: list[WatchCondition]
+    fps: float
+    state: str = "connecting"  # connecting, running, stopped, error
+    started_at: float = 0.0
+    checks: int = 0
+    alerts: int = 0
+    stop_event: asyncio.Event | None = None
+    resolution: str = ""
+    error: str | None = None
+
+
+_watches: dict[str, _WatchState] = {}
 
 
 def get_engine() -> TrioCore:
@@ -66,6 +96,10 @@ async def lifespan(app: FastAPI):
         raise
     logger.info("Engine ready: backend=%s", _engine._backend.backend_name if _engine._backend else "none")
     yield
+    # Stop all active watches
+    for ws in list(_watches.values()):
+        if ws.stop_event:
+            ws.stop_event.set()
     # Graceful shutdown: wait for in-flight requests to finish
     logger.info("Shutting down — waiting for %d active request(s)...", _active_requests)
     _shutdown_event.set()
@@ -336,6 +370,78 @@ def _register_routes(app: FastAPI) -> None:
         )
 
 
+    # ── Watch API (/v1/watch) ──────────────────────────────────────────────
+
+    @app.post("/v1/watch")
+    async def start_watch(request: WatchRequest):
+        """Start watching an RTSP stream. Returns SSE event stream."""
+        engine = get_engine()
+        watch_id = f"w_{uuid.uuid4().hex[:8]}"
+        stop_event = asyncio.Event()
+
+        ws = _WatchState(
+            watch_id=watch_id,
+            source=request.source,
+            conditions=request.conditions,
+            fps=request.fps,
+            started_at=_time.time(),
+            stop_event=stop_event,
+        )
+        _watches[watch_id] = ws
+
+        return StreamingResponse(
+            _watch_sse_stream(engine, ws),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Watch-ID": watch_id,
+            },
+        )
+
+    @app.get("/v1/watch")
+    async def list_watches():
+        """List all active watches."""
+        now = _time.time()
+        return [
+            WatchInfo(
+                watch_id=ws.watch_id,
+                source=ws.source,
+                state=ws.state,
+                conditions=ws.conditions,
+                uptime_s=int(now - ws.started_at),
+                checks=ws.checks,
+                alerts=ws.alerts,
+            )
+            for ws in _watches.values()
+        ]
+
+    @app.delete("/v1/watch/{watch_id}")
+    async def stop_watch(watch_id: str):
+        """Stop an active watch."""
+        ws = _watches.get(watch_id)
+        if ws is None:
+            raise HTTPException(404, f"Watch not found: {watch_id}")
+        if ws.stop_event:
+            ws.stop_event.set()
+        ws.state = "stopped"
+        result = {
+            "status": "stopped",
+            "total_checks": ws.checks,
+            "total_alerts": ws.alerts,
+        }
+        _watches.pop(watch_id, None)
+        return result
+
+
+def _strip_think_tags(text: str) -> str:
+    """Strip Qwen3.5 <think>...</think> reasoning blocks from VLM output."""
+    # Remove <think>content</think> blocks (including multiline)
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+    # Remove any remaining orphan tags
+    text = re.sub(r"</?think>", "", text)
+    return text.strip()
+
+
 def _detect_triggered(answer: str) -> bool | None:
     """Detect yes/no from VLM answer for trioclaw triggered flag.
 
@@ -483,6 +589,182 @@ async def _stream_frames_analyze(
         logger.error("Stream error in /v1/frames/analyze: %s", e, exc_info=True)
         yield f"data: {json.dumps({'error': str(e), 'finished': True})}\n\n"
     yield "data: [DONE]\n\n"
+
+
+async def _watch_sse_stream(
+    engine: TrioCore, ws: _WatchState
+) -> AsyncIterator[str]:
+    """Core watch loop: RTSP → frames → motion gate → inference → SSE events."""
+    import base64
+    import io
+
+    from PIL import Image
+
+    from trio_core._rtsp_proxy import ensure_rtsp_url
+    from trio_core.video import MotionGate
+
+    watch_id = ws.watch_id
+    motion_gate = MotionGate()
+
+    # Emit connecting status
+    yield _sse_event("status", {"watch_id": watch_id, "state": "connecting"})
+
+    # Resolve RTSP URL (handles Tailscale proxy if needed)
+    loop = asyncio.get_event_loop()
+    try:
+        effective_url = await loop.run_in_executor(None, ensure_rtsp_url, ws.source)
+    except Exception as e:
+        ws.state = "error"
+        ws.error = str(e)
+        yield _sse_event("error", {"watch_id": watch_id, "error": f"RTSP proxy failed: {e}"})
+        _watches.pop(watch_id, None)
+        return
+
+    # Start ffmpeg process to read RTSP frames
+    import subprocess
+
+    ffmpeg_cmd = [
+        "ffmpeg", "-v", "quiet",
+        "-rtsp_transport", "tcp",
+        "-i", effective_url,
+        "-vf", f"fps={ws.fps},scale=672:448",
+        "-f", "rawvideo",
+        "-pix_fmt", "rgb24",
+        "-",
+    ]
+
+    try:
+        proc = await asyncio.to_thread(
+            lambda: subprocess.Popen(
+                ffmpeg_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+        )
+    except Exception as e:
+        ws.state = "error"
+        ws.error = str(e)
+        yield _sse_event("error", {"watch_id": watch_id, "error": f"ffmpeg failed: {e}"})
+        _watches.pop(watch_id, None)
+        return
+
+    frame_w, frame_h = 672, 448
+    frame_bytes = frame_w * frame_h * 3
+    model_name = engine.config.model.split("/")[-1] if "/" in engine.config.model else engine.config.model
+
+    ws.state = "running"
+    ws.resolution = f"{frame_w}x{frame_h}"
+    yield _sse_event("status", {
+        "watch_id": watch_id,
+        "state": "running",
+        "resolution": ws.resolution,
+        "model": model_name,
+    })
+
+    try:
+        while not ws.stop_event.is_set():
+            # Read one frame from ffmpeg
+            raw = await loop.run_in_executor(
+                None, lambda: proc.stdout.read(frame_bytes) if proc.stdout else b""
+            )
+            if len(raw) < frame_bytes:
+                # Stream ended or error
+                if ws.stop_event.is_set():
+                    break
+                ws.state = "error"
+                ws.error = "RTSP stream ended"
+                yield _sse_event("error", {"watch_id": watch_id, "error": "RTSP stream ended"})
+                break
+
+            # Parse frame: (H, W, 3) uint8 → (C, H, W) float32
+            frame = np.frombuffer(raw, dtype=np.uint8).reshape(frame_h, frame_w, 3)
+            frame_chw = frame.transpose(2, 0, 1).astype(np.float32) / 255.0
+
+            # Motion gate — skip inference on static scenes
+            if not motion_gate.has_motion(frame_chw):
+                continue
+
+            # Run inference for each condition
+            t0 = _time.monotonic()
+            any_triggered = False
+            condition_results = []
+
+            last_result = None
+            for cond in ws.conditions:
+                last_result = await loop.run_in_executor(
+                    None,
+                    lambda q=cond.question: engine.analyze_frame(frame_chw, q),
+                )
+                answer_text = _strip_think_tags(last_result.text)
+                triggered = _detect_triggered(answer_text)
+
+                condition_results.append(WatchConditionResult(
+                    id=cond.id,
+                    triggered=triggered is True,
+                    answer=answer_text,
+                ))
+                if triggered:
+                    any_triggered = True
+
+            latency_ms = int((_time.monotonic() - t0) * 1000)
+            tok_s = last_result.metrics.tokens_per_sec if last_result else 0.0
+            ws.checks += 1
+
+            metrics = WatchMetrics(
+                latency_ms=latency_ms,
+                tok_s=round(tok_s, 1),
+                frames_analyzed=1,
+            )
+
+            if any_triggered:
+                ws.alerts += 1
+                # Encode frame as base64 JPEG for the alert
+                img = Image.fromarray(frame)
+                buf = io.BytesIO()
+                img.save(buf, format="JPEG", quality=80)
+                frame_b64 = base64.b64encode(buf.getvalue()).decode()
+
+                yield _sse_event("alert", {
+                    "watch_id": watch_id,
+                    "ts": _iso_now(),
+                    "conditions": [c.model_dump() for c in condition_results],
+                    "metrics": metrics.model_dump(),
+                    "frame_b64": frame_b64,
+                })
+            else:
+                yield _sse_event("result", {
+                    "watch_id": watch_id,
+                    "ts": _iso_now(),
+                    "conditions": [c.model_dump() for c in condition_results],
+                    "metrics": metrics.model_dump(),
+                })
+
+    except asyncio.CancelledError:
+        pass
+    except Exception as e:
+        logger.error("Watch %s error: %s", watch_id, e, exc_info=True)
+        yield _sse_event("error", {"watch_id": watch_id, "error": str(e)})
+    finally:
+        # Cleanup
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+        ws.state = "stopped"
+        _watches.pop(watch_id, None)
+
+
+def _sse_event(event_type: str, data: dict) -> str:
+    """Format an SSE event."""
+    return f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
+
+
+def _iso_now() -> str:
+    """Return current time in ISO 8601 format."""
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 async def _stream_chat_completion(
