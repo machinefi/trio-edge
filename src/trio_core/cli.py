@@ -524,6 +524,7 @@ def webcam(
     max_tokens: int = typer.Option(10, "--max-tokens", help="Max generation tokens"),
     resolution: int = typer.Option(240, "--resolution", help="Max resolution (lower=faster)"),
     no_sound: bool = typer.Option(False, "--no-sound", help="Disable audio alerts"),
+    count: bool = typer.Option(False, "--count", "-c", help="Count people, cars, dogs, cats (cumulative)"),
 ):
     """Live webcam/camera monitor with VLM analysis and alerts.
 
@@ -535,6 +536,7 @@ def webcam(
         trio webcam -w "a person is waving"                  # Custom condition
         trio webcam -w "someone at the door" -s 1            # iPhone Continuity Camera
         trio webcam -w "package on doorstep" -s rtsp://...   # IP camera
+        trio webcam --count                                  # Count objects
     """
     import os
     import sys
@@ -552,6 +554,10 @@ def webcam(
     if not model:
         model = "mlx-community/Qwen3.5-2B-MLX-4bit"
 
+    # Count mode needs more tokens
+    if count and max_tokens < 40:
+        max_tokens = 40
+
     # Build args
     sys.argv = [
         "webcam_gui",
@@ -567,6 +573,8 @@ def webcam(
         sys.argv += ["--backend", backend]
     if no_sound:
         sys.argv += ["--no-sound"]
+    if count:
+        sys.argv += ["--count"]
 
     try:
         from trio_core._webcam_gui import main
@@ -583,7 +591,7 @@ def cam(
     password: str = typer.Option("", "--password", "-p", help="Camera password"),
     rtsp: str = typer.Option(None, "--rtsp", help="Direct RTSP URL (skip discovery + ONVIF)"),
     watch: str = typer.Option(
-        "a person is visible",
+        None,
         "--watch", "-w", help="Watch condition in natural language"),
     model: str = typer.Option(None, "--model", "-m", help="Override model"),
     backend: str = typer.Option(None, "--backend", "-b", help="Force backend: mlx, transformers"),
@@ -591,6 +599,8 @@ def cam(
     resolution: int = typer.Option(240, "--resolution", help="Max resolution (lower=faster)"),
     discover: bool = typer.Option(False, "--discover", help="Discover cameras and exit"),
     no_sound: bool = typer.Option(False, "--no-sound", help="Disable audio alerts"),
+    count: bool = typer.Option(False, "--count", "-c", help="Count people, cars, dogs, cats (cumulative)"),
+    digest: bool = typer.Option(False, "--digest", "-d", help="Smart event timeline with scene understanding"),
 ):
     """IP camera monitor with ONVIF discovery and AI analysis.
 
@@ -602,6 +612,7 @@ def cam(
         trio cam --host 192.168.1.100 -p pass                  # known IP
         trio cam --rtsp "rtsp://admin:pass@IP:554/stream"      # direct RTSP
         trio cam -w "someone at the door" --host 192.168.1.100 -p pass
+        trio cam --rtsp "rtsp://..." --count                   # count objects
     """
     import os
     import sys
@@ -656,21 +667,33 @@ def cam(
     if not model:
         model = "mlx-community/Qwen3.5-2B-MLX-4bit"
 
+    # Structured modes need more tokens
+    if count and max_tokens < 40:
+        max_tokens = 40
+    if digest and max_tokens < 30:
+        max_tokens = 30
+
     # Launch webcam GUI with RTSP source
+    n_frames = "3" if digest else "1"
     sys.argv = [
         "webcam_gui",
         "--source", rtsp_url,
-        "--watch", watch,
-        "--frames", "1",
+        "--frames", n_frames,
         "--max-tokens", str(max_tokens),
         "--interval", "0",
         "--resolution", str(resolution),
         "--model", model,
     ]
+    if watch:
+        sys.argv += ["--watch", watch]
     if backend:
         sys.argv += ["--backend", backend]
     if no_sound:
         sys.argv += ["--no-sound"]
+    if count:
+        sys.argv += ["--count"]
+    if digest:
+        sys.argv += ["--digest"]
 
     try:
         from trio_core._webcam_gui import main
