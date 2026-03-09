@@ -13,11 +13,15 @@ Usage:
     # Watch mode — natural language condition monitoring:
     python examples/webcam_gui.py --watch "someone is at the door"
     python examples/webcam_gui.py --watch "a package is missing" --source 1
-    python examples/webcam_gui.py --watch "person not wearing safety helmet"
+
+    # Digest mode — smart event timeline:
+    python examples/webcam_gui.py --digest
+
+    # Count mode — cumulative object counting:
+    python examples/webcam_gui.py --count
 
     # Custom prompt:
     python examples/webcam_gui.py --prompt "What is the person doing?"
-    python examples/webcam_gui.py --model mlx-community/Qwen2.5-VL-3B-Instruct-4bit
 
 Camera sources:
     0           — Built-in Mac webcam
@@ -41,6 +45,44 @@ import cv2
 import numpy as np
 
 
+def _parse_counts(text):
+    """Parse 'COUNT people:N cars:N dogs:N cats:N' from VLM response."""
+    import re
+    counts = {}
+    for key in ("people", "cars", "dogs", "cats"):
+        m = re.search(rf"{key}:\s*(\d+)", text, re.IGNORECASE)
+        counts[key] = int(m.group(1)) if m else 0
+    return counts
+
+
+def _text_similar(a: str, b: str, threshold: float = 0.6) -> bool:
+    """Check if two event descriptions are similar (word overlap ratio)."""
+    if not a or not b:
+        return False
+    words_a = set(a.lower().split())
+    words_b = set(b.lower().split())
+    if not words_a or not words_b:
+        return False
+    overlap = len(words_a & words_b)
+    return overlap / min(len(words_a), len(words_b)) >= threshold
+
+
+def _parse_digest(text):
+    """Parse digest response: 'EVENT: ...' or 'NOTHING' from VLM."""
+    import re
+    text = re.sub(r"</?think>", "", text).strip()
+    # Check for "nothing" / "no change" variants
+    lower = text.lower()
+    if (lower.startswith("nothing") or lower.startswith("no change")
+            or lower.startswith("no new") or lower.startswith("no,")
+            or "there is no person" in lower or "no person, animal" in lower
+            or "there are no" in lower):
+        return None
+    # Strip "EVENT:" prefix if present
+    text = re.sub(r"^EVENT:\s*", "", text, flags=re.IGNORECASE).strip()
+    return text if text else None
+
+
 def _wrap_text(text, font, font_scale, thickness, max_width):
     """Word-wrap text to fit within max_width pixels."""
     words = text.split()
@@ -61,8 +103,11 @@ def _wrap_text(text, font, font_scale, thickness, max_width):
 
 def draw_overlay(frame: np.ndarray, description: str, metrics: str = "",
                  watch_mode: bool = False, triggered: bool = False,
-                 events: list | None = None, watch_text: str = "") -> np.ndarray:
-    """Draw status bar (top) + description box (bottom) + event log."""
+                 events: list | None = None, watch_text: str = "",
+                 counters: dict | None = None,
+                 digest_events: list | None = None,
+                 chat_input: str = "", chat_history: list | None = None) -> np.ndarray:
+    """Draw status bar (top) + description box (bottom) + event log + counters."""
     h, w = frame.shape[:2]
     overlay = frame.copy()
     font = cv2.FONT_HERSHEY_SIMPLEX
@@ -101,27 +146,98 @@ def draw_overlay(frame: np.ndarray, description: str, metrics: str = "",
             log_w = 500
             log_x = w - log_w - margin
             log_y_start = 85 if watch_mode else 10
+            # Dark background behind event log
+            log_h = len(show_alerts) * log_line_h + 10
+            cv2.rectangle(overlay, (log_x - 5, log_y_start - 20),
+                          (w, log_y_start + log_h - 10), (0, 0, 0), -1)
+            frame = cv2.addWeighted(overlay, 0.6, frame, 0.4, 0)
+            overlay = frame.copy()
             for i, evt in enumerate(show_alerts):
                 y = log_y_start + i * log_line_h
                 cv2.putText(frame, evt["text"], (log_x, y),
-                            font, 0.6, (50, 50, 255), 2, cv2.LINE_AA)  # bright red
+                            font, 0.6, (100, 100, 255), 2, cv2.LINE_AA)
 
-    # --- Bottom description box ---
-    max_width = w - 2 * margin
-    lines = _wrap_text(description, font, 0.6, 1, max_width)
-    if metrics:
-        lines.append(metrics)
+    # --- Digest event timeline (left side, scrolling) ---
+    if digest_events:
+        panel_y = 10
+        log_line_h = 26
+        show_events = digest_events[-12:]  # show last 12
+        panel_h = len(show_events) * log_line_h + 20
+        panel_w = min(w - 20, 650)
+        # Dark semi-transparent background
+        cv2.rectangle(overlay, (0, panel_y - 5), (panel_w, panel_y + panel_h), (0, 0, 0), -1)
+        frame = cv2.addWeighted(overlay, 0.65, frame, 0.35, 0)
+        overlay = frame.copy()
 
-    if lines:
-        box_height = len(lines) * line_height + 2 * margin
+        cv2.putText(frame, "Event Log", (margin, panel_y + 14),
+                    font, 0.55, (0, 255, 255), 1, cv2.LINE_AA)
+        for i, evt in enumerate(show_events):
+            y = panel_y + 35 + i * log_line_h
+            text = evt["text"][:80]
+            # Color: cyan for timestamp, white for text
+            cv2.putText(frame, text, (margin + 2, y),
+                        font, 0.5, (0, 0, 0), 2, cv2.LINE_AA)  # shadow
+            cv2.putText(frame, text, (margin, y),
+                        font, 0.5, (200, 255, 200), 1, cv2.LINE_AA)
+
+    # --- Counters panel (left side, with dark background) ---
+    if counters:
+        panel_y = 130 if watch_mode else 10
+        panel_h = 30 + 4 * 32 + 10  # title + 4 rows + padding
+        panel_w = 200
+        # Dark semi-transparent background
+        cv2.rectangle(overlay, (0, panel_y - 10), (panel_w, panel_y + panel_h), (0, 0, 0), -1)
+        frame = cv2.addWeighted(overlay, 0.7, frame, 0.3, 0)
+        overlay = frame.copy()
+
+        cv2.putText(frame, "Cumulative Count", (margin, panel_y + 5),
+                    font, 0.55, (200, 200, 200), 1, cv2.LINE_AA)
+        labels = {"people": "People", "cars": "Cars", "dogs": "Dogs", "cats": "Cats"}
+        for i, key in enumerate(["people", "cars", "dogs", "cats"]):
+            y = panel_y + 35 + i * 32
+            total = counters.get(key, 0)
+            label = f"{labels[key]}: {total}"
+            # White text with black outline for readability
+            cv2.putText(frame, label, (margin + 5, y),
+                        font, 0.75, (0, 0, 0), 3, cv2.LINE_AA)  # black outline
+            cv2.putText(frame, label, (margin + 5, y),
+                        font, 0.75, (255, 255, 255), 2, cv2.LINE_AA)  # white fill
+
+    # --- Chat history + input bar (bottom) ---
+    bottom_lines = []
+
+    # Chat history (last 3 Q&A pairs)
+    if chat_history:
+        for entry in chat_history[-3:]:
+            bottom_lines.append(("Q: " + entry["q"], (0, 255, 255)))  # cyan
+            for al in _wrap_text("A: " + entry["a"], font, 0.55, 1, w - 2 * margin):
+                bottom_lines.append((al, (200, 255, 200)))  # green
+
+    # Current description + metrics (if no chat active)
+    if not chat_input and not chat_history:
+        for line in _wrap_text(description, font, 0.6, 1, w - 2 * margin):
+            bottom_lines.append((line, (255, 255, 255)))
+        if metrics:
+            bottom_lines.append((metrics, (180, 180, 180)))
+    elif not chat_input:
+        # Show metrics line even with chat
+        if metrics:
+            bottom_lines.append((metrics, (180, 180, 180)))
+
+    # Chat input line
+    input_line = f"> {chat_input}_" if chat_input is not None else ""
+    if input_line:
+        bottom_lines.append((input_line, (255, 255, 0)))  # yellow
+
+    if bottom_lines:
+        box_height = len(bottom_lines) * line_height + 2 * margin
         box_top = h - box_height
         cv2.rectangle(overlay, (0, box_top), (w, h), (0, 0, 0), -1)
         frame = cv2.addWeighted(overlay, 0.7, frame, 0.3, 0)
 
-        for i, line in enumerate(lines):
+        for i, (line, color) in enumerate(bottom_lines):
             y = box_top + margin + (i + 1) * line_height - 4
-            color = (180, 180, 180) if i == len(lines) - 1 and metrics else (255, 255, 255)
-            cv2.putText(frame, line, (margin, y), font, 0.6, color, 1, cv2.LINE_AA)
+            cv2.putText(frame, line, (margin, y), font, 0.55, color, 1, cv2.LINE_AA)
 
     return frame
 
@@ -144,22 +260,52 @@ def main():
     parser.add_argument("--resolution", type=int, default=None,
                         help="Max resolution for inference (e.g. 480, 360). Lower = faster.")
     parser.add_argument("--no-sound", action="store_true", help="Disable audio alerts")
+    parser.add_argument("--count", action="store_true",
+                        help="Count people, cars, and dogs (cumulative)")
+    parser.add_argument("--digest", action="store_true",
+                        help="Smart event timeline — logs activities with scene understanding")
     args = parser.parse_args()
 
     watch_mode = args.watch is not None
+    count_mode = args.count
+    digest_mode = args.digest
+
+    count_suffix = (
+        "\nAlso carefully count ALL visible objects including small or partially occluded ones. "
+        "Look closely for animals (dogs, cats) even if they are small, far away, or partially hidden. "
+        "End your answer with a line in EXACTLY this format:\n"
+        "COUNT people:N cars:N dogs:N cats:N"
+    ) if count_mode else ""
 
     # Build prompt
     if args.prompt:
         prompt = args.prompt
+    elif digest_mode:
+        prompt = (
+            "Something moved in this security camera scene. "
+            "Identify ONLY the moving subject (person, animal, or vehicle in motion). "
+            "IGNORE all parked/stationary vehicles — they are not the cause of motion. "
+            "Describe the moving subject in one sentence: appearance, action, direction."
+        )
+    elif count_mode and not watch_mode:
+        prompt = (
+            "You are a security camera counter tracking objects over time.\n"
+            "Count every person, car, dog, and cat CURRENTLY visible — even small, distant, or partially hidden.\n"
+            "{prev_context}"
+            "Report only what is visible RIGHT NOW (not cumulative). "
+            "Briefly describe the scene, then end with EXACTLY:\n"
+            "COUNT people:N cars:N dogs:N cats:N"
+        )
     elif watch_mode:
         prompt = (
             f"You are a security monitor. Look at this image carefully.\n"
             f"Check if the following is true: \"{args.watch}\"\n"
             f"{{prev_context}}"
             f"Answer YES or NO first, then briefly explain why."
+            f"{count_suffix}"
         )
     else:
-        prompt = "Describe what you see briefly.{prev_context}"
+        prompt = "Describe what you see briefly.{prev_context}" + count_suffix
 
     # Initialize engine
     from trio_core import TrioCore, EngineConfig
@@ -178,6 +324,8 @@ def main():
     print(f"Temporal frames: {args.frames} per analysis")
     if watch_mode:
         print(f"Watch condition: \"{args.watch}\"")
+    if digest_mode:
+        print("Mode: Event digest (smart activity timeline)")
 
     # Open source
     source_str = args.source
@@ -265,6 +413,21 @@ def main():
     triggered_until = 0.0  # time.monotonic() when alert should expire
     events: list[dict] = []
     prev_description = ""
+    # Counting state — debounce prevents flicker double-counts
+    total_counts = {"people": 0, "cars": 0, "dogs": 0, "cats": 0}
+    prev_visible = {"people": 0, "cars": 0, "dogs": 0, "cats": 0}
+    zero_streak = {"people": 0, "cars": 0, "dogs": 0, "cats": 0}  # consecutive 0-count frames
+    DEBOUNCE_FRAMES = 3  # require N consecutive zeros before accepting decrease
+    # Digest state
+    digest_events: list[dict] = []
+    nothing_count = 0  # consecutive "nothing" responses
+    # Chat state
+    chat_input = ""
+    chat_history: list[dict] = []  # [{"q": "...", "a": "..."}, ...]
+    chat_busy = False
+    # Motion detection baseline (for digest mode)
+    baseline_frame: np.ndarray | None = None
+    MOTION_THRESHOLD = 0.005  # fraction of pixels that must change
 
     def _alert(text):
         """Play audio alert on macOS."""
@@ -279,6 +442,8 @@ def main():
     def inference_loop():
         nonlocal description, metrics_text, latest_frame_for_vlm, running
         nonlocal triggered, triggered_until, prev_description
+        nonlocal total_counts, prev_visible, nothing_count
+        nonlocal baseline_frame
 
         while running:
             force_analyze.wait(timeout=args.interval)
@@ -301,6 +466,28 @@ def main():
             else:
                 selected = buf
 
+            # Motion gate for digest mode — skip VLM if scene is static
+            if digest_mode:
+                current_gray = cv2.cvtColor(selected[-1], cv2.COLOR_BGR2GRAY)
+                current_gray = cv2.GaussianBlur(current_gray, (11, 11), 0)
+                if baseline_frame is None:
+                    baseline_frame = current_gray
+                    with lock:
+                        description = "Monitoring... no motion."
+                    continue
+                diff = cv2.absdiff(baseline_frame, current_gray)
+                motion_pixels = np.sum(diff > 15) / diff.size
+                # Update baseline slowly (rolling average)
+                baseline_frame = cv2.addWeighted(baseline_frame, 0.95, current_gray, 0.05, 0).astype(np.uint8)
+                if motion_pixels < MOTION_THRESHOLD:
+                    nothing_count += 1
+                    if nothing_count % 100 == 1:
+                        print(f"  ... no motion ({nothing_count}) score={motion_pixels:.4f}")
+                    with lock:
+                        description = f"Monitoring... (motion: {motion_pixels:.4f})"
+                    continue
+                print(f"  [MOTION DETECTED: {motion_pixels:.4f}]")
+
             # Resize + convert BGR uint8 -> RGB float32, stack as (N, C, H, W)
             rgb_frames = []
             for f in selected:
@@ -315,10 +502,14 @@ def main():
             video_array = np.stack(rgb_frames)  # (N, C, H, W)
 
             # Build prompt with temporal context
-            prev_ctx = ""
-            if prev_description:
-                prev_ctx = f"\nPrevious observation: \"{prev_description}\"\n"
-            current_prompt = prompt.replace("{prev_context}", prev_ctx)
+            # Build prompt — digest mode skips prev_context to avoid hallucination feedback
+            if digest_mode:
+                current_prompt = prompt
+            else:
+                prev_ctx = ""
+                if prev_description:
+                    prev_ctx = f"\nPrevious observation: \"{prev_description}\"\n"
+                current_prompt = prompt.replace("{prev_context}", prev_ctx)
 
             try:
                 t0 = time.monotonic()
@@ -326,13 +517,63 @@ def main():
                                               max_tokens=args.max_tokens)
                 elapsed = time.monotonic() - t0
                 text = result.text.strip().replace("\n", " ")
-                # Strip Qwen3.5 thinking tags: <think>...</think> YES → YES
                 import re
-                answer = re.sub(r"</?think>", "", text).strip()
+                # Strip thinking tags
+                answer = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+                answer = re.sub(r"</?think>", "", answer).strip()
+                # Truncate at chat template leakage (model didn't stop at EOS)
+                answer = re.sub(r"\s*user\b.*", "", answer, flags=re.IGNORECASE).strip()
+                answer = re.sub(r"\s*assistant\b.*", "", answer, flags=re.IGNORECASE).strip()
+                answer = re.sub(r"<\|.*", "", answer).strip()  # <|im_end|> etc
+
+                # Update cumulative counters with debounce
+                if count_mode:
+                    current = _parse_counts(answer)
+                    for key in total_counts:
+                        if current[key] > 0:
+                            zero_streak[key] = 0
+                            if current[key] > prev_visible[key]:
+                                total_counts[key] += current[key] - prev_visible[key]
+                                prev_visible[key] = current[key]
+                            # On decrease: keep prev_visible as high-water mark
+                            # so fluctuations (3→2→4) don't over-count
+                        else:
+                            # Only accept decrease to 0 after N consecutive zero frames
+                            zero_streak[key] += 1
+                            if zero_streak[key] >= DEBOUNCE_FRAMES:
+                                prev_visible[key] = 0
+                    # Strip COUNT line from display text
+                    import re as _re
+                    answer = _re.sub(r"\s*COUNT\s+people:\d+\s+cars:\d+\s+dogs:\d+\s+cats:\d+", "", answer).strip()
+
+                # Digest mode: motion gate already confirmed activity, log it
+                if digest_mode:
+                    nothing_count = 0
+                    ts = datetime.now().strftime("%H:%M:%S")
+                    event_text = answer.strip()
+                    if event_text:
+                        # Dedup: skip if too similar to last event
+                        last_raw = digest_events[-1]["raw"] if digest_events else ""
+                        if _text_similar(event_text, last_raw):
+                            # Same event continuing — update timestamp only
+                            digest_events[-1]["time"] = ts
+                            digest_events[-1]["text"] = f"[{ts}] {event_text}"
+                        else:
+                            digest_events.append({
+                                "time": ts,
+                                "text": f"[{ts}] {event_text}",
+                                "raw": event_text,
+                            })
+                            print(f"  [{ts}] {event_text}")
 
                 with lock:
                     description = answer
-                    prev_description = answer
+                    # For digest: feed back clean text to avoid garbage feedback loop
+                    if digest_mode:
+                        event_text_clean = _parse_digest(answer)
+                        prev_description = event_text_clean if event_text_clean else "quiet street, no activity"
+                    else:
+                        prev_description = answer
                     metrics_text = (
                         f"[{elapsed:.1f}s | "
                         f"preprocess {result.metrics.preprocess_ms:.0f}ms | "
@@ -358,20 +599,53 @@ def main():
                             if not was_triggered:
                                 _alert(f"Alert: {args.watch}")
 
-                print(f"\n> {answer}")
-                print(f"  {metrics_text}")
+                if not digest_mode:
+                    print(f"\n> {answer}")
+                    print(f"  {metrics_text}")
             except Exception as e:
                 with lock:
                     description = f"Error: {e}"
                 print(f"Inference error: {e}")
 
+    def chat_query(question: str):
+        """Send a question to VLM with current frame, update chat_history."""
+        nonlocal chat_busy
+        chat_busy = True
+        with lock:
+            buf = list(frame_buffer)
+        if not buf:
+            chat_history.append({"q": question, "a": "No frame available."})
+            chat_busy = False
+            return
+        frame_for_chat = buf[-1]
+        if args.resolution:
+            rh, rw = frame_for_chat.shape[:2]
+            scale = args.resolution / max(rh, rw)
+            if scale < 1.0:
+                frame_for_chat = cv2.resize(frame_for_chat, (int(rw * scale), int(rh * scale)))
+        rgb = cv2.cvtColor(frame_for_chat, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+        try:
+            result = engine.analyze_frame(rgb, question, max_tokens=80)
+            import re
+            answer = re.sub(r"<think>.*?</think>", "", result.text.strip(), flags=re.DOTALL).strip()
+            answer = re.sub(r"</?think>", "", answer).strip()
+            answer = re.sub(r"\s*user\b.*", "", answer, flags=re.IGNORECASE).strip()
+            answer = re.sub(r"<\|.*", "", answer).strip()
+            chat_history.append({"q": question, "a": answer or "No answer."})
+            print(f"  Chat Q: {question}")
+            print(f"  Chat A: {answer}")
+        except Exception as e:
+            chat_history.append({"q": question, "a": f"Error: {e}"})
+        chat_busy = False
+
     thread = threading.Thread(target=inference_loop, daemon=True)
     thread.start()
 
-    window_name = "TrioCore" + (" Watch" if watch_mode else " Webcam")
+    mode_label = " Watch" if watch_mode else " Digest" if digest_mode else " Webcam"
+    window_name = "TrioCore" + mode_label
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
 
-    controls = "Press 'q' or ESC to quit, SPACE to force re-analyze."
+    controls = "Type to ask questions, Enter to send, ESC to clear/quit, SPACE to re-analyze."
     print(f"\n{controls}")
 
     try:
@@ -399,15 +673,35 @@ def main():
                     watch_mode=watch_mode, triggered=triggered,
                     events=events if watch_mode else None,
                     watch_text=args.watch or "",
+                    counters=total_counts if count_mode else None,
+                    digest_events=digest_events if digest_mode else None,
+                    chat_input=chat_input,
+                    chat_history=chat_history,
                 )
 
             cv2.imshow(window_name, display)
 
             key = cv2.waitKey(1) & 0xFF
-            if key in (ord("q"), 27):
+            if key == 255:  # no key pressed
+                pass
+            elif key == 27:  # ESC — clear chat input or quit
+                if chat_input:
+                    chat_input = ""
+                else:
+                    break
+            elif key == ord("q") and not chat_input:
                 break
-            elif key == ord(" "):
+            elif key == 13:  # Enter — submit chat question
+                if chat_input.strip() and not chat_busy:
+                    q = chat_input.strip()
+                    chat_input = ""
+                    threading.Thread(target=chat_query, args=(q,), daemon=True).start()
+            elif key == 8 or key == 127:  # Backspace
+                chat_input = chat_input[:-1]
+            elif key == ord(" ") and not chat_input:
                 force_analyze.set()
+            elif 32 <= key < 127:  # printable ASCII
+                chat_input += chr(key)
     finally:
         running = False
         force_analyze.set()
@@ -425,6 +719,18 @@ def main():
             print(f"Alerts: {len(alerts)}/{len(events)}")
             for e in alerts:
                 print(f"  {e['text']}")
+        if count_mode and any(total_counts.values()):
+            print(f"\n--- Object Counts ---")
+            for key, val in total_counts.items():
+                if val > 0:
+                    print(f"  {key}: {val}")
+        if digest_mode and digest_events:
+            print(f"\n{'='*60}")
+            print(f"  ACTIVITY DIGEST — {len(digest_events)} events")
+            print(f"{'='*60}")
+            for evt in digest_events:
+                print(f"  {evt['text']}")
+            print(f"{'='*60}")
         print("Done.")
 
 
