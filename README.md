@@ -30,8 +30,11 @@ pip install 'trio-core[mlx]'          # or as library in your project
 pipx install 'trio-core[transformers]'
 pip install 'trio-core[transformers]'
 
-# With webcam/camera support
-pipx install 'trio-core[mlx,gui]'
+# With webcam/camera support (opencv for local webcam)
+pipx install 'trio-core[mlx,webcam]'
+
+# For IP cameras (RTSP), just install ffmpeg
+brew install ffmpeg
 ```
 
 ## Quick Start
@@ -45,30 +48,47 @@ trio device
 # Analyze a video
 trio analyze video.mp4 -q "What is happening?"
 
-# Live camera monitor — define what to watch in plain English
+# Live webcam monitor — define what to watch in plain English
 trio webcam -w "a person is waving"
+
+# IP camera monitor (ONVIF / RTSP)
+trio cam --host 192.168.1.100 -p mypassword -w "someone at the door"
 
 # Start the API server
 trio serve
 ```
 
-### Live Camera Monitor
+### IP Camera Monitor (`trio cam`)
 
 ```bash
-# Default: detect if someone is holding something
-trio webcam
+# Auto-discover ONVIF cameras on your LAN
+trio cam --discover
 
-# Custom watch conditions — just describe what to look for
+# Connect to a camera by IP (auto-generates Reolink RTSP URL)
+trio cam --host 192.168.1.100 -p mypassword
+
+# Direct RTSP URL (any camera brand)
+trio cam --rtsp "rtsp://admin:pass@192.168.1.100:554/stream" -w "intruder detected"
+
+# Custom watch condition
+trio cam --host 192.168.1.100 -p pass -w "package on the doorstep"
+trio cam --host 192.168.1.100 -p pass -w "car in the driveway"
+```
+
+GUI window with live feed, AI analysis overlay, and audio alerts. Works through Tailscale (auto TCP proxy for macOS network extensions). Requires `ffmpeg` (`brew install ffmpeg`).
+
+### Webcam Monitor (`trio webcam`)
+
+```bash
+# Built-in webcam (default)
 trio webcam -w "a person is waving"
-trio webcam -w "no safety helmet"
-trio webcam -w "package missing from doorstep"
-trio webcam -w "someone entered the restricted area"
 
 # iPhone as camera (macOS Continuity Camera)
-trio webcam -s 1 -w "a person is waving"
+trio webcam -s 1 -w "someone at the door"
 
-# IP camera via RTSP
-trio webcam -s "rtsp://admin:pass@192.168.1.100:554/stream" -w "intruder detected"
+# Custom conditions
+trio webcam -w "no safety helmet"
+trio webcam -w "package missing from doorstep"
 ```
 
 Auto-calibrates resolution for ~500ms inference on any Mac. Green = clear, red = alert with audio notification. No ML training needed — just describe what to monitor.
