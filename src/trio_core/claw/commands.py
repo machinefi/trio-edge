@@ -31,11 +31,14 @@ class WatchTask:
     watch_id: str
     condition: str
     interval: float
+    temporal: bool = False
     task: asyncio.Task | None = None
     stop_event: asyncio.Event = field(default_factory=asyncio.Event)
     checks: int = 0
     alerts: int = 0
+    transitions: int = 0  # state transitions detected (temporal mode)
     consecutive_failures: int = 0
+    last_state: str | None = None  # last detected state (temporal mode)
 
 
 @dataclass
@@ -199,18 +202,21 @@ class CommandHandler:
     # =========================================================================
 
     async def _vision_status(self, req: InvokeRequest) -> InvokeResult:
-        status = {
-            "watches": [
-                {
-                    "watchId": w.watch_id,
-                    "condition": w.condition,
-                    "interval": w.interval,
-                    "checks": w.checks,
-                    "alerts": w.alerts,
-                }
-                for w in self._watches.values()
-            ],
-        }
+        watches_list = []
+        for w in self._watches.values():
+            info = {
+                "watchId": w.watch_id,
+                "condition": w.condition,
+                "interval": w.interval,
+                "checks": w.checks,
+                "alerts": w.alerts,
+            }
+            if w.temporal:
+                info["temporal"] = True
+                info["transitions"] = w.transitions
+                info["lastState"] = w.last_state
+            watches_list.append(info)
+        status = {"watches": watches_list}
         if self.engine:
             health = self.engine.health()
             backend = health.get("backend", {})
@@ -240,8 +246,13 @@ class CommandHandler:
 
         interval = float(req.params.get("interval", 10))
         interval = max(interval, 2.0)  # floor at 2s to avoid hammering
+        temporal = bool(req.params.get("temporal", False))
         device_id = req.params.get("deviceId", "")
         source = self._resolve_source(device_id)
+
+        # Enable StreamMem on engine for temporal mode
+        if temporal:
+            self._enable_streaming_memory()
 
         watch_id = generate_id(12)
 
@@ -249,6 +260,7 @@ class CommandHandler:
             watch_id=watch_id,
             condition=question,
             interval=interval,
+            temporal=temporal,
         )
         self._watches[watch_id] = watch
 
@@ -256,15 +268,39 @@ class CommandHandler:
             self._watch_loop(watch, source, req.id)
         )
 
-        logger.info("vision.watch started: id=%s question=%r interval=%.0fs",
-                     watch_id, question, interval)
+        mode_str = "temporal" if temporal else "stateless"
+        logger.info("vision.watch started: id=%s question=%r interval=%.0fs mode=%s",
+                     watch_id, question, interval, mode_str)
 
         return self._ok(req, {
             "watchId": watch_id,
             "status": "started",
             "condition": question,
             "interval": interval,
+            "temporal": temporal,
         })
+
+    def _enable_streaming_memory(self) -> None:
+        """Enable StreamMem on the engine backend for temporal mode."""
+        if self.engine is None:
+            return
+        backend = getattr(self.engine, '_backend', None)
+        if backend is None:
+            return
+        if not hasattr(backend, 'set_streaming_memory'):
+            logger.warning("Backend does not support streaming memory — temporal mode degraded")
+            return
+        # Check if already enabled
+        sm_config = getattr(backend, '_streaming_memory_config', None)
+        if sm_config is not None:
+            return  # already configured
+        backend.set_streaming_memory(
+            enabled=True,
+            budget=6000,  # ~6K visual tokens — memory-bounded
+            prototype_ratio=0.1,
+            n_sink_tokens=4,
+        )
+        logger.info("StreamMem enabled for temporal mode (budget=6000)")
 
     # =========================================================================
     # vision.watch.stop — stop one or all watches
@@ -272,11 +308,16 @@ class CommandHandler:
 
     async def stop_all_watches(self) -> None:
         """Stop all active watches. Called by node.py on WebSocket disconnect."""
+        had_temporal = any(w.temporal for w in self._watches.values())
         for w in list(self._watches.values()):
             w.stop_event.set()
             if w.task and not w.task.done():
                 w.task.cancel()
         self._watches.clear()
+        # Reset accumulated KV if any temporal watches were active
+        if had_temporal and self.engine is not None:
+            if hasattr(self.engine, 'reset_context'):
+                self.engine.reset_context()
         logger.info("All watches stopped (disconnect cleanup)")
 
     async def _vision_watch_stop(self, req: InvokeRequest) -> InvokeResult:
@@ -305,21 +346,37 @@ class CommandHandler:
             except (asyncio.TimeoutError, asyncio.CancelledError):
                 watch.task.cancel()
         self._watches.pop(watch.watch_id, None)
-        logger.info("vision.watch stopped: id=%s checks=%d alerts=%d",
-                     watch.watch_id, watch.checks, watch.alerts)
-        return {
+
+        # Reset accumulated KV context only if no other temporal watches remain
+        if watch.temporal and self.engine is not None:
+            other_temporal = any(w.temporal for w in self._watches.values())
+            if not other_temporal and hasattr(self.engine, 'reset_context'):
+                self.engine.reset_context()
+
+        logger.info("vision.watch stopped: id=%s checks=%d alerts=%d transitions=%d",
+                     watch.watch_id, watch.checks, watch.alerts, watch.transitions)
+        result = {
             "watchId": watch.watch_id,
             "status": "stopped",
             "checks": watch.checks,
             "alerts": watch.alerts,
         }
+        if watch.temporal:
+            result["transitions"] = watch.transitions
+        return result
 
     # =========================================================================
     # Watch loop — periodic capture + VLM + send results via WebSocket
     # =========================================================================
 
     async def _watch_loop(self, watch: WatchTask, source: str, invoke_id: str) -> None:
-        """Core watch loop: capture → VLM → send result → sleep → repeat."""
+        """Core watch loop: capture → VLM → send result → sleep → repeat.
+
+        In temporal mode (watch.temporal=True):
+          - Uses StreamMem accumulated KV to provide cross-frame context
+          - Wraps the user's condition in a change-detection prompt
+          - Only triggers on state transitions (not repeated detections)
+        """
         try:
             while not watch.stop_event.is_set():
                 t0 = time.monotonic()
@@ -335,7 +392,6 @@ class CommandHandler:
                             "Watch %s: %d consecutive capture failures — stopping watch",
                             watch.watch_id, watch.consecutive_failures,
                         )
-                        # Send camera.offline event before stopping
                         await self._send_camera_offline_event(
                             source, watch.watch_id, watch.consecutive_failures,
                         )
@@ -358,10 +414,16 @@ class CommandHandler:
                 # Reset failure counter on successful capture
                 watch.consecutive_failures = 0
 
+                # Build prompt — temporal mode uses change-detection wrapping
+                if watch.temporal:
+                    prompt = _build_temporal_prompt(watch.condition, watch.last_state)
+                else:
+                    prompt = watch.condition
+
                 # VLM inference
                 def _infer():
                     rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
-                    return self.engine.analyze_frame(rgb, watch.condition)
+                    return self.engine.analyze_frame(rgb, prompt)
 
                 try:
                     result = await asyncio.to_thread(_infer)
@@ -377,10 +439,24 @@ class CommandHandler:
                 self._metrics.record_vlm_latency(elapsed)
 
                 answer = result.text.strip()
-                triggered = _detect_triggered(answer)
-                if triggered:
-                    watch.alerts += 1
-                    self._metrics.watch_alerts += 1
+
+                # Temporal mode: detect state transitions, not raw triggers
+                if watch.temporal:
+                    triggered, transition = _detect_temporal_transition(
+                        answer, watch.last_state,
+                    )
+                    if transition:
+                        watch.last_state = transition["new_state"]
+                    if triggered:
+                        watch.transitions += 1
+                        watch.alerts += 1
+                        self._metrics.watch_alerts += 1
+                else:
+                    triggered = _detect_triggered(answer)
+                    transition = None
+                    if triggered:
+                        watch.alerts += 1
+                        self._metrics.watch_alerts += 1
 
                 # Build result payload
                 payload = {
@@ -391,6 +467,12 @@ class CommandHandler:
                     "checks": watch.checks,
                     "alerts": watch.alerts,
                 }
+
+                if watch.temporal:
+                    payload["temporal"] = True
+                    payload["transitions"] = watch.transitions
+                    if transition:
+                        payload["transition"] = transition
 
                 # Include frame on alerts
                 if triggered:
@@ -403,8 +485,9 @@ class CommandHandler:
                                 watch.watch_id)
                     break
 
-                logger.info("Watch %s: check #%d triggered=%s (%.0fms)",
-                            watch.watch_id, watch.checks, triggered, elapsed_ms)
+                logger.info("Watch %s: check #%d triggered=%s transitions=%d (%.0fms)",
+                            watch.watch_id, watch.checks, triggered,
+                            watch.transitions, elapsed_ms)
 
                 await self._interruptible_sleep(watch.stop_event, watch.interval)
 
@@ -529,6 +612,105 @@ class CommandHandler:
             id=req.id, node_id=self.node_id, ok=False,
             error_code=code, error_message=message,
         )
+
+
+# =========================================================================
+# Temporal mode helpers
+# =========================================================================
+
+def _build_temporal_prompt(condition: str, last_state: str | None) -> str:
+    """Wrap user condition in a change-detection prompt for temporal mode.
+
+    Instead of asking "is the door open?" every frame (stateless),
+    we ask the VLM to report the current state AND whether it changed.
+    The accumulated KV cache gives the model memory of previous frames.
+    """
+    if last_state is None:
+        # First check — establish baseline state
+        return (
+            f"Observe this scene carefully. Regarding the condition: \"{condition}\"\n"
+            f"Describe the current state in a few words, then answer YES or NO.\n"
+            f"Format: STATE: <current state> | ANSWER: YES or NO"
+        )
+    # Subsequent checks — detect change from last known state
+    return (
+        f"You have been observing this scene over time. "
+        f"The previous state was: \"{last_state}\"\n"
+        f"Regarding: \"{condition}\"\n"
+        f"Has the state CHANGED from the previous observation? "
+        f"Describe the current state, then answer CHANGED or SAME.\n"
+        f"Format: STATE: <current state> | CHANGED or SAME"
+    )
+
+
+def _detect_temporal_transition(
+    answer: str, last_state: str | None,
+) -> tuple[bool, dict | None]:
+    """Parse temporal VLM response for state transitions.
+
+    Returns:
+        (triggered, transition_info)
+        triggered: True only when state actually changed
+        transition_info: {"old_state": ..., "new_state": ...} or None
+    """
+    lower = answer.lower().strip()
+
+    # Extract current state from "STATE: <state> | ..."
+    new_state = None
+    if "state:" in lower:
+        state_part = lower.split("state:")[-1]
+        # Take until pipe separator or end
+        if "|" in state_part:
+            new_state = state_part.split("|")[0].strip()
+        else:
+            # Take first sentence
+            new_state = state_part.split(".")[0].strip()
+
+    # Detect change signal
+    is_changed = False
+    if last_state is None:
+        # First observation — detect initial trigger from YES/NO
+        # Check the answer portion after "ANSWER:" if present, else after "|"
+        if "answer:" in lower:
+            answer_part = lower.split("answer:")[-1].strip()
+        elif "|" in lower:
+            answer_part = lower.split("|")[-1].strip()
+        else:
+            answer_part = lower
+        triggered = _detect_triggered(answer_part)
+        if new_state:
+            return (triggered or False, {
+                "old_state": None,
+                "new_state": new_state,
+            })
+        return (triggered or False, None)
+
+    # Look for CHANGED/SAME keywords — check the tail portion after "|"
+    tail = lower.split("|")[-1].strip() if "|" in lower else lower
+    negated_changed = any(neg in tail for neg in ("not changed", "hasn't changed",
+                                                   "has not changed", "no change"))
+    if negated_changed or tail.startswith("same"):
+        is_changed = False
+    elif "changed" in tail:
+        is_changed = True
+    elif "same" in tail:
+        is_changed = False
+    else:
+        # Fallback: compare states if we got a new one
+        if new_state and new_state != last_state:
+            is_changed = True
+
+    if is_changed and new_state:
+        return (True, {
+            "old_state": last_state,
+            "new_state": new_state,
+        })
+
+    # Update state even if not changed (state description may refine)
+    if new_state and new_state != last_state:
+        return (False, {"old_state": last_state, "new_state": new_state})
+
+    return (False, None)
 
 
 def _detect_triggered(answer: str) -> bool | None:

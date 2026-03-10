@@ -1,0 +1,191 @@
+[
+  {
+    "mode": "independent",
+    "test": "seq_ABC",
+    "category": "sequence",
+    "ground_truth": "A, B, C",
+    "answer": "C",
+    "passed": false,
+    "time_s": 0.27
+  },
+  {
+    "mode": "independent",
+    "test": "seq_XYZ",
+    "category": "sequence",
+    "ground_truth": "X, Y, Z",
+    "answer": "z",
+    "passed": false,
+    "time_s": 0.18
+  },
+  {
+    "mode": "independent",
+    "test": "seq_12345",
+    "category": "sequence",
+    "ground_truth": "1, 2, 3, 4, 5",
+    "answer": "1, 2, 3, 4, 5",
+    "passed": true,
+    "time_s": 0.28
+  },
+  {
+    "mode": "independent",
+    "test": "disappear_circle",
+    "category": "disappearance",
+    "ground_truth": "red",
+    "answer": "The current image is blank, so there is no object to describe.",
+    "passed": false,
+    "time_s": 0.29
+  },
+  {
+    "mode": "independent",
+    "test": "disappear_square",
+    "category": "disappearance",
+    "ground_truth": "blue",
+    "answer": "The current image is blank, so there is no object to describe.",
+    "passed": false,
+    "time_s": 0.12
+  },
+  {
+    "mode": "independent",
+    "test": "disappear_text",
+    "category": "disappearance",
+    "ground_truth": "HELLO",
+    "answer": "The current image is blank, and there was no text shown in the earlier images.",
+    "passed": false,
+    "time_s": 0.31
+  },
+  {
+    "mode": "independent",
+    "test": "count_3shapes",
+    "category": "counting",
+    "ground_truth": "3",
+    "answer": "1",
+    "passed": false,
+    "time_s": 0.19
+  },
+  {
+    "mode": "multiframe",
+    "test": "seq_ABC",
+    "category": "sequence",
+    "ground_truth": "A, B, C",
+    "answer": "B, C",
+    "passed": false,
+    "time_s": 0.34
+  },
+  {
+    "mode": "multiframe",
+    "test": "seq_XYZ",
+    "category": "sequence",
+    "ground_truth": "X, Y, Z",
+    "answer": "x,z",
+    "passed": false,
+    "time_s": 0.31
+  },
+  {
+    "mode": "multiframe",
+    "test": "seq_12345",
+    "category": "sequence",
+    "ground_truth": "1, 2, 3, 4, 5",
+    "answer": "2, 3, 5",
+    "passed": false,
+    "time_s": 0.49
+  },
+  {
+    "mode": "multiframe",
+    "test": "disappear_circle",
+    "category": "disappearance",
+    "ground_truth": "red",
+    "answer": "There was no object in the earlier images. The current image is blank.",
+    "passed": false,
+    "time_s": 0.41
+  },
+  {
+    "mode": "multiframe",
+    "test": "disappear_square",
+    "category": "disappearance",
+    "ground_truth": "blue",
+    "answer": "The earlier images were not visible, so I cannot describe any objects or their shapes and colors. However, if you have any specific questions about the earlier images, please provide more details, and",
+    "passed": false,
+    "time_s": 0.63
+  },
+  {
+    "mode": "multiframe",
+    "test": "disappear_text",
+    "category": "disappearance",
+    "ground_truth": "HELLO",
+    "answer": "The text shown in the earlier images was \"HELLO\".",
+    "passed": true,
+    "time_s": 0.38
+  },
+  {
+    "mode": "multiframe",
+    "test": "count_3shapes",
+    "category": "counting",
+    "ground_truth": "3",
+    "answer": "2",
+    "passed": false,
+    "time_s": 0.31
+  },
+  {
+    "mode": "accumulated",
+    "test": "seq_ABC",
+    "category": "sequence",
+    "ground_truth": "A, B, C",
+    "answer": "A,B,C",
+    "passed": true,
+    "time_s": 0.63
+  },
+  {
+    "mode": "accumulated",
+    "test": "seq_XYZ",
+    "category": "sequence",
+    "ground_truth": "X, Y, Z",
+    "answer": "X,Y,Z",
+    "passed": true,
+    "time_s": 0.61
+  },
+  {
+    "mode": "accumulated",
+    "test": "seq_12345",
+    "category": "sequence",
+    "ground_truth": "1, 2, 3, 4, 5",
+    "answer": "1,2,3,4,5",
+    "passed": true,
+    "time_s": 1.13
+  },
+  {
+    "mode": "accumulated",
+    "test": "disappear_circle",
+    "category": "disappearance",
+    "ground_truth": "red",
+    "answer": "The earlier images were not provided, so I cannot describe any objects or their shapes and colors. However, if you have any specific questions about the earlier images, please let me know, and I'll do",
+    "passed": false,
+    "time_s": 0.8
+  },
+  {
+    "mode": "accumulated",
+    "test": "disappear_square",
+    "category": "disappearance",
+    "ground_truth": "blue",
+    "answer": "The earlier images were not provided, so I cannot describe any objects or their shapes and colors. However, if you have any specific questions about the earlier images, please let me know, and I'll do",
+    "passed": false,
+    "time_s": 0.81
+  },
+  {
+    "mode": "accumulated",
+    "test": "disappear_text",
+    "category": "disappearance",
+    "ground_truth": "HELLO",
+    "answer": "The earlier images did not contain any text.",
+    "passed": false,
+    "time_s": 0.54
+  },
+  {
+    "mode": "accumulated",
+    "test": "count_3shapes",
+    "category": "counting",
+    "ground_truth": "3",
+    "answer": "3",
+    "passed": true,
+    "time_s": 0.6
+  }
+]
