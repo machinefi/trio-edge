@@ -26,35 +26,28 @@ async def main():
         print("Example: python test_invoke.py mytoken 11e600d228cc5f42 camera.list")
         return
 
-    device_id, private_key, raw_pub = load_or_create_identity()
-
     ws = await websockets.connect(GATEWAY)
     try:
         # 1. Challenge
         frame = json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
-        nonce = ""
-        if "payloadJSON" in frame:
-            nonce = json.loads(frame["payloadJSON"]).get("nonce", "")
-        if not nonce and "payload" in frame:
-            p = frame["payload"]
-            if isinstance(p, str):
-                p = json.loads(p)
-            nonce = p.get("nonce", "")
-        if not nonce:
-            nonce = frame.get("nonce", "")
 
-        # 2. Connect as operator
-        params = connect_params(
-            "test-operator", token=TOKEN,
-            nonce=nonce, device_id=device_id,
-            private_key=private_key, raw_pub=raw_pub,
-        )
-        # Override to operator role
-        params["client"]["id"] = "cli"
-        params["client"]["mode"] = "cli"
-        params["role"] = "operator"
-        params["caps"] = []
-        params["commands"] = []
+        # 2. Connect as operator (no device identity, just gateway token)
+        params = {
+            "minProtocol": 3,
+            "maxProtocol": 3,
+            "client": {
+                "id": "cli",
+                "version": "0.1.0",
+                "platform": "darwin",
+                "deviceFamily": "trio-core",
+                "modelIdentifier": "test",
+                "mode": "cli",
+            },
+            "role": "operator",
+            "auth": {"token": TOKEN},
+            "caps": [],
+            "commands": [],
+        }
 
         await ws.send(json.dumps(make_req("connect", params)))
 
