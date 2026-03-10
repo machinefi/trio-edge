@@ -55,7 +55,7 @@ class TestProtocol:
 
     def test_connect_params(self):
         params = connect_params("test-node", token="tok123")
-        assert params["client"]["id"] == "trio-core"
+        assert params["client"]["id"] == "node-host"
         assert params["role"] == "node"
         assert params["auth"]["token"] == "tok123"
         assert "camera.snap" in params["commands"]

@@ -86,7 +86,7 @@ def connect_params(
         "minProtocol": 3,
         "maxProtocol": 3,
         "client": {
-            "id": "trio-core",
+            "id": "node-host",
             "version": version,
             "platform": platform.system().lower(),
             "deviceFamily": "trio-core",
