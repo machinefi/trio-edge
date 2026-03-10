@@ -20,6 +20,10 @@ from .protocol import InvokeRequest, InvokeResult, generate_id, make_req
 
 logger = logging.getLogger("trio.claw")
 
+# RTSP failure thresholds
+CAPTURE_WARN_THRESHOLD = 5    # consecutive failures before WARNING + camera.offline event
+CAPTURE_STOP_THRESHOLD = 20   # consecutive failures before stopping the watch
+
 
 @dataclass
 class WatchTask:
@@ -31,6 +35,21 @@ class WatchTask:
     stop_event: asyncio.Event = field(default_factory=asyncio.Event)
     checks: int = 0
     alerts: int = 0
+    consecutive_failures: int = 0
+
+
+@dataclass
+class NodeMetrics:
+    """Lightweight metrics for health/Prometheus endpoint."""
+    watch_checks: int = 0
+    watch_alerts: int = 0
+    capture_failures: int = 0
+    vlm_latency_samples: list = field(default_factory=list)  # last 1000 latencies in seconds
+
+    def record_vlm_latency(self, seconds: float) -> None:
+        self.vlm_latency_samples.append(seconds)
+        if len(self.vlm_latency_samples) > 1000:
+            self.vlm_latency_samples = self.vlm_latency_samples[-1000:]
 
 
 class CommandHandler:
@@ -49,6 +68,7 @@ class CommandHandler:
         self._watches: dict[str, WatchTask] = {}
         self._ws = None  # WebSocket ref, set by node.py before dispatch
         self._max_watches = 5
+        self._metrics = NodeMetrics()
 
     async def handle(self, req: InvokeRequest) -> InvokeResult:
         """Dispatch invoke request to appropriate handler."""
@@ -153,7 +173,9 @@ class CommandHandler:
         except Exception as e:
             logger.exception("VLM inference failed")
             return self._error(req, "INTERNAL_ERROR", f"VLM inference error: {e}")
-        elapsed_ms = (time.monotonic() - t0) * 1000
+        elapsed = time.monotonic() - t0
+        elapsed_ms = elapsed * 1000
+        self._metrics.record_vlm_latency(elapsed)
         logger.info("VLM result: %r (%.0fms)", result.text[:100], elapsed_ms)
 
         # Encode frame as JPEG for response
@@ -305,10 +327,36 @@ class CommandHandler:
                 # Capture frame
                 frame_bgr = await asyncio.to_thread(self._capture_frame, source)
                 if frame_bgr is None:
-                    logger.warning("Watch %s: capture failed, retrying in %.0fs",
-                                   watch.watch_id, watch.interval)
+                    watch.consecutive_failures += 1
+                    self._metrics.capture_failures += 1
+
+                    if watch.consecutive_failures >= CAPTURE_STOP_THRESHOLD:
+                        logger.error(
+                            "Watch %s: %d consecutive capture failures — stopping watch",
+                            watch.watch_id, watch.consecutive_failures,
+                        )
+                        # Send camera.offline event before stopping
+                        await self._send_camera_offline_event(
+                            source, watch.watch_id, watch.consecutive_failures,
+                        )
+                        break
+
+                    if watch.consecutive_failures == CAPTURE_WARN_THRESHOLD:
+                        logger.warning(
+                            "Watch %s: %d consecutive capture failures — camera may be offline",
+                            watch.watch_id, watch.consecutive_failures,
+                        )
+                        await self._send_camera_offline_event(
+                            source, watch.watch_id, watch.consecutive_failures,
+                        )
+
+                    logger.warning("Watch %s: capture failed (%d consecutive), retrying in %.0fs",
+                                   watch.watch_id, watch.consecutive_failures, watch.interval)
                     await self._interruptible_sleep(watch.stop_event, watch.interval)
                     continue
+
+                # Reset failure counter on successful capture
+                watch.consecutive_failures = 0
 
                 # VLM inference
                 def _infer():
@@ -322,13 +370,17 @@ class CommandHandler:
                     await self._interruptible_sleep(watch.stop_event, watch.interval)
                     continue
 
-                elapsed_ms = (time.monotonic() - t0) * 1000
+                elapsed = time.monotonic() - t0
+                elapsed_ms = elapsed * 1000
                 watch.checks += 1
+                self._metrics.watch_checks += 1
+                self._metrics.record_vlm_latency(elapsed)
 
                 answer = result.text.strip()
                 triggered = _detect_triggered(answer)
                 if triggered:
                     watch.alerts += 1
+                    self._metrics.watch_alerts += 1
 
                 # Build result payload
                 payload = {
@@ -362,6 +414,28 @@ class CommandHandler:
             logger.exception("Watch %s: loop crashed", watch.watch_id)
         finally:
             self._watches.pop(watch.watch_id, None)
+
+    async def _send_camera_offline_event(
+        self, source: str, watch_id: str, failures: int,
+    ) -> None:
+        """Send a camera.offline event to the Gateway."""
+        if self._ws is None:
+            return
+        masked = _mask_url(source) if "://" in source else source
+        frame = make_req("node.event", {
+            "nodeId": self.node_id,
+            "event": "camera.offline",
+            "payload": {
+                "camera": masked,
+                "watchId": watch_id,
+                "consecutiveFailures": failures,
+            },
+        })
+        try:
+            await self._ws.send(json.dumps(frame))
+            logger.info("Sent camera.offline event for %s (failures=%d)", masked, failures)
+        except Exception:
+            logger.warning("Failed to send camera.offline event")
 
     async def _send_watch_result(self, invoke_id: str, payload: dict) -> bool:
         """Send a watch check result back to the gateway via WebSocket.

@@ -736,6 +736,12 @@ def claw(
     adapter: str = typer.Option(None, "--adapter", "-a", help="LoRA adapter directory"),
     token: str = typer.Option(None, "--token", "-t",
                               help="Gateway auth token (pre-shared secret)"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Debug logging"),
+    json_logs: bool = typer.Option(False, "--json-logs", help="Structured JSON logging"),
+    health_port: int = typer.Option(0, "--health-port",
+                                    help="Enable health/metrics HTTP server on this port (e.g. 9090)"),
+    config: str = typer.Option(None, "--config",
+                               help="YAML config file (alternative to CLI flags)"),
 ):
     """Connect trio-core as an OpenClaw node (replaces TrioClaw).
 
@@ -744,6 +750,12 @@ def claw(
 
     Run as node:
         trio claw --gateway ws://host:18789 --camera "rtsp://admin:pass@ip/stream"
+
+    Production (with health endpoint):
+        trio claw --gateway ws://host:18789 --health-port 9090 --json-logs
+
+    Config file (alternative to CLI flags):
+        trio claw --config trio-claw.yaml
 
     The node connects to the OpenClaw Gateway via WebSocket and handles
     vision/camera commands directly — no intermediate Go binary needed.
@@ -754,8 +766,24 @@ def claw(
     os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
     os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s", datefmt="%H:%M:%S")
-    logging.getLogger("trio.claw").setLevel(logging.DEBUG)
+    # Load config file if provided (CLI flags override config values)
+    cfg = {}
+    if config:
+        cfg = _load_claw_config(config)
+
+    # Merge config with CLI defaults (CLI flags win)
+    gateway = gateway if gateway != "ws://127.0.0.1:18789" else cfg.get("gateway", gateway)
+    model = model or cfg.get("model")
+    adapter = adapter or cfg.get("adapter")
+    token = token or cfg.get("token")
+    health_port = health_port or cfg.get("health_port", 0)
+    json_logs = json_logs or cfg.get("log_format") == "json"
+    verbose = verbose or cfg.get("verbose", False)
+    if not camera and "cameras" in cfg:
+        camera = cfg["cameras"]
+
+    _setup_logging(verbose, json_logs=json_logs)
+    logging.getLogger("trio.claw").setLevel(logging.DEBUG if verbose else logging.INFO)
 
     try:
         from trio_core.claw.node import ClawNode
@@ -789,10 +817,10 @@ def claw(
                 config_kwargs["model"] = model
             if adapter:
                 config_kwargs["adapter_path"] = adapter
-            config = EngineConfig(**config_kwargs)
+            config_obj = EngineConfig(**config_kwargs)
 
-            typer.echo(f"Loading model: {config.model} ...")
-            engine = TrioCore(config)
+            typer.echo(f"Loading model: {config_obj.model} ...")
+            engine = TrioCore(config_obj)
             engine.load()
 
             health = engine.health()
@@ -810,12 +838,45 @@ def claw(
 
     typer.echo(f"Connecting to Gateway: {gateway}")
     typer.echo(f"Cameras: {sources}")
+    if health_port:
+        typer.echo(f"Health endpoint: http://0.0.0.0:{health_port}/health")
     typer.echo("Press Ctrl+C to stop.\n")
 
+    async def _run_with_health():
+        health_server = None
+        if health_port:
+            from trio_core.claw.health import HealthServer
+            health_server = HealthServer(node, port=health_port)
+            await health_server.start()
+        try:
+            await node.run()
+        finally:
+            if health_server:
+                await health_server.stop()
+
     try:
-        asyncio.run(node.run())
+        asyncio.run(_run_with_health())
     except KeyboardInterrupt:
         typer.echo("\nDisconnected.")
+
+
+def _load_claw_config(path: str) -> dict:
+    """Load a YAML config file for trio claw."""
+    try:
+        import yaml
+    except ImportError:
+        typer.echo("YAML config requires PyYAML: pip install pyyaml", err=True)
+        raise typer.Exit(1)
+
+    from pathlib import Path
+    p = Path(path)
+    if not p.exists():
+        typer.echo(f"Config file not found: {path}", err=True)
+        raise typer.Exit(1)
+
+    with open(p) as f:
+        data = yaml.safe_load(f) or {}
+    return data
 
 
 if __name__ == "__main__":

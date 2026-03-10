@@ -7,7 +7,9 @@ Handles:
   - Authenticated connection (subsequent runs with saved token)
   - Ping/pong keepalive (30s)
   - Frame dispatch → command handlers
-  - Graceful shutdown
+  - Graceful shutdown (SIGTERM/SIGINT)
+  - Auth failure detection (no retry on token rejection)
+  - SIGUSR1 status dump
 """
 
 from __future__ import annotations
@@ -15,6 +17,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import signal
+import sys
+import time
 from pathlib import Path
 
 import websockets
@@ -37,8 +42,13 @@ logger = logging.getLogger("trio.claw")
 PING_INTERVAL = 30  # seconds
 MAX_BACKOFF = 15  # seconds
 PAIR_TIMEOUT = 300  # 5 minutes
+SHUTDOWN_TIMEOUT = 5  # seconds — forced exit if drain hangs
 STATE_DIR = Path.home() / ".trio"
 STATE_FILE = STATE_DIR / "claw_state.json"
+
+
+class AuthError(Exception):
+    """Raised when the Gateway rejects authentication (invalid/expired token)."""
 
 
 class ClawNode:
@@ -56,6 +66,10 @@ class ClawNode:
         self.token = _load_token()
         self._ws: ClientConnection | None = None
         self._running = False
+        self._shutdown = asyncio.Event()
+        self._start_time: float = 0.0
+        self._reconnect_count: int = 0
+        self._connected: bool = False
 
         # Load or create Ed25519 device identity
         self._device_id, self._private_key, self._raw_pub = load_or_create_identity()
@@ -132,32 +146,132 @@ class ClawNode:
             raise RuntimeError("Not paired. Run `trio claw --pair` first.")
 
         self._running = True
+        self._start_time = time.monotonic()
+        self._shutdown.clear()
         backoff = 1.0
 
-        while self._running:
+        # Install signal handlers
+        self._install_signals()
+
+        while self._running and not self._shutdown.is_set():
             try:
                 await self._connect_and_loop()
                 backoff = 1.0  # reset on clean disconnect
+            except AuthError as e:
+                logger.error("Authentication failed: %s", e)
+                logger.error("Check your token with `trio claw --token <token>`")
+                self._running = False
+                break
             except (
                 websockets.ConnectionClosed,
                 ConnectionRefusedError,
                 OSError,
                 asyncio.TimeoutError,
             ) as e:
-                if not self._running:
+                if not self._running or self._shutdown.is_set():
                     break
+                self._connected = False
+                self._reconnect_count += 1
                 logger.warning("Disconnected: %s. Reconnecting in %.0fs...", e, backoff)
-                await asyncio.sleep(backoff)
+                try:
+                    await asyncio.wait_for(self._shutdown.wait(), timeout=backoff)
+                    break  # shutdown requested during backoff
+                except asyncio.TimeoutError:
+                    pass  # normal — backoff elapsed
                 backoff = min(backoff * 1.5, MAX_BACKOFF)
             except asyncio.CancelledError:
                 break
 
+        self._connected = False
         await self._close()
 
     async def stop(self) -> None:
         """Signal the run loop to stop."""
         self._running = False
+        self._shutdown.set()
         await self._close()
+
+    def status(self) -> dict:
+        """Return current node status (for SIGUSR1 / health endpoint)."""
+        uptime = time.monotonic() - self._start_time if self._start_time else 0
+        watches = []
+        if self.handler and hasattr(self.handler, "_watches"):
+            for w in self.handler._watches.values():
+                watches.append({
+                    "watchId": w.watch_id,
+                    "condition": w.condition,
+                    "checks": w.checks,
+                    "alerts": w.alerts,
+                })
+        model = "unknown"
+        if self.handler and hasattr(self.handler, "engine") and self.handler.engine:
+            try:
+                health = self.handler.engine.health()
+                model = health.get("backend", {}).get("model", "unknown")
+            except Exception:
+                pass
+        return {
+            "status": "connected" if self._connected else "reconnecting",
+            "uptime_s": round(uptime, 1),
+            "reconnects": self._reconnect_count,
+            "watches_active": len(watches),
+            "watches": watches,
+            "model": model,
+            "gateway": self.gateway_url,
+            "node_id": self.node_id,
+        }
+
+    # =========================================================================
+    # Signal handling
+    # =========================================================================
+
+    def _install_signals(self) -> None:
+        """Install SIGTERM, SIGINT, and SIGUSR1 handlers."""
+        loop = asyncio.get_running_loop()
+
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            loop.add_signal_handler(sig, self._on_shutdown_signal, sig)
+
+        # SIGUSR1 for status dump (Unix only)
+        if hasattr(signal, "SIGUSR1"):
+            loop.add_signal_handler(signal.SIGUSR1, self._on_status_signal)
+
+    def _on_shutdown_signal(self, sig: signal.Signals) -> None:
+        """Handle SIGTERM/SIGINT — initiate graceful shutdown."""
+        sig_name = sig.name
+        logger.info("Received %s — shutting down gracefully (timeout %ds)...",
+                     sig_name, SHUTDOWN_TIMEOUT)
+        self._running = False
+        self._shutdown.set()
+
+        # Schedule forced exit if graceful shutdown hangs
+        loop = asyncio.get_running_loop()
+        loop.call_later(SHUTDOWN_TIMEOUT, self._force_exit, sig_name)
+
+    def _force_exit(self, sig_name: str) -> None:
+        """Force exit if graceful shutdown exceeds timeout."""
+        logger.warning("Graceful shutdown timed out after %ds (%s). Forcing exit.",
+                       SHUTDOWN_TIMEOUT, sig_name)
+        sys.exit(1)
+
+    def _on_status_signal(self) -> None:
+        """Handle SIGUSR1 — dump status to stderr."""
+        s = self.status()
+        lines = [
+            f"--- trio-claw status ---",
+            f"  status:     {s['status']}",
+            f"  uptime:     {s['uptime_s']:.0f}s",
+            f"  reconnects: {s['reconnects']}",
+            f"  gateway:    {s['gateway']}",
+            f"  model:      {s['model']}",
+            f"  watches:    {s['watches_active']}",
+        ]
+        for w in s["watches"]:
+            lines.append(f"    - {w['watchId']}: {w['condition']} "
+                         f"(checks={w['checks']}, alerts={w['alerts']})")
+        lines.append("---")
+        sys.stderr.write("\n".join(lines) + "\n")
+        sys.stderr.flush()
 
     # =========================================================================
     # Internal: connect + event loop
@@ -172,8 +286,9 @@ class ClawNode:
         self._ws = ws
 
         try:
-            # Handshake
+            # Handshake (may raise AuthError)
             await self._handshake(ws)
+            self._connected = True
             logger.info("Connected to Gateway (%s)", self.gateway_url)
 
             # Start ping task
@@ -182,6 +297,8 @@ class ClawNode:
             try:
                 # Read loop
                 async for raw in ws:
+                    if self._shutdown.is_set():
+                        break
                     frame = json.loads(raw)
                     frame_type = frame.get("type")
 
@@ -202,13 +319,17 @@ class ClawNode:
                     pass
         finally:
             self._ws = None
+            self._connected = False
             # Stop all watches — they can't send results without a WebSocket
             if self.handler and hasattr(self.handler, "stop_all_watches"):
                 await self.handler.stop_all_watches()
             await ws.close()
 
     async def _handshake(self, ws: ClientConnection) -> None:
-        """Challenge-response handshake with Ed25519 device identity."""
+        """Challenge-response handshake with Ed25519 device identity.
+
+        Raises AuthError if the Gateway rejects the token (don't retry).
+        """
         # 1. Receive connect.challenge
         frame = json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
         if frame.get("event") != "connect.challenge":
@@ -230,6 +351,22 @@ class ClawNode:
         # 3. Expect hello-ok
         res = json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
         if res.get("type") != "res" or not res.get("ok"):
+            # Distinguish auth failure from other handshake errors
+            error = res.get("error", {})
+            error_code = error.get("code", "") if isinstance(error, dict) else ""
+            error_msg = error.get("message", str(res)) if isinstance(error, dict) else str(res)
+
+            # Auth-related error codes from Gateway
+            auth_codes = {"AUTH_FAILED", "UNAUTHORIZED", "TOKEN_EXPIRED",
+                          "TOKEN_INVALID", "FORBIDDEN", "INVALID_TOKEN"}
+            auth_keywords = {"auth", "token", "unauthorized", "forbidden", "credential"}
+
+            is_auth = (
+                error_code.upper() in auth_codes
+                or any(kw in error_msg.lower() for kw in auth_keywords)
+            )
+            if is_auth:
+                raise AuthError(f"Token rejected by Gateway: {error_msg}")
             raise RuntimeError(f"Handshake failed: {res}")
 
         payload = res.get("payload", {})

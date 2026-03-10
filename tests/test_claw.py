@@ -2,6 +2,8 @@
 
 import asyncio
 import json
+import signal
+import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import numpy as np
@@ -19,8 +21,15 @@ from trio_core.claw.protocol import (
     make_res,
     pair_request_params,
 )
-from trio_core.claw.node import ClawNode
-from trio_core.claw.commands import CommandHandler, WatchTask, _detect_triggered
+from trio_core.claw.node import ClawNode, AuthError
+from trio_core.claw.commands import (
+    CommandHandler,
+    NodeMetrics,
+    WatchTask,
+    _detect_triggered,
+    CAPTURE_WARN_THRESHOLD,
+    CAPTURE_STOP_THRESHOLD,
+)
 
 
 # =============================================================================
@@ -185,6 +194,32 @@ class TestCommandHandler:
 
 
 # =============================================================================
+# NodeMetrics unit tests
+# =============================================================================
+
+class TestNodeMetrics:
+    def test_initial_state(self):
+        m = NodeMetrics()
+        assert m.watch_checks == 0
+        assert m.capture_failures == 0
+        assert m.vlm_latency_samples == []
+
+    def test_record_vlm_latency(self):
+        m = NodeMetrics()
+        m.record_vlm_latency(0.5)
+        m.record_vlm_latency(1.2)
+        assert len(m.vlm_latency_samples) == 2
+
+    def test_latency_capped_at_1000(self):
+        m = NodeMetrics()
+        for i in range(1100):
+            m.record_vlm_latency(float(i))
+        assert len(m.vlm_latency_samples) == 1000
+        # Should keep the latest 1000
+        assert m.vlm_latency_samples[0] == 100.0
+
+
+# =============================================================================
 # Node integration test (mock Gateway)
 # =============================================================================
 
@@ -312,6 +347,161 @@ class TestClawNode:
                 task.cancel()
 
         assert pong_received.is_set()
+
+    @pytest.mark.asyncio
+    async def test_auth_failure_no_retry(self):
+        """Node exits immediately on auth rejection (no reconnect loop)."""
+        connect_attempts = 0
+
+        async def mock_gateway(ws):
+            nonlocal connect_attempts
+            connect_attempts += 1
+            # Send challenge
+            await ws.send(json.dumps({
+                "type": "event", "event": "connect.challenge",
+                "payloadJSON": json.dumps({"nonce": "n1"}),
+            }))
+            # Receive connect
+            frame = json.loads(await ws.recv())
+            # Reject with auth error
+            await ws.send(json.dumps({
+                "type": "res", "id": frame["id"], "ok": False,
+                "error": {"code": "AUTH_FAILED", "message": "Invalid token"},
+            }))
+            await ws.close()
+
+        async with serve(mock_gateway, "127.0.0.1", 0) as server:
+            port = server.sockets[0].getsockname()[1]
+            node = ClawNode(gateway_url=f"ws://127.0.0.1:{port}")
+            node.token = "bad-token"
+
+            # run() should complete without retrying
+            await asyncio.wait_for(node.run(), timeout=5)
+
+        # Should have connected exactly once (no retry on auth failure)
+        assert connect_attempts == 1
+
+    @pytest.mark.asyncio
+    async def test_status_method(self):
+        """node.status() returns structured status dict."""
+        handler = CommandHandler(engine=None, camera_sources=["0"])
+        node = ClawNode(gateway_url="ws://localhost:1234", handler=handler)
+        node.token = "tok"
+        node._start_time = 100.0
+
+        with patch("time.monotonic", return_value=110.0):
+            s = node.status()
+
+        assert s["status"] == "reconnecting"  # not connected
+        assert s["uptime_s"] == 10.0
+        assert s["watches_active"] == 0
+        assert s["gateway"] == "ws://localhost:1234"
+
+    @pytest.mark.asyncio
+    async def test_graceful_shutdown_via_stop(self):
+        """node.stop() cleanly terminates the run loop."""
+        handshake_done = asyncio.Event()
+
+        async def mock_gateway(ws):
+            # Handshake
+            await ws.send(json.dumps({
+                "type": "event", "event": "connect.challenge",
+                "payloadJSON": json.dumps({"nonce": "n1"}),
+            }))
+            frame = json.loads(await ws.recv())
+            await ws.send(json.dumps({
+                "type": "res", "id": frame["id"], "ok": True,
+                "payload": {"type": "hello-ok"},
+            }))
+            handshake_done.set()
+            # Keep connection open
+            try:
+                async for _ in ws:
+                    pass
+            except websockets.ConnectionClosed:
+                pass
+
+        async with serve(mock_gateway, "127.0.0.1", 0) as server:
+            port = server.sockets[0].getsockname()[1]
+            node = ClawNode(gateway_url=f"ws://127.0.0.1:{port}")
+            node.token = "tok"
+
+            task = asyncio.create_task(node.run())
+            await asyncio.wait_for(handshake_done.wait(), timeout=5)
+
+            # Stop should complete cleanly
+            await node.stop()
+            await asyncio.wait_for(task, timeout=3)
+
+        # Task completed without error
+        assert task.done()
+        assert not task.cancelled()
+
+    @pytest.mark.asyncio
+    async def test_reconnect_stops_watches(self):
+        """On reconnect, stale watches from previous connection are cleared."""
+        first_connect = True
+        reconnected = asyncio.Event()
+
+        async def mock_gateway(ws):
+            nonlocal first_connect
+            # Handshake
+            await ws.send(json.dumps({
+                "type": "event", "event": "connect.challenge",
+                "payloadJSON": json.dumps({"nonce": "n1"}),
+            }))
+            frame = json.loads(await ws.recv())
+            await ws.send(json.dumps({
+                "type": "res", "id": frame["id"], "ok": True,
+                "payload": {"type": "hello-ok"},
+            }))
+
+            if first_connect:
+                first_connect = False
+                # Start a watch
+                await ws.send(json.dumps(make_event("node.invoke.request", {
+                    "id": "w1", "nodeId": "test-node",
+                    "command": "vision.watch",
+                    "params": {"question": "test?", "interval": 60},
+                })))
+                # Wait for ack, then disconnect
+                try:
+                    await asyncio.wait_for(ws.recv(), timeout=5)
+                except asyncio.TimeoutError:
+                    pass
+                await ws.close()
+            else:
+                # Second connection — signal test to check watches
+                reconnected.set()
+                try:
+                    async for _ in ws:
+                        pass
+                except websockets.ConnectionClosed:
+                    pass
+
+        engine = MagicMock()
+        with patch.object(CommandHandler, "_capture_frame", return_value=_fake_frame()):
+            async with serve(mock_gateway, "127.0.0.1", 0) as server:
+                port = server.sockets[0].getsockname()[1]
+                handler = CommandHandler(engine=engine, camera_sources=["0"])
+                node = ClawNode(
+                    gateway_url=f"ws://127.0.0.1:{port}",
+                    node_id="test-node",
+                    handler=handler,
+                )
+                node.token = "tok"
+
+                task = asyncio.create_task(node.run())
+                await asyncio.wait_for(reconnected.wait(), timeout=10)
+
+                # After reconnect, watches from first connection should be cleared
+                assert len(handler._watches) == 0
+
+                await node.stop()
+                try:
+                    await asyncio.wait_for(task, timeout=2)
+                except (asyncio.TimeoutError, Exception):
+                    task.cancel()
 
 
 # =============================================================================
@@ -524,6 +714,130 @@ class TestVisionWatch:
             w.stop_event.set()
             if w.task:
                 w.task.cancel()
+
+
+# =============================================================================
+# RTSP failure escalation tests
+# =============================================================================
+
+class TestCaptureFailureEscalation:
+    @pytest.mark.asyncio
+    async def test_consecutive_failures_trigger_warning(self):
+        """After CAPTURE_WARN_THRESHOLD failures, camera.offline event is sent."""
+        engine = _mock_engine("Yes.")
+        handler = CommandHandler(engine=engine, camera_sources=["0"])
+        handler._ws = AsyncMock()
+        handler._ws.send = AsyncMock(return_value=None)
+
+        # Track what gets sent via WebSocket
+        sent_frames = []
+        original_send = handler._ws.send
+
+        async def capture_send(data):
+            sent_frames.append(json.loads(data))
+
+        handler._ws.send = capture_send
+
+        # Simulate capture returning None repeatedly
+        call_count = 0
+
+        def failing_capture(source):
+            nonlocal call_count
+            call_count += 1
+            if call_count <= CAPTURE_WARN_THRESHOLD + 1:
+                return None
+            # After warning threshold + 1, return a real frame to stop the loop naturally
+            return _fake_frame()
+
+        with patch.object(handler, "_capture_frame", side_effect=failing_capture):
+            watch = WatchTask(watch_id="test-w", condition="test?", interval=0.01)
+            handler._watches["test-w"] = watch
+
+            # Run the watch loop briefly
+            task = asyncio.create_task(
+                handler._watch_loop(watch, "0", "inv-1")
+            )
+            # Give it time to hit the threshold
+            await asyncio.sleep(0.5)
+            watch.stop_event.set()
+            try:
+                await asyncio.wait_for(task, timeout=2)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                task.cancel()
+
+        # Check that a camera.offline event was sent
+        offline_events = [
+            f for f in sent_frames
+            if f.get("method") == "node.event"
+            and f.get("params", {}).get("event") == "camera.offline"
+        ]
+        assert len(offline_events) >= 1
+
+    @pytest.mark.asyncio
+    async def test_consecutive_failures_stop_watch(self):
+        """After CAPTURE_STOP_THRESHOLD failures, the watch stops itself."""
+        engine = _mock_engine("Yes.")
+        handler = CommandHandler(engine=engine, camera_sources=["0"])
+        handler._ws = AsyncMock()
+
+        sent_frames = []
+
+        async def capture_send(data):
+            sent_frames.append(json.loads(data))
+
+        handler._ws.send = capture_send
+
+        # Always fail
+        with patch.object(handler, "_capture_frame", return_value=None):
+            watch = WatchTask(watch_id="test-w2", condition="test?", interval=0.01)
+            handler._watches["test-w2"] = watch
+
+            task = asyncio.create_task(
+                handler._watch_loop(watch, "0", "inv-2")
+            )
+            # Wait for it to hit the stop threshold and exit
+            await asyncio.wait_for(task, timeout=10)
+
+        # Watch should have self-terminated
+        assert "test-w2" not in handler._watches
+
+    @pytest.mark.asyncio
+    async def test_failure_counter_resets_on_success(self):
+        """Successful capture resets the consecutive failure counter."""
+        engine = _mock_engine("No.")
+        handler = CommandHandler(engine=engine, camera_sources=["0"])
+        handler._ws = AsyncMock()
+        handler._ws.send = AsyncMock(return_value=None)
+
+        call_count = 0
+
+        def intermittent_capture(source):
+            nonlocal call_count
+            call_count += 1
+            # Fail 3 times, then succeed
+            if call_count % 4 != 0:
+                return None
+            return _fake_frame()
+
+        with patch.object(handler, "_capture_frame", side_effect=intermittent_capture):
+            watch = WatchTask(watch_id="test-w3", condition="test?", interval=0.01)
+            handler._watches["test-w3"] = watch
+
+            task = asyncio.create_task(
+                handler._watch_loop(watch, "0", "inv-3")
+            )
+            # Let it run a few cycles
+            await asyncio.sleep(0.5)
+            watch.stop_event.set()
+            try:
+                await asyncio.wait_for(task, timeout=2)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                task.cancel()
+
+        # Failures never accumulated past 3 (reset each success),
+        # so metrics should show some failures but watch shouldn't have auto-stopped
+        assert handler._metrics.capture_failures > 0
+        assert watch.consecutive_failures < CAPTURE_WARN_THRESHOLD
 
 
 # =============================================================================
@@ -790,3 +1104,306 @@ class TestWatchLoopIntegration:
 
         # Watches should be cleaned up after disconnect
         assert len(handler._watches) == 0
+
+
+# =============================================================================
+# Health server tests
+# =============================================================================
+
+class TestHealthServer:
+    @pytest.mark.asyncio
+    async def test_health_endpoint(self):
+        """GET /health returns JSON status."""
+        from trio_core.claw.health import HealthServer
+
+        handler = CommandHandler(engine=None, camera_sources=["0"])
+        node = ClawNode(gateway_url="ws://localhost:1234", handler=handler)
+        node.token = "tok"
+        node._start_time = 100.0
+
+        server = HealthServer(node, port=0)
+        # Use a random port
+        raw_server = await asyncio.start_server(
+            server._handle_connection, "127.0.0.1", 0,
+        )
+        port = raw_server.sockets[0].getsockname()[1]
+
+        try:
+            reader, writer = await asyncio.open_connection("127.0.0.1", port)
+            writer.write(b"GET /health HTTP/1.1\r\nHost: localhost\r\n\r\n")
+            await writer.drain()
+
+            response = await asyncio.wait_for(reader.read(4096), timeout=3)
+            response_str = response.decode()
+
+            assert "200 OK" in response_str
+            assert "application/json" in response_str
+            # Parse the JSON body
+            body_start = response_str.index("\r\n\r\n") + 4
+            body = json.loads(response_str[body_start:])
+            assert "status" in body
+            assert "uptime_s" in body
+            assert "watches_active" in body
+
+            writer.close()
+            await writer.wait_closed()
+        finally:
+            raw_server.close()
+            await raw_server.wait_closed()
+
+    @pytest.mark.asyncio
+    async def test_metrics_endpoint(self):
+        """GET /metrics returns Prometheus text format."""
+        from trio_core.claw.health import HealthServer
+
+        handler = CommandHandler(engine=None, camera_sources=["0"])
+        handler._metrics.watch_checks = 42
+        handler._metrics.capture_failures = 3
+        node = ClawNode(gateway_url="ws://localhost:1234", handler=handler)
+        node.token = "tok"
+        node._start_time = 100.0
+
+        server = HealthServer(node, port=0)
+        raw_server = await asyncio.start_server(
+            server._handle_connection, "127.0.0.1", 0,
+        )
+        port = raw_server.sockets[0].getsockname()[1]
+
+        try:
+            reader, writer = await asyncio.open_connection("127.0.0.1", port)
+            writer.write(b"GET /metrics HTTP/1.1\r\nHost: localhost\r\n\r\n")
+            await writer.drain()
+
+            response = await asyncio.wait_for(reader.read(4096), timeout=3)
+            response_str = response.decode()
+
+            assert "200 OK" in response_str
+            assert "trio_claw_connected 0" in response_str  # not connected
+            assert "trio_claw_watch_checks_total 42" in response_str
+            assert "trio_claw_capture_failures_total 3" in response_str
+
+            writer.close()
+            await writer.wait_closed()
+        finally:
+            raw_server.close()
+            await raw_server.wait_closed()
+
+    @pytest.mark.asyncio
+    async def test_404_on_unknown_path(self):
+        """Unknown paths return 404."""
+        from trio_core.claw.health import HealthServer
+
+        handler = CommandHandler(engine=None, camera_sources=["0"])
+        node = ClawNode(gateway_url="ws://localhost:1234", handler=handler)
+        node.token = "tok"
+
+        server = HealthServer(node, port=0)
+        raw_server = await asyncio.start_server(
+            server._handle_connection, "127.0.0.1", 0,
+        )
+        port = raw_server.sockets[0].getsockname()[1]
+
+        try:
+            reader, writer = await asyncio.open_connection("127.0.0.1", port)
+            writer.write(b"GET /unknown HTTP/1.1\r\nHost: localhost\r\n\r\n")
+            await writer.drain()
+
+            response = await asyncio.wait_for(reader.read(4096), timeout=3)
+            assert b"404 Not Found" in response
+
+            writer.close()
+            await writer.wait_closed()
+        finally:
+            raw_server.close()
+            await raw_server.wait_closed()
+
+
+# =============================================================================
+# Smoke test — full lifecycle end-to-end
+# =============================================================================
+
+class TestClawSmoke:
+    """End-to-end smoke test: mock Gateway → handshake → camera.list →
+    vision.analyze → vision.watch (1 cycle) → health endpoint → shutdown.
+
+    Exercises every production code path without real hardware.
+    """
+
+    @pytest.mark.asyncio
+    async def test_full_lifecycle(self):
+        results = {}
+        phase = asyncio.Event()
+        phases_done = {"list": False, "analyze": False, "watch_result": False}
+
+        async def mock_gateway(ws):
+            # --- Handshake ---
+            await ws.send(json.dumps({
+                "type": "event", "event": "connect.challenge",
+                "payloadJSON": json.dumps({"nonce": "smoke-nonce"}),
+            }))
+            frame = json.loads(await ws.recv())
+            assert frame["method"] == "connect"
+            assert frame["params"]["role"] == "node"
+            await ws.send(json.dumps({
+                "type": "res", "id": frame["id"], "ok": True,
+                "payload": {"type": "hello-ok"},
+            }))
+
+            # --- Phase 1: camera.list ---
+            await ws.send(json.dumps(make_event("node.invoke.request", {
+                "id": "smoke-list", "nodeId": "smoke-node",
+                "command": "camera.list", "params": {},
+            })))
+            msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=5))
+            payload = json.loads(msg["params"]["payloadJSON"])
+            results["list"] = payload
+            phases_done["list"] = True
+
+            # --- Phase 2: vision.analyze ---
+            await ws.send(json.dumps(make_event("node.invoke.request", {
+                "id": "smoke-analyze", "nodeId": "smoke-node",
+                "command": "vision.analyze",
+                "params": {"question": "What do you see?"},
+            })))
+            msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=5))
+            payload = json.loads(msg["params"]["payloadJSON"])
+            results["analyze"] = payload
+            phases_done["analyze"] = True
+
+            # --- Phase 3: vision.watch (collect 1 streaming result, then stop) ---
+            await ws.send(json.dumps(make_event("node.invoke.request", {
+                "id": "smoke-watch", "nodeId": "smoke-node",
+                "command": "vision.watch",
+                "params": {"question": "Is anyone there?", "interval": 2},
+            })))
+            # Collect start ack + first streaming result
+            watch_id = None
+            try:
+                while True:
+                    raw = await asyncio.wait_for(ws.recv(), timeout=10)
+                    msg = json.loads(raw)
+                    if msg.get("method") != "node.invoke.result":
+                        continue
+                    params = msg["params"]
+                    p = json.loads(params.get("payloadJSON", "{}"))
+                    if p.get("status") == "started":
+                        watch_id = p["watchId"]
+                        results["watch_start"] = p
+                    elif params.get("streaming"):
+                        results["watch_result"] = p
+                        phases_done["watch_result"] = True
+                        # Stop the watch
+                        await ws.send(json.dumps(make_event("node.invoke.request", {
+                            "id": "smoke-stop", "nodeId": "smoke-node",
+                            "command": "vision.watch.stop",
+                            "params": {"watchId": watch_id},
+                        })))
+                    elif p.get("status") == "stopped":
+                        results["watch_stop"] = p
+                        break
+            except asyncio.TimeoutError:
+                pass
+
+            phase.set()
+            # Keep connection open for health check
+            try:
+                async for _ in ws:
+                    pass
+            except websockets.ConnectionClosed:
+                pass
+
+        engine = _mock_engine("Yes, I see a person walking.")
+
+        with patch.object(CommandHandler, "_capture_frame", return_value=_fake_frame()):
+            async with serve(mock_gateway, "127.0.0.1", 0) as gw_server:
+                gw_port = gw_server.sockets[0].getsockname()[1]
+
+                handler = CommandHandler(engine=engine, camera_sources=["0", "rtsp://test"])
+                node = ClawNode(
+                    gateway_url=f"ws://127.0.0.1:{gw_port}",
+                    node_id="smoke-node",
+                    handler=handler,
+                )
+                node.token = "smoke-token"
+
+                # Start health server
+                from trio_core.claw.health import HealthServer
+                health_srv = await asyncio.start_server(
+                    HealthServer(node)._handle_connection, "127.0.0.1", 0,
+                )
+                health_port = health_srv.sockets[0].getsockname()[1]
+
+                # Run node
+                task = asyncio.create_task(node.run())
+                await asyncio.wait_for(phase.wait(), timeout=20)
+
+                # --- Phase 4: Health endpoint ---
+                reader, writer = await asyncio.open_connection("127.0.0.1", health_port)
+                writer.write(b"GET /health HTTP/1.1\r\nHost: localhost\r\n\r\n")
+                await writer.drain()
+                resp = await asyncio.wait_for(reader.read(4096), timeout=3)
+                resp_str = resp.decode()
+                body_start = resp_str.index("\r\n\r\n") + 4
+                health_body = json.loads(resp_str[body_start:])
+                results["health"] = health_body
+                writer.close()
+                await writer.wait_closed()
+
+                # --- Phase 5: Metrics endpoint ---
+                reader, writer = await asyncio.open_connection("127.0.0.1", health_port)
+                writer.write(b"GET /metrics HTTP/1.1\r\nHost: localhost\r\n\r\n")
+                await writer.drain()
+                resp = await asyncio.wait_for(reader.read(4096), timeout=3)
+                results["metrics"] = resp.decode()
+                writer.close()
+                await writer.wait_closed()
+
+                # --- Phase 6: Graceful shutdown ---
+                await node.stop()
+                try:
+                    await asyncio.wait_for(task, timeout=3)
+                except (asyncio.TimeoutError, Exception):
+                    task.cancel()
+
+                health_srv.close()
+                await health_srv.wait_closed()
+
+        # =================================================================
+        # Assertions — verify every phase
+        # =================================================================
+
+        # Phase 1: camera.list
+        assert "devices" in results["list"]
+        assert len(results["list"]["devices"]) == 2
+        assert results["list"]["devices"][0]["id"] == "cam-0"
+
+        # Phase 2: vision.analyze
+        assert results["analyze"]["answer"] == "Yes, I see a person walking."
+        assert results["analyze"]["latency_ms"] >= 0
+        assert "frame" in results["analyze"]
+        assert results["analyze"]["frame"]["format"] == "jpeg"
+
+        # Phase 3: vision.watch
+        assert results["watch_start"]["status"] == "started"
+        assert results["watch_result"]["triggered"] is True
+        assert results["watch_result"]["checks"] == 1
+        assert "frame" in results["watch_result"]  # triggered=True → includes frame
+        assert results["watch_stop"]["status"] == "stopped"
+
+        # Phase 4: Health
+        assert results["health"]["status"] == "connected"
+        assert results["health"]["uptime_s"] >= 0
+        assert results["health"]["model"] == "mock"
+
+        # Phase 5: Metrics
+        assert "trio_claw_connected 1" in results["metrics"]
+        assert "trio_claw_watch_checks_total" in results["metrics"]
+        assert "trio_claw_vlm_latency_seconds" in results["metrics"]
+
+        # Phase 6: Shutdown was clean (task completed)
+        assert task.done()
+
+        # Metrics accumulated correctly
+        assert handler._metrics.watch_checks >= 1
+        assert handler._metrics.watch_alerts >= 1
+        assert len(handler._metrics.vlm_latency_samples) >= 2  # analyze + watch

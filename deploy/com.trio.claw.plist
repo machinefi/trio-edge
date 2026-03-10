@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Service identity -->
+    <key>Label</key>
+    <string>com.trio.claw</string>
+
+    <!-- Command to run -->
+    <key>ProgramArguments</key>
+    <array>
+        <!-- Update this path to your trio binary or Python venv -->
+        <string>/usr/local/bin/trio</string>
+        <string>claw</string>
+        <string>--gateway</string>
+        <string>ws://127.0.0.1:18789</string>
+        <string>--model</string>
+        <string>mlx-community/Qwen3.5-2B-MLX-4bit</string>
+        <string>--camera</string>
+        <string>rtsp://admin:pass@192.168.1.100:554/stream</string>
+        <string>--health-port</string>
+        <string>9090</string>
+        <string>--json-logs</string>
+    </array>
+
+    <!-- Keep alive — restart on crash or exit -->
+    <key>KeepAlive</key>
+    <true/>
+
+    <!-- Throttle restarts: wait 10s between crashes -->
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <!-- Working directory -->
+    <key>WorkingDirectory</key>
+    <string>/tmp</string>
+
+    <!-- Logging -->
+    <key>StandardOutPath</key>
+    <string>/usr/local/var/log/trio-claw.log</string>
+    <key>StandardErrorPath</key>
+    <string>/usr/local/var/log/trio-claw.err</string>
+
+    <!-- Environment variables -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin</string>
+        <key>HOME</key>
+        <string>/Users/YOUR_USERNAME</string>
+        <!-- Add your token here or use --config with a YAML file -->
+        <!-- <key>TRIO_CLAW_TOKEN</key> -->
+        <!-- <string>your-gateway-token</string> -->
+    </dict>
+
+    <!-- Run at load (don't wait for calendar/network triggers) -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Soft kill with SIGTERM (our graceful shutdown handler) -->
+    <key>ExitTimeOut</key>
+    <integer>10</integer>
+</dict>
+</plist>
+<!--
+Installation:
+  1. Copy this file to ~/Library/LaunchAgents/com.trio.claw.plist
+  2. Edit ProgramArguments, EnvironmentVariables, and StandardOutPath as needed
+  3. Load:   launchctl load ~/Library/LaunchAgents/com.trio.claw.plist
+  4. Start:  launchctl start com.trio.claw
+  5. Stop:   launchctl stop com.trio.claw
+  6. Unload: launchctl unload ~/Library/LaunchAgents/com.trio.claw.plist
+
+Logs:
+  tail -f /usr/local/var/log/trio-claw.log
+  tail -f /usr/local/var/log/trio-claw.err
+
+Health check:
+  curl http://localhost:9090/health
+  curl http://localhost:9090/metrics
+
+Status dump (without health port):
+  kill -USR1 $(pgrep -f "trio claw")
+-->
