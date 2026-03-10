@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-03-10
+
+### Removed
+- FastV visual token pruning — benchmark-negative on all T1 models (~950 lines removed)
+- Stale code review document (`review1.md`)
+
 ### Added
 - Webcam GUI example with live video preview and VLM text overlay
 - Accuracy regression test suite (POPE + TextVQA gate)
@@ -104,7 +110,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Callback system with 10 lifecycle events
 - 120 unit tests
 
-[Unreleased]: https://github.com/machinefi/trio-core/compare/v0.8.2...HEAD
+[Unreleased]: https://github.com/machinefi/trio-core/compare/v0.8.3...HEAD
+[0.8.3]: https://github.com/machinefi/trio-core/compare/v0.8.2...v0.8.3
 [0.8.2]: https://github.com/machinefi/trio-core/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/machinefi/trio-core/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/machinefi/trio-core/compare/v0.2.1...v0.8.0
