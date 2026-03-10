@@ -207,6 +207,16 @@ class TrioCore(CallbackMixin):
         )
         self.run_callbacks("on_engine_load")
 
+    def reset_context(self) -> None:
+        """Reset accumulated context (KV cache, StreamMem state).
+
+        Call between independent test cases or conversation turns to
+        prevent context from one session leaking into the next.
+        The model stays loaded — only inference state is cleared.
+        """
+        if self._backend is not None:
+            self._backend._prompt_cache = None
+
     def analyze_video(
         self,
         video: str | Path | np.ndarray,

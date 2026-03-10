@@ -859,6 +859,162 @@ def _mock_engine(answer="Yes, there is a person."):
     return engine
 
 
+# =============================================================================
+# Temporal mode tests
+# =============================================================================
+
+class TestTemporalMode:
+    """Tests for temporal (StreamMem) watch mode."""
+
+    @pytest.mark.asyncio
+    async def test_temporal_watch_returns_temporal_flag(self):
+        """vision.watch with temporal=true includes temporal in response."""
+        handler = CommandHandler(engine=MagicMock(), camera_sources=["0"])
+        handler._ws = AsyncMock()
+        req = InvokeRequest(
+            id="1", node_id="n", command="vision.watch",
+            params={"question": "Is the door open?", "temporal": True},
+        )
+        result = await handler.handle(req)
+        assert result.ok
+        assert result.payload["temporal"] is True
+
+        # Cleanup
+        for w in list(handler._watches.values()):
+            w.stop_event.set()
+            if w.task:
+                w.task.cancel()
+
+    @pytest.mark.asyncio
+    async def test_temporal_watch_enables_streaming_memory(self):
+        """Temporal mode calls set_streaming_memory on the backend."""
+        engine = MagicMock()
+        backend = MagicMock()
+        backend._streaming_memory_config = None
+        engine._backend = backend
+        handler = CommandHandler(engine=engine, camera_sources=["0"])
+        handler._ws = AsyncMock()
+
+        req = InvokeRequest(
+            id="1", node_id="n", command="vision.watch",
+            params={"question": "test?", "temporal": True},
+        )
+        await handler.handle(req)
+
+        backend.set_streaming_memory.assert_called_once_with(
+            enabled=True, budget=6000, prototype_ratio=0.1, n_sink_tokens=4,
+        )
+
+        # Cleanup
+        for w in list(handler._watches.values()):
+            w.stop_event.set()
+            if w.task:
+                w.task.cancel()
+
+    @pytest.mark.asyncio
+    async def test_temporal_stop_resets_context(self):
+        """Stopping a temporal watch calls reset_context on the engine."""
+        engine = MagicMock()
+        engine.reset_context = MagicMock()
+        handler = CommandHandler(engine=engine, camera_sources=["0"])
+        handler._ws = AsyncMock()
+
+        watch = WatchTask(
+            watch_id="tw-1", condition="test?", interval=10, temporal=True,
+        )
+        handler._watches["tw-1"] = watch
+        await handler._stop_watch(watch)
+
+        engine.reset_context.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_temporal_stop_includes_transitions(self):
+        """Stopping a temporal watch includes transition count in summary."""
+        handler = CommandHandler(engine=MagicMock(), camera_sources=["0"])
+        handler._ws = AsyncMock()
+
+        watch = WatchTask(
+            watch_id="tw-2", condition="test?", interval=10,
+            temporal=True,
+        )
+        watch.checks = 10
+        watch.alerts = 2
+        watch.transitions = 3
+        handler._watches["tw-2"] = watch
+        summary = await handler._stop_watch(watch)
+        assert summary["transitions"] == 3
+
+    @pytest.mark.asyncio
+    async def test_temporal_status_shows_temporal_info(self):
+        """vision.status shows temporal info for temporal watches."""
+        handler = CommandHandler(engine=MagicMock(), camera_sources=["0"])
+        handler._ws = AsyncMock()
+
+        watch = WatchTask(
+            watch_id="tw-3", condition="test?", interval=10,
+            temporal=True,
+        )
+        watch.last_state = "door is closed"
+        watch.transitions = 1
+        handler._watches["tw-3"] = watch
+
+        status_req = InvokeRequest(id="s1", node_id="n", command="vision.status")
+        result = await handler.handle(status_req)
+        assert result.ok
+        w_info = result.payload["watches"][0]
+        assert w_info["temporal"] is True
+        assert w_info["transitions"] == 1
+        assert w_info["lastState"] == "door is closed"
+
+        # Cleanup
+        watch.stop_event.set()
+
+
+class TestTemporalHelpers:
+    """Tests for _build_temporal_prompt and _detect_temporal_transition."""
+
+    def test_build_prompt_first_check(self):
+        from trio_core.claw.commands import _build_temporal_prompt
+        prompt = _build_temporal_prompt("Is the door open?", None)
+        assert "Is the door open?" in prompt
+        assert "STATE:" in prompt
+        assert "YES or NO" in prompt
+
+    def test_build_prompt_subsequent_check(self):
+        from trio_core.claw.commands import _build_temporal_prompt
+        prompt = _build_temporal_prompt("Is the door open?", "door is closed")
+        assert "door is closed" in prompt
+        assert "CHANGED or SAME" in prompt
+
+    def test_detect_transition_first_check_yes(self):
+        from trio_core.claw.commands import _detect_temporal_transition
+        triggered, transition = _detect_temporal_transition(
+            "STATE: door is open | ANSWER: YES", None,
+        )
+        assert triggered is True
+        assert transition["new_state"] == "door is open"
+        assert transition["old_state"] is None
+
+    def test_detect_transition_changed(self):
+        from trio_core.claw.commands import _detect_temporal_transition
+        triggered, transition = _detect_temporal_transition(
+            "STATE: door is now open | CHANGED",
+            "door is closed",
+        )
+        assert triggered is True
+        assert transition["old_state"] == "door is closed"
+        assert transition["new_state"] == "door is now open"
+
+    def test_detect_transition_same(self):
+        from trio_core.claw.commands import _detect_temporal_transition
+        triggered, transition = _detect_temporal_transition(
+            "STATE: door is closed | SAME",
+            "door is closed",
+        )
+        assert triggered is False
+        assert transition is None
+
+
 class TestWatchLoopIntegration:
     """End-to-end: mock Gateway sends vision.watch invoke, receives streaming
     results, then sends vision.watch.stop and verifies summary."""

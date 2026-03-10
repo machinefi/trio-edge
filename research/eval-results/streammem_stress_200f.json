@@ -1,0 +1,182 @@
+[
+  {
+    "label": "sm_budget=2000",
+    "model": "mlx-community/Qwen2.5-VL-3B-Instruct-4bit",
+    "n_frames": 200,
+    "streaming_memory": true,
+    "budget": 2000,
+    "total_evictions": 187,
+    "total_time_s": 65.3,
+    "pope_accuracy": null,
+    "pope_samples": 0,
+    "mem_start_mb": 3093.8,
+    "mem_end_mb": 3169.3,
+    "mem_peak_mb": 3601.6,
+    "kv_start": 0,
+    "kv_end": 0,
+    "latency_first_ms": 253.0,
+    "latency_last_ms": 320.8,
+    "snapshots": [
+      {
+        "frame_idx": 0,
+        "metal_active_mb": 3093.8,
+        "metal_peak_mb": 3592.1,
+        "kv_offset": 0,
+        "latency_ms": 253.0,
+        "eviction_happened": false
+      },
+      {
+        "frame_idx": 10,
+        "metal_active_mb": 3095.4,
+        "metal_peak_mb": 3601.6,
+        "kv_offset": 0,
+        "latency_ms": 186.6,
+        "eviction_happened": false
+      },
+      {
+        "frame_idx": 20,
+        "metal_active_mb": 3169.3,
+        "metal_peak_mb": 3601.6,
+        "kv_offset": 0,
+        "latency_ms": 332.3,
+        "eviction_happened": true
+      },
+      {
+        "frame_idx": 30,
+        "metal_active_mb": 3169.3,
+        "metal_peak_mb": 3601.6,
+        "kv_offset": 0,
+        "latency_ms": 334.1,
+        "eviction_happened": true
+      },
+      {
+        "frame_idx": 40,
+        "metal_active_mb": 3169.3,
+        "metal_peak_mb": 3601.6,
+        "kv_offset": 0,
+        "latency_ms": 723.8,
+        "eviction_happened": true
+      },
+      {
+        "frame_idx": 50,
+        "metal_active_mb": 3169.3,
+        "metal_peak_mb": 3601.6,
+        "kv_offset": 0,
+        "latency_ms": 334.0,
+        "eviction_happened": true
+      },
+      {
+        "frame_idx": 60,
+        "metal_active_mb": 3169.3,
+        "metal_peak_mb": 3601.6,
+        "kv_offset": 0,
+        "latency_ms": 324.9,
+        "eviction_happened": true
+      },
+      {
+        "frame_idx": 70,
+        "metal_active_mb": 3169.3,
+        "metal_peak_mb": 3601.6,
+        "kv_offset": 0,
+        "latency_ms": 329.3,
+        "eviction_happened": true
+      },
+      {
+        "frame_idx": 80,
+        "metal_active_mb": 3169.3,
+        "metal_peak_mb": 3601.6,
+        "kv_offset": 0,
+        "latency_ms": 331.3,
+        "eviction_happened": true
+      },
+      {
+        "frame_idx": 90,
+        "metal_active_mb": 3169.3,
+        "metal_peak_mb": 3601.6,
+        "kv_offset": 0,
+        "latency_ms": 332.2,
+        "eviction_happened": true
+      },
+      {
+        "frame_idx": 100,
+        "metal_active_mb": 3169.3,
+        "metal_peak_mb": 3601.6,
+        "kv_offset": 0,
+        "latency_ms": 321.9,
+        "eviction_happened": true
+      },
+      {
+        "frame_idx": 110,
+        "metal_active_mb": 3169.3,
+        "metal_peak_mb": 3601.6,
+        "kv_offset": 0,
+        "latency_ms": 323.3,
+        "eviction_happened": true
+      },
+      {
+        "frame_idx": 120,
+        "metal_active_mb": 3169.3,
+        "metal_peak_mb": 3601.6,
+        "kv_offset": 0,
+        "latency_ms": 318.8,
+        "eviction_happened": true
+      },
+      {
+        "frame_idx": 130,
+        "metal_active_mb": 3169.3,
+        "metal_peak_mb": 3601.6,
+        "kv_offset": 0,
+        "latency_ms": 320.2,
+        "eviction_happened": true
+      },
+      {
+        "frame_idx": 140,
+        "metal_active_mb": 3169.3,
+        "metal_peak_mb": 3601.6,
+        "kv_offset": 0,
+        "latency_ms": 322.4,
+        "eviction_happened": true
+      },
+      {
+        "frame_idx": 150,
+        "metal_active_mb": 3169.3,
+        "metal_peak_mb": 3601.6,
+        "kv_offset": 0,
+        "latency_ms": 315.7,
+        "eviction_happened": true
+      },
+      {
+        "frame_idx": 160,
+        "metal_active_mb": 3169.3,
+        "metal_peak_mb": 3601.6,
+        "kv_offset": 0,
+        "latency_ms": 322.5,
+        "eviction_happened": true
+      },
+      {
+        "frame_idx": 170,
+        "metal_active_mb": 3169.3,
+        "metal_peak_mb": 3601.6,
+        "kv_offset": 0,
+        "latency_ms": 320.8,
+        "eviction_happened": true
+      },
+      {
+        "frame_idx": 180,
+        "metal_active_mb": 3169.3,
+        "metal_peak_mb": 3601.6,
+        "kv_offset": 0,
+        "latency_ms": 322.5,
+        "eviction_happened": true
+      },
+      {
+        "frame_idx": 190,
+        "metal_active_mb": 3169.3,
+        "metal_peak_mb": 3601.6,
+        "kv_offset": 0,
+        "latency_ms": 322.8,
+        "eviction_happened": true
+      }
+    ]
+  }
+]

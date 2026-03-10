@@ -263,6 +263,11 @@ class PromptCache:
         # StreamMem: bounded KV cache accumulation for continuous streams
         self._streaming_memory = None
 
+        # MRoPE position continuation for StreamMem accumulated mode.
+        # Tracks the max position used across frames so new frames'
+        # position IDs continue where the previous frame left off.
+        self._streaming_position_offset = 0
+
     @property
     def kv_cache(self) -> Optional[List[Any]]:
         return self._kv_cache
@@ -347,6 +352,7 @@ class PromptCache:
             self._model.language_model,
             max_kv_size=self._max_kv_size,
         )
+        self._streaming_position_offset = 0
         return self._kv_cache
 
     def check_hit(self, input_ids: mx.array, pixel_values: mx.array = None) -> bool:
@@ -679,6 +685,11 @@ def _resolve_cache(
             prefix_hit = prompt_cache_manager.check_prefix_hit(input_ids)
             prompt_cache = prompt_cache_manager.kv_cache or prompt_cache_manager.get_or_create_cache()
             logger.debug("Cache MISS — deferring for visual similarity check (prefix_match=%s)", prefix_hit)
+        elif prompt_cache_manager.streaming_memory is not None:
+            # StreamMem mode: skip prefix caching — restore_prefix_cache()
+            # creates a NEW cache which destroys accumulated visual KV.
+            prompt_cache = prompt_cache_manager.get_or_create_cache()
+            logger.debug("Cache MISS (StreamMem) — full prefill, preserving accumulated KV")
         else:
             prefix_hit = prompt_cache_manager.check_prefix_hit(input_ids)
             if prefix_hit:
@@ -721,6 +732,12 @@ def _run_prefill(
     may_visual_hit = resolution.may_visual_hit
     prefix_hit = resolution.prefix_hit
 
+    # Track whether StreamMem accumulated mode is active
+    _sm_active = (
+        prompt_cache_manager is not None
+        and prompt_cache_manager.streaming_memory is not None
+    )
+
     with mx.stream(_generation_stream):
         if inputs_embeds is not None:
             pass  # Pre-computed (e.g. ToMe path)
@@ -735,6 +752,68 @@ def _run_prefill(
             )
 
         full_inputs_embeds = inputs_embeds
+
+        # ── MRoPE position continuation for StreamMem accumulated mode ──
+        # When KV cache accumulates across frames, each new frame's MRoPE
+        # positions must continue where the previous frame left off.
+        # Without this, get_rope_index() computes positions from 0, which
+        # overlap with positions already baked into cached K/V rotary
+        # embeddings from previous frames.
+        #
+        # Guards: skip when prefix_hit (suffix-only prefill has different
+        # position handling) or when chunked prefill would trigger (full-
+        # sequence position_ids would mismatch chunk shapes).
+        _streaming_pos_data = None
+        if (
+            _sm_active
+            and not prefix_hit
+            and prompt_cache_manager._streaming_position_offset > 0
+            and hasattr(model.language_model, 'get_rope_index')
+            and (prefill_step_size is None
+                 or inputs_embeds.shape[1] <= prefill_step_size)
+        ):
+            lm = model.language_model
+            offset = prompt_cache_manager._streaming_position_offset
+
+            # Get KV cache offset before this frame's prefill
+            cache_offset_before = 0
+            if cache_ref[0]:
+                for c in cache_ref[0]:
+                    if hasattr(c, 'offset'):
+                        cache_offset_before = c.offset
+                        break
+
+            # Compute fresh position IDs for this frame
+            pos_ids, rope_deltas = lm.get_rope_index(
+                original_input_ids,
+                kwargs.get('image_grid_thw'),
+                kwargs.get('video_grid_thw'),
+                None,  # attention_mask — get_rope_index creates ones_like if None
+            )
+
+            # Bias positions to continue from previous frame
+            biased_pos_ids = pos_ids + offset
+            # For decode: position = cache_offset_after + _rope_deltas
+            # We want: position = biased_max_pos + 1
+            # cache_offset_after = cache_offset_before + seq_len
+            # So: _rope_deltas = biased_max_pos + 1 - cache_offset_after
+            #   = (original_max_pos + offset + 1) - (cache_offset_before + seq_len)
+            #   = (original_rope_deltas + seq_len + offset) - cache_offset_before - seq_len
+            #   = original_rope_deltas + offset - cache_offset_before
+            biased_rope_deltas = rope_deltas + offset - cache_offset_before
+
+            # Pass biased position_ids through kwargs — LanguageModel.__call__
+            # pops position_ids from kwargs and uses them directly, skipping
+            # get_rope_index() entirely.
+            kwargs['position_ids'] = biased_pos_ids
+            _streaming_pos_data = {
+                'biased_pos_ids': biased_pos_ids,
+                'biased_rope_deltas': biased_rope_deltas,
+            }
+            logger.debug(
+                "StreamMem MRoPE: biasing positions by %d (cache_offset=%d)",
+                offset, cache_offset_before,
+            )
 
         # Visual similarity check (tier 2)
         visual_hit = (
@@ -763,6 +842,25 @@ def _run_prefill(
                 prompt_cache_manager, may_visual_hit, step_fn, quantize_cache_fn,
                 prefill_step_size, kwargs,
             )
+
+        # ── Save MRoPE position state for StreamMem ──
+        if _sm_active and not visual_hit:
+            lm = model.language_model
+            if _streaming_pos_data is not None:
+                # Frame 2+: set biased _rope_deltas for decode phase
+                lm._rope_deltas = _streaming_pos_data['biased_rope_deltas']
+                lm._position_ids = None  # prevent stale chunked-prefill path
+                # Save max position for next frame
+                mx.eval(_streaming_pos_data['biased_pos_ids'])
+                prompt_cache_manager._streaming_position_offset = int(
+                    _streaming_pos_data['biased_pos_ids'].max().item()
+                ) + 1
+            elif hasattr(lm, '_position_ids') and lm._position_ids is not None:
+                # Frame 1: save initial position offset from naturally computed IDs
+                mx.eval(lm._position_ids)
+                prompt_cache_manager._streaming_position_offset = int(
+                    lm._position_ids.max().item()
+                ) + 1
 
     return y, logprobs, visual_hit, full_inputs_embeds, new_kwargs
 
@@ -829,14 +927,17 @@ def _prefill_full(
     y, logprobs = step_fn(input_ids, inputs_embeds=inputs_embeds)
 
     if prompt_cache_manager is not None:
-        vis_boundary = _find_visual_boundary(original_input_ids, model)
-        if vis_boundary > 0:
-            lm = model.language_model
-            prompt_cache_manager.save_prefix(
-                original_input_ids, vis_boundary, prompt_cache,
-                position_ids=getattr(lm, '_position_ids', None),
-                rope_deltas=getattr(lm, '_rope_deltas', None),
-            )
+        # Skip prefix save in StreamMem mode — prefix caching is disabled
+        # to prevent restore_prefix_cache() from destroying accumulated KV.
+        if prompt_cache_manager.streaming_memory is None:
+            vis_boundary = _find_visual_boundary(original_input_ids, model)
+            if vis_boundary > 0:
+                lm = model.language_model
+                prompt_cache_manager.save_prefix(
+                    original_input_ids, vis_boundary, prompt_cache,
+                    position_ids=getattr(lm, '_position_ids', None),
+                    rope_deltas=getattr(lm, '_rope_deltas', None),
+                )
 
     return y, logprobs
 
@@ -896,6 +997,18 @@ def _post_prefill_bookkeeping(
             for c in prompt_cache:
                 if hasattr(c, 'offset'):
                     prompt_cache_manager.update_prefill_offset(c.offset)
+                    # Fix _rope_deltas after eviction: cache_offset changed but
+                    # _rope_deltas was computed for pre-eviction offset.
+                    # Correct: decode_pos = new_offset + _rope_deltas = max_pos + 1
+                    # So: _rope_deltas = streaming_position_offset - new_offset
+                    lm = model.language_model
+                    pos_offset = prompt_cache_manager._streaming_position_offset
+                    if (
+                        pos_offset > 0
+                        and hasattr(lm, '_rope_deltas')
+                        and lm._rope_deltas is not None
+                    ):
+                        lm._rope_deltas = mx.array(pos_offset - c.offset)
                     break
 
 
