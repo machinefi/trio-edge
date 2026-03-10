@@ -19,12 +19,27 @@ mvbench_videos/
 test_videos/
 .venv-lora/
 
+# Model adapters — ignore all checkpoints and experiments
+# Use adapters/* (not adapters/) so negation patterns can un-ignore the shipped adapter
+adapters/*
+*.safetensors
+# Ship the final LoRA adapter (16MB)
+!adapters/surveillance-qwen35-2b/
+adapters/surveillance-qwen35-2b/*
+!adapters/surveillance-qwen35-2b/adapters.safetensors
+!adapters/surveillance-qwen35-2b/adapter_config.json
 
 # Surveillance VQA data (videos, images, datasets)
 surveillance_vqa/videos/
+surveillance_vqa/lora_dataset/*.jsonl
 surveillance_vqa/lora_dataset/train/
 surveillance_vqa/lora_dataset/valid/
 surveillance_vqa/*.zip
 surveillance_vqa/baseline_results.json
 surveillance_vqa/github/
 surveillance_vqa/test_data/
+surveillance_vqa/test_datasets
+
+# Benchmark results (large JSON files)
+research/bench-results/
+research/bench-results-v2/

@@ -9,6 +9,14 @@
 </p>
 
 <p align="center">
+  <a href="https://pypi.org/project/trio-core/"><img src="https://img.shields.io/pypi/v/trio-core?color=blue" alt="PyPI"></a>
+  <a href="https://pypi.org/project/trio-core/"><img src="https://img.shields.io/pypi/pyversions/trio-core" alt="Python"></a>
+  <a href="https://github.com/machinefi/trio-core/blob/main/LICENSE"><img src="https://img.shields.io/github/license/machinefi/trio-core" alt="License"></a>
+  <a href="https://github.com/machinefi/trio-core/actions/workflows/test.yml"><img src="https://github.com/machinefi/trio-core/actions/workflows/test.yml/badge.svg" alt="Tests"></a>
+  <a href="https://github.com/machinefi/trio-core/stargazers"><img src="https://img.shields.io/github/stars/machinefi/trio-core?style=social" alt="Stars"></a>
+</p>
+
+<p align="center">
   <img src="assets/pipeline.svg" alt="TrioCore Pipeline" width="800"/>
 </p>
 

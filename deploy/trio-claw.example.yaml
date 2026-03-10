@@ -1,0 +1,33 @@
+# TrioCore Claw — OpenClaw Gateway node configuration
+# Copy to trio-claw.yaml and edit for your setup.
+
+# OpenClaw Gateway connection
+gateway:
+  url: ws://127.0.0.1:18789        # Gateway WebSocket URL
+  token: ""                         # Gateway auth token (from `openclaw gateway token`)
+
+# VLM model (any mlx-vlm compatible model ID)
+model: mlx-community/Qwen2.5-VL-3B-Instruct-4bit
+
+# Camera sources (first camera is the default for commands without deviceId)
+cameras:
+  - id: front-door
+    url: "rtsp://admin:password@192.168.1.100:554/h264Preview_01_sub"
+  # - id: backyard
+  #   url: "rtsp://admin:password@192.168.1.101:554/h264Preview_01_sub"
+
+# TrioCore engine options
+engine:
+  tome_enabled: true                # Token Merging in ViT (reduces prefill by ~73%)
+  tome_r: 4                         # Number of tokens to merge per block
+  compressed_ratio: 0.5             # Visual token compression ratio (0.5 = 50% fewer tokens)
+  max_tokens: 256                   # Max output tokens per inference
+
+# Watch mode defaults
+watch:
+  interval: 10                      # Seconds between checks (vision.watch)
+  max_concurrent: 5                 # Max simultaneous watch loops
+
+# Logging
+log_level: INFO                     # DEBUG, INFO, WARNING, ERROR
+json_logs: false                    # Structured JSON output (for log aggregation)
