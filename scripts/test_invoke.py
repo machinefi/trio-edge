@@ -65,6 +65,7 @@ async def main():
             "nodeId": NODE_ID,
             "command": COMMAND,
             "params": PARAMS,
+            "idempotencyKey": f"test-{invoke_id}",
         })
         invoke_req["id"] = invoke_id
         await ws.send(json.dumps(invoke_req))
