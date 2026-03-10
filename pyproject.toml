@@ -43,7 +43,8 @@ mlx = ["mlx>=0.16", "tokenizers>=0.19", "huggingface-hub", "safetensors", "jinja
 mlx-vlm = ["mlx-vlm>=0.3.12"]
 transformers = ["transformers>=4.40", "torch", "accelerate", "qwen-vl-utils"]
 webcam = ["opencv-python>=4.8"]
-all = ["trio-core[mlx,transformers,webcam]"]
+claw = ["websockets>=13.0"]
+all = ["trio-core[mlx,transformers,webcam,claw]"]
 dev = ["pytest", "pytest-asyncio", "httpx"]
 
 [project.scripts]

@@ -1,0 +1,296 @@
+"""OpenClaw Gateway WebSocket client — trio-core as a direct node.
+
+Handles:
+  - WebSocket connect/reconnect with exponential backoff
+  - Challenge-response handshake (protocol v3)
+  - Device pairing (first-time registration)
+  - Authenticated connection (subsequent runs with saved token)
+  - Ping/pong keepalive (30s)
+  - Frame dispatch → command handlers
+  - Graceful shutdown
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+from pathlib import Path
+
+import websockets
+from websockets.asyncio.client import ClientConnection
+
+from .protocol import (
+    InvokeRequest,
+    InvokeResult,
+    connect_params,
+    generate_id,
+    make_req,
+    make_res,
+    pair_request_params,
+)
+
+logger = logging.getLogger("trio.claw")
+
+# Constants (matching TrioClaw Go implementation)
+PING_INTERVAL = 30  # seconds
+MAX_BACKOFF = 15  # seconds
+PAIR_TIMEOUT = 300  # 5 minutes
+STATE_DIR = Path.home() / ".trio"
+STATE_FILE = STATE_DIR / "claw_state.json"
+
+
+class ClawNode:
+    """OpenClaw node client — connects trio-core directly to the Gateway."""
+
+    def __init__(
+        self,
+        gateway_url: str = "ws://127.0.0.1:18789",
+        node_id: str | None = None,
+        handler: object | None = None,
+    ):
+        self.gateway_url = gateway_url
+        self.node_id = node_id or _default_node_id()
+        self.handler = handler  # CommandHandler instance
+        self.token = _load_token()
+        self._ws: ClientConnection | None = None
+        self._running = False
+
+    # =========================================================================
+    # Pairing — first-time device registration
+    # =========================================================================
+
+    async def pair(self, display_name: str = "trio-core") -> str:
+        """Pair with the Gateway. Returns device token.
+
+        The operator must approve via: openclaw devices approve <requestId>
+        """
+        logger.info("Connecting for pairing...")
+        ws = await websockets.connect(self.gateway_url)
+
+        try:
+            # 1. Receive connect.challenge
+            frame = json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
+            if frame.get("event") != "connect.challenge":
+                raise RuntimeError(f"Expected connect.challenge, got: {frame}")
+
+            # 2. Send connect (no auth)
+            params = connect_params(self.node_id, token=None)
+            await ws.send(json.dumps(make_req("connect", params)))
+
+            # 3. Read hello response
+            res = json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
+            # For pairing, we may get hello-ok or need to proceed anyway
+
+            # 4. Send pair request
+            pair_params = pair_request_params(self.node_id, display_name)
+            await ws.send(json.dumps(make_req("node.pair.request", pair_params)))
+            logger.info("Pairing request sent. Waiting for operator approval...")
+            print(f"\n  Approve in OpenClaw: openclaw devices approve\n")
+
+            # 5. Wait for device.pair.resolved event
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + PAIR_TIMEOUT
+            while loop.time() < deadline:
+                remaining = deadline - loop.time()
+                raw = await asyncio.wait_for(ws.recv(), timeout=remaining)
+                event = json.loads(raw)
+                if event.get("event") == "device.pair.resolved":
+                    payload = json.loads(event.get("payloadJSON", "{}"))
+                    if payload.get("status") == "approved" and payload.get("token"):
+                        token = payload["token"]
+                        _save_token(token)
+                        self.token = token
+                        logger.info("Paired successfully!")
+                        return token
+                    raise RuntimeError(f"Pairing {payload.get('status', 'failed')}")
+
+            raise TimeoutError("Pairing timed out (operator did not approve)")
+        finally:
+            await ws.close()
+
+    # =========================================================================
+    # Main run loop — connect, dispatch, reconnect
+    # =========================================================================
+
+    async def run(self) -> None:
+        """Connect to Gateway and enter main event loop. Blocks until cancelled."""
+        if not self.token:
+            raise RuntimeError("Not paired. Run `trio claw --pair` first.")
+
+        self._running = True
+        backoff = 1.0
+
+        while self._running:
+            try:
+                await self._connect_and_loop()
+                backoff = 1.0  # reset on clean disconnect
+            except (
+                websockets.ConnectionClosed,
+                ConnectionRefusedError,
+                OSError,
+                asyncio.TimeoutError,
+            ) as e:
+                if not self._running:
+                    break
+                logger.warning("Disconnected: %s. Reconnecting in %.0fs...", e, backoff)
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 1.5, MAX_BACKOFF)
+            except asyncio.CancelledError:
+                break
+
+        await self._close()
+
+    async def stop(self) -> None:
+        """Signal the run loop to stop."""
+        self._running = False
+        await self._close()
+
+    # =========================================================================
+    # Internal: connect + event loop
+    # =========================================================================
+
+    async def _connect_and_loop(self) -> None:
+        """Single connection lifecycle: handshake → event loop."""
+        ws = await websockets.connect(
+            self.gateway_url,
+            max_size=25 * 1024 * 1024,  # 25MB max frame
+        )
+        self._ws = ws
+
+        try:
+            # Handshake
+            await self._handshake(ws)
+            logger.info("Connected to Gateway (%s)", self.gateway_url)
+
+            # Start ping task
+            ping_task = asyncio.create_task(self._ping_loop(ws))
+
+            try:
+                # Read loop
+                async for raw in ws:
+                    frame = json.loads(raw)
+                    frame_type = frame.get("type")
+
+                    if frame_type == "event":
+                        await self._handle_event(ws, frame)
+                    elif frame_type == "req":
+                        await self._handle_request(ws, frame)
+                    # Ignore "res" frames
+            finally:
+                ping_task.cancel()
+                try:
+                    await ping_task
+                except asyncio.CancelledError:
+                    pass
+        finally:
+            self._ws = None
+            await ws.close()
+
+    async def _handshake(self, ws: ClientConnection) -> None:
+        """Challenge-response handshake with auth token."""
+        # 1. Receive connect.challenge
+        frame = json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
+        if frame.get("event") != "connect.challenge":
+            raise RuntimeError(f"Expected connect.challenge, got: {frame}")
+
+        # 2. Send connect with auth
+        params = connect_params(self.node_id, token=self.token)
+        await ws.send(json.dumps(make_req("connect", params)))
+
+        # 3. Expect hello-ok
+        res = json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
+        if res.get("type") != "res" or not res.get("ok"):
+            raise RuntimeError(f"Handshake failed: {res}")
+
+        payload = res.get("payload", {})
+        if isinstance(payload, dict) and payload.get("type") != "hello-ok":
+            raise RuntimeError(f"Expected hello-ok, got: {payload}")
+
+    async def _handle_event(self, ws: ClientConnection, frame: dict) -> None:
+        """Dispatch incoming events."""
+        event = frame.get("event", "")
+
+        if event == "node.invoke.request":
+            payload_json = frame.get("payloadJSON", "{}")
+            req = InvokeRequest.from_payload(payload_json)
+            # Dispatch asynchronously
+            asyncio.create_task(self._dispatch_invoke(ws, req))
+
+        elif event == "tick":
+            pass  # Gateway heartbeat, ignore
+
+        else:
+            logger.debug("Unknown event: %s", event)
+
+    async def _handle_request(self, ws: ClientConnection, frame: dict) -> None:
+        """Handle incoming request frames (e.g., ping)."""
+        method = frame.get("method", "")
+        if method == "ping":
+            res = make_res(frame.get("id", ""), ok=True)
+            await ws.send(json.dumps(res))
+
+    async def _dispatch_invoke(self, ws: ClientConnection, req: InvokeRequest) -> None:
+        """Execute a command and send the result back."""
+        if self.handler is None:
+            result = InvokeResult(
+                id=req.id, node_id=self.node_id, ok=False,
+                error_code="UNAVAILABLE", error_message="No handler configured",
+            )
+        else:
+            try:
+                result = await self.handler.handle(req)
+            except Exception as e:
+                logger.exception("Command %s failed", req.command)
+                result = InvokeResult(
+                    id=req.id, node_id=self.node_id, ok=False,
+                    error_code="INTERNAL_ERROR", error_message=str(e),
+                )
+
+        try:
+            await ws.send(json.dumps(result.to_req_frame()))
+        except Exception:
+            logger.exception("Failed to send invoke result")
+
+    async def _ping_loop(self, ws: ClientConnection) -> None:
+        """Send WebSocket ping every 30 seconds."""
+        while True:
+            await asyncio.sleep(PING_INTERVAL)
+            try:
+                await ws.ping()
+            except Exception:
+                break
+
+    async def _close(self) -> None:
+        """Close the WebSocket connection."""
+        if self._ws:
+            await self._ws.close()
+            self._ws = None
+
+
+# =============================================================================
+# Token persistence (~/.trio/claw_state.json)
+# =============================================================================
+
+def _load_token() -> str | None:
+    """Load saved device token."""
+    if STATE_FILE.exists():
+        try:
+            data = json.loads(STATE_FILE.read_text())
+            return data.get("token")
+        except (json.JSONDecodeError, KeyError):
+            pass
+    return None
+
+
+def _save_token(token: str) -> None:
+    """Save device token for subsequent connections."""
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    STATE_FILE.write_text(json.dumps({"token": token}, indent=2))
+    logger.info("Token saved to %s", STATE_FILE)
+
+
+def _default_node_id() -> str:
+    """Generate a default node ID from hostname."""
+    import socket
+    return f"trio-{socket.gethostname().split('.')[0].lower()}"
