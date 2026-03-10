@@ -209,7 +209,7 @@ def connect_params(
         params["auth"] = {"token": token}
 
     # Add device identity if we have the key material
-    if nonce and device_id and private_key and raw_pub:
+    if device_id and private_key and raw_pub:
         params["device"] = build_device_params(
             nonce=nonce,
             device_id=device_id,

@@ -94,7 +94,15 @@ class ClawNode:
                 private_key=self._private_key,
                 raw_pub=self._raw_pub,
             )
-            await ws.send(json.dumps(make_req("connect", params)))
+            req_frame = make_req("connect", params)
+            logger.info("Challenge nonce: %r", nonce)
+            logger.info("Connect params keys: %s", list(params.keys()))
+            logger.info("Device in params: %s", "device" in params)
+            if "device" in params:
+                d = params["device"]
+                logger.info("Device ID: %s..., pubkey len: %d, sig len: %d, nonce: %r",
+                            d["id"][:16], len(d["publicKey"]), len(d["signature"]), d["nonce"])
+            await ws.send(json.dumps(req_frame))
 
             # 3. Read hello response
             res = json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
