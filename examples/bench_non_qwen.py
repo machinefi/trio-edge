@@ -5,9 +5,9 @@ Runs synthetic eval suite + POPE accuracy for each model × optimization combo.
 Results saved to research/eval-results/tier1/.
 
 Models:
-  - InternVL3-1B-4bit:  baseline, FastV, Compressed, KV reuse
+  - InternVL3-1B-4bit:  baseline, Compressed, KV reuse
   - nanoLLaVA-1.5-4bit: baseline, KV reuse, StreamMem
-  - InternVL3-2B-4bit:  baseline, FastV, Compressed, KV reuse (if available)
+  - InternVL3-2B-4bit:  baseline, Compressed, KV reuse
 
 Usage:
     python examples/bench_non_qwen.py
@@ -36,13 +36,11 @@ MODELS = {
 COMBOS = {
     "internvl3-1b": [
         ("baseline", {}),
-        ("fastv_0.5", {"fastv_enabled": True, "fastv_ratio": 0.5, "fastv_layer": 2}),
         ("compressed_50", {"_compress": 0.5}),  # special key handled below
         ("kv_reuse", {"visual_similarity_threshold": 0.95}),
     ],
     "internvl3-2b": [
         ("baseline", {}),
-        ("fastv_0.5", {"fastv_enabled": True, "fastv_ratio": 0.5, "fastv_layer": 2}),
         ("compressed_50", {"_compress": 0.5}),
         ("kv_reuse", {"visual_similarity_threshold": 0.95}),
     ],

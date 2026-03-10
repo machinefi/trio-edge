@@ -53,14 +53,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--skip-existing`, `--dry-run`, `--report` modes for benchmark sweeps
 
 ### Fixed
-- FastV backend: model-agnostic via `adapter.call_layer()`, MRoPE guarded with `adapter.uses_mrope`
 - Compressed/ToMe backends: proper guards for non-Qwen architectures
 - bench.py: `auto_optimize=False` to prevent baseline pollution
 
 ### Results
 - InternVL3-2B: POPE 95%, MMBench 98% (new best)
 - Compressed 50% on 4B+ models acts as regularization, often improving accuracy
-- FastV: mostly harmful, default disabled
+- FastV: removed (benchmark-negative on all T1 models)
 
 ## [0.2.1] - 2026-03-06
 

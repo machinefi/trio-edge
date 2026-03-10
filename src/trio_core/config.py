@@ -64,15 +64,6 @@ class EngineConfig(BaseSettings):
         "Simple scenes get high compression, complex scenes (dense text) get low compression.",
     )
 
-    # FastV (visual token pruning in LLM layers)
-    fastv_enabled: bool = Field(default=False, description="Enable FastV visual token pruning")
-    fastv_ratio: float = Field(
-        default=0.5, description="Fraction of visual tokens to prune (0.0-1.0)"
-    )
-    fastv_layer: int = Field(
-        default=2, description="LLM layer to compute attention importance at"
-    )
-
     # Frame-to-frame KV reuse (visual similarity gating)
     visual_similarity_threshold: float = Field(
         default=0.0,

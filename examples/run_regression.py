@@ -41,20 +41,16 @@ def build_config_key(args) -> str:
     # Shorten model name
     model_short = model.split("/")[-1].lower().replace("-instruct", "").replace("-4bit", "")
     parts.append(model_short)
-    has_fastv = args.fastv is not None
     has_tome = bool(args.tome)
     if has_tome:
         suffix = f"tome_r{args.tome}"
         if args.tome_adaptive:
             suffix += "_adaptive"
         parts.append(suffix)
-    if has_fastv:
-        layer_suffix = f"_L{args.fastv_layer}" if args.fastv_layer else ""
-        parts.append(f"fastv_{args.fastv}{layer_suffix}")
     has_vs = args.visual_similarity is not None
     if has_vs:
         parts.append(f"vs_{args.visual_similarity}")
-    if not has_fastv and not has_tome and not has_vs:
+    if not has_tome and not has_vs:
         parts.append("baseline")
     return "_".join(parts)
 
@@ -75,11 +71,6 @@ def run_benchmarks(args) -> dict:
     }
     if args.model:
         config_kwargs["model"] = args.model
-    if args.fastv is not None:
-        config_kwargs["fastv_enabled"] = True
-        config_kwargs["fastv_ratio"] = args.fastv
-        if args.fastv_layer is not None:
-            config_kwargs["fastv_layer"] = args.fastv_layer
     if args.tome:
         config_kwargs["tome_enabled"] = True
         config_kwargs["tome_r"] = args.tome
@@ -108,7 +99,6 @@ def run_benchmarks(args) -> dict:
         "config_key": build_config_key(args),
         "tome_r": args.tome,
         "tome_adaptive": getattr(args, "tome_adaptive", False),
-        "fastv_ratio": getattr(args, "fastv", None),
         "visual_similarity_threshold": getattr(args, "visual_similarity", None),
         "samples_per_bench": n,
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -265,10 +255,6 @@ def main():
                         help="Use adaptive r (linear ramp from 0 to r_max)")
     parser.add_argument("--visual-similarity", type=float, default=None, metavar="THRESHOLD",
                         help="Visual similarity threshold for KV reuse (e.g., 0.95)")
-    parser.add_argument("--fastv", type=float, default=None, metavar="RATIO",
-                        help="Enable FastV with given prune ratio (0.0-1.0)")
-    parser.add_argument("--fastv-layer", type=int, default=None,
-                        help="FastV: LLM layer to compute importance at (default: 2)")
     parser.add_argument("--samples", "-n", type=int, default=DEFAULT_SAMPLES,
                         help=f"Samples per benchmark (default: {DEFAULT_SAMPLES})")
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD,

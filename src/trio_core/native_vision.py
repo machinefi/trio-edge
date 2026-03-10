@@ -445,12 +445,12 @@ def create_tome_vision(
     if 'intern' in vt_type:
         raise ValueError(
             "InternViT does not support ToMe — pixel_shuffle after ViT "
-            "disrupts spatial structure. Use FastV instead."
+            "disrupts spatial structure. Use Compressed instead."
         )
     if 'fastvlm' in vt_type or 'fastvithd' in vt_type:
         raise ValueError(
             "FastVLM does not support ToMe — CNN encoder is fundamentally "
-            "different from ViT. Use FastV instead."
+            "different from ViT. Use Compressed instead."
         )
 
     kwargs = dict(

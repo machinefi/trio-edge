@@ -64,7 +64,7 @@ trio serve
 | **Privacy** | 100% local | 100% local | Data leaves device |
 | **Camera support** | Webcam, RTSP, ONVIF | None built-in | None built-in |
 | **Watch mode** | Built-in ("person at door") | DIY scripting | DIY scripting |
-| **Visual optimization** | ToMe + FastV + KV reuse | None | N/A |
+| **Visual optimization** | ToMe + Compressed + KV reuse | None | N/A |
 | **Setup** | `pipx install trio-core` | Install + pull model | API key + billing |
 
 ---
@@ -344,7 +344,6 @@ TrioCore optimizes **every stage** of VLM inference. Each technique is independe
 | Pre-inference | Temporal dedup | Skip near-identical frames (L2 on 64x64) | -50% frames |
 | Pre-inference | Motion gate | Skip VLM entirely when scene is static | -80% calls |
 | Vision encoder | **[ToMe](https://arxiv.org/abs/2210.09461)** | Merge similar visual tokens between ViT blocks | **-73% prefill** |
-| LLM layers | **[FastV](https://arxiv.org/abs/2403.06764)** | Prune low-attention visual tokens from KV cache | -50% tokens |
 | Cross-frame | **KV Reuse** | Reuse KV cache when frames are visually similar | **1.7x speedup** |
 | Long video | **[StreamMem](https://arxiv.org/abs/2504.08498)** | Bounded KV cache with saliency eviction | constant memory |
 
@@ -352,13 +351,13 @@ TrioCore optimizes **every stage** of VLM inference. Each technique is independe
 
 ### Tier 1 — Full optimization (native loading, all 4 stages)
 
-| Model | Size | 4-bit VRAM | ToMe | FastV | Compressed | KV Reuse |
-|---|---|---|---|---|---|---|
-| Qwen2.5-VL 3B | 3B | 1.8G | ✓ | ✓ | ✓ | ✓ |
-| Qwen2.5-VL 7B | 7B | 4.5G | ✓ | ✗ | ✓ | ✓ |
-| Qwen3-VL 2B/4B/8B | 2-8B | 1.5-5.0G | — | ✓ | ✓ | ✓ |
-| Qwen3.5 0.8B/2B/4B/9B | 0.8-9B | 0.5-5.0G | ✓ | — | ✓ | ✓ (DeltaNet) |
-| InternVL3 1B/2B | 1-2B | 1.0-1.6G | — | — | ✓ | ✓ |
+| Model | Size | 4-bit VRAM | ToMe | Compressed | KV Reuse |
+|---|---|---|---|---|---|
+| Qwen2.5-VL 3B | 3B | 1.8G | ✓ | ✓ | ✓ |
+| Qwen2.5-VL 7B | 7B | 4.5G | ✓ | ✓ | ✓ |
+| Qwen3-VL 2B/4B/8B | 2-8B | 1.5-5.0G | — | ✓ | ✓ |
+| Qwen3.5 0.8B/2B/4B/9B | 0.8-9B | 0.5-5.0G | ✓ | ✓ | ✓ (DeltaNet) |
+| InternVL3 1B/2B | 1-2B | 1.0-1.6G | — | ✓ | ✓ |
 
 ### Tier 2 — Inference only (mlx-vlm, no optimization)
 
@@ -386,67 +385,67 @@ Accuracy is hardware-independent (bit-identical output on any Apple Silicon). La
 
 ### POPE — Object Hallucination (100 samples, yes/no)
 
-| Model | Params | Baseline | ToMe r=4 | Compressed 50% | FastV |
-|---|---|---|---|---|---|
-| **InternVL3-2B** | 2B | **95%** | — | 94% (-1) | — |
-| Qwen2.5-VL-3B | 3B | 94% | 91% (-3) | 75% (-19) | 92% (-2) |
-| Qwen3.5-2B | 2B | 94% | 93% (-1) | 93% (-1) | — |
-| InternVL3-1B | 1B | 93% | — | **94% (+1)** | — |
-| Qwen3.5-0.8B | 0.8B | 93% | **94% (+1)** | 93% (0) | — |
-| Qwen3-VL-2B | 2B | 92% | — | 92% (0) | 0% |
-| Qwen3.5-9B | 9B | 92% | 91% (-1) | 90% (-2) | — |
-| Qwen3-VL-8B | 8B | 91% | — | **93% (+2)** | 75% (-16) |
-| Qwen3-VL-4B | 4B | 91% | — | 88% (-3) | 85% (-6) |
-| Qwen2.5-VL-7B | 7B | 90% | 86% (-4) | 90% (0) | ✗ |
-| Qwen3.5-4B | 4B | 90% | 89% (-1) | 89% (-1) | — |
+| Model | Params | Baseline | ToMe r=4 | Compressed 50% |
+|---|---|---|---|---|
+| **InternVL3-2B** | 2B | **95%** | — | 94% (-1) |
+| Qwen2.5-VL-3B | 3B | 94% | 91% (-3) | 75% (-19) |
+| Qwen3.5-2B | 2B | 94% | 93% (-1) | 93% (-1) |
+| InternVL3-1B | 1B | 93% | — | **94% (+1)** |
+| Qwen3.5-0.8B | 0.8B | 93% | **94% (+1)** | 93% (0) |
+| Qwen3-VL-2B | 2B | 92% | — | 92% (0) |
+| Qwen3.5-9B | 9B | 92% | 91% (-1) | 90% (-2) |
+| Qwen3-VL-8B | 8B | 91% | — | **93% (+2)** |
+| Qwen3-VL-4B | 4B | 91% | — | 88% (-3) |
+| Qwen2.5-VL-7B | 7B | 90% | 86% (-4) | 90% (0) |
+| Qwen3.5-4B | 4B | 90% | 89% (-1) | 89% (-1) |
 
 ### TextVQA — OCR Reading (50 samples, open-ended)
 
-| Model | Params | Baseline | ToMe r=4 | Compressed 50% | FastV |
-|---|---|---|---|---|---|
-| Qwen3.5-2B | 2B | **80%** | 78% (-2) | 74% (-6) | — |
-| InternVL3-2B | 2B | 78% | — | 72% (-6) | — |
-| Qwen3-VL-2B | 2B | 76% | — | **76% (0)** | 66% (-10) |
-| Qwen2.5-VL-3B | 3B | 72% | 42% (-30) | 60% (-12) | 40% (-32) |
-| Qwen3-VL-4B | 4B | 72% | — | **72% (0)** | 56% (-16) |
-| Qwen3.5-0.8B | 0.8B | 70% | 64% (-6) | 52% (-18) | — |
-| Qwen3-VL-8B | 8B | 70% | — | **70% (0)** | 54% (-16) |
-| Qwen2.5-VL-7B | 7B | 66% | 52% (-14) | **68% (+2)** | ✗ |
-| Qwen3.5-9B | 9B | 56% | **62% (+6)** | 56% (0) | — |
-| Qwen3.5-4B | 4B | 52% | **64% (+12)** | 52% (0) | — |
-| InternVL3-1B | 1B | 50% | — | 50% (0) | — |
+| Model | Params | Baseline | ToMe r=4 | Compressed 50% |
+|---|---|---|---|---|
+| Qwen3.5-2B | 2B | **80%** | 78% (-2) | 74% (-6) |
+| InternVL3-2B | 2B | 78% | — | 72% (-6) |
+| Qwen3-VL-2B | 2B | 76% | — | **76% (0)** |
+| Qwen2.5-VL-3B | 3B | 72% | 42% (-30) | 60% (-12) |
+| Qwen3-VL-4B | 4B | 72% | — | **72% (0)** |
+| Qwen3.5-0.8B | 0.8B | 70% | 64% (-6) | 52% (-18) |
+| Qwen3-VL-8B | 8B | 70% | — | **70% (0)** |
+| Qwen2.5-VL-7B | 7B | 66% | 52% (-14) | **68% (+2)** |
+| Qwen3.5-9B | 9B | 56% | **62% (+6)** | 56% (0) |
+| Qwen3.5-4B | 4B | 52% | **64% (+12)** | 52% (0) |
+| InternVL3-1B | 1B | 50% | — | 50% (0) |
 
 ### GQA — Visual Reasoning (50 samples, open-ended)
 
-| Model | Params | Baseline | ToMe r=4 | Compressed 50% | FastV |
-|---|---|---|---|---|---|
-| **Qwen3.5-2B** | 2B | **68%** | 66% (-2) | 68% (0) | — |
-| InternVL3-2B | 2B | 66% | — | 66% (0) | — |
-| Qwen3-VL-4B | 4B | 66% | — | 62% (-4) | 50% (-16) |
-| Qwen3.5-0.8B | 0.8B | 66% | 60% (-6) | 60% (-6) | — |
-| InternVL3-1B | 1B | 62% | — | 58% (-4) | — |
-| Qwen2.5-VL-3B | 3B | 58% | 54% (-4) | 52% (-6) | 42% (-16) |
-| Qwen2.5-VL-7B | 7B | 58% | 58% (0) | 50% (-8) | — |
-| Qwen3.5-4B | 4B | 58% | 60% (+2) | **64% (+6)** | — |
-| Qwen3.5-9B | 9B | 56% | **64% (+8)** | **62% (+6)** | — |
-| Qwen3-VL-2B | 2B | 52% | — | **58% (+6)** | 0% |
-| Qwen3-VL-8B | 8B | 48% | — | **54% (+6)** | 42% (-6) |
+| Model | Params | Baseline | ToMe r=4 | Compressed 50% |
+|---|---|---|---|---|
+| **Qwen3.5-2B** | 2B | **68%** | 66% (-2) | 68% (0) |
+| InternVL3-2B | 2B | 66% | — | 66% (0) |
+| Qwen3-VL-4B | 4B | 66% | — | 62% (-4) |
+| Qwen3.5-0.8B | 0.8B | 66% | 60% (-6) | 60% (-6) |
+| InternVL3-1B | 1B | 62% | — | 58% (-4) |
+| Qwen2.5-VL-3B | 3B | 58% | 54% (-4) | 52% (-6) |
+| Qwen2.5-VL-7B | 7B | 58% | 58% (0) | 50% (-8) |
+| Qwen3.5-4B | 4B | 58% | 60% (+2) | **64% (+6)** |
+| Qwen3.5-9B | 9B | 56% | **64% (+8)** | **62% (+6)** |
+| Qwen3-VL-2B | 2B | 52% | — | **58% (+6)** |
+| Qwen3-VL-8B | 8B | 48% | — | **54% (+6)** |
 
 ### MMBench — Multi-ability (50 samples, multiple choice)
 
-| Model | Params | Baseline | ToMe r=4 | Compressed 50% | FastV |
-|---|---|---|---|---|---|
-| **InternVL3-2B** | 2B | **98%** | — | 96% (-2) | — |
-| Qwen2.5-VL-7B | 7B | 96% | 96% (0) | 94% (-2) | — |
-| Qwen3-VL-4B | 4B | 96% | — | 94% (-2) | 90% (-6) |
-| Qwen3-VL-8B | 8B | 96% | — | 94% (-2) | 78% (-18) |
-| Qwen3.5-9B | 9B | 96% | 90% (-6) | 96% (0) | — |
-| Qwen2.5-VL-3B | 3B | 90% | 82% (-8) | 86% (-4) | 66% (-24) |
-| InternVL3-1B | 1B | 88% | — | 86% (-2) | — |
-| Qwen3-VL-2B | 2B | 84% | — | 80% (-4) | 2% |
-| Qwen3.5-2B | 2B | 82% | 82% (0) | 82% (0) | — |
-| Qwen3.5-0.8B | 0.8B | 58% | **62% (+4)** | 54% (-4) | — |
-| Qwen3.5-4B | 4B | 46% | 44% (-2) | 36% (-10) | — |
+| Model | Params | Baseline | ToMe r=4 | Compressed 50% |
+|---|---|---|---|---|
+| **InternVL3-2B** | 2B | **98%** | — | 96% (-2) |
+| Qwen2.5-VL-7B | 7B | 96% | 96% (0) | 94% (-2) |
+| Qwen3-VL-4B | 4B | 96% | — | 94% (-2) |
+| Qwen3-VL-8B | 8B | 96% | — | 94% (-2) |
+| Qwen3.5-9B | 9B | 96% | 90% (-6) | 96% (0) |
+| Qwen2.5-VL-3B | 3B | 90% | 82% (-8) | 86% (-4) |
+| InternVL3-1B | 1B | 88% | — | 86% (-2) |
+| Qwen3-VL-2B | 2B | 84% | — | 80% (-4) |
+| Qwen3.5-2B | 2B | 82% | 82% (0) | 82% (0) |
+| Qwen3.5-0.8B | 0.8B | 58% | **62% (+4)** | 54% (-4) |
+| Qwen3.5-4B | 4B | 46% | 44% (-2) | 36% (-10) |
 
 ### MVBench — Video Understanding (19 tasks, 5 samples/task)
 
@@ -463,7 +462,7 @@ Accuracy is hardware-independent (bit-identical output on any Apple Silicon). La
 | Qwen3.5-4B | 4B | 1% | 2% (+1) |
 | InternVL3 | 1-2B | — | — |
 
-`—` = architecturally incompatible (auto-skipped). `✗` = produces garbage output. ToMe incompatible with Qwen3-VL (deepstack) and InternVL3 (pixel shuffle). FastV incompatible with Qwen3.5 (DeltaNet), InternVL3, Qwen2.5-VL-7B (over-prunes), and Qwen3-VL-2B (garbage output). InternVL3 does not support multi-image/video inference (MVBench). Qwen3.5-4B: known 4-bit quantization issue on MCQ/video benchmarks (official FP16: MMBench 89%, our 4-bit: 46%).
+`—` = architecturally incompatible (auto-skipped). ToMe incompatible with Qwen3-VL (deepstack) and InternVL3 (pixel shuffle). InternVL3 does not support multi-image/video inference (MVBench). Qwen3.5-4B: known 4-bit quantization issue on MCQ/video benchmarks (official FP16: MMBench 89%, our 4-bit: 46%).
 
 ### SurveillanceVQA — Anomaly Detection (1,827 samples, yes/no)
 
@@ -494,19 +493,19 @@ Key findings: **TrioCore optimizations do NOT cause regression** — TrioCore is
 
 ### Latency — ms/sample (POPE)
 
-| Model | Baseline | ToMe r=4 | Compressed 50% | FastV | Best Speedup |
-|---|---|---|---|---|---|
-| Qwen3.5-0.8B | 148ms | 167ms | **135ms** | — | 1.09x |
-| Qwen3.5-2B | 251ms | 297ms | **221ms** | — | 1.14x |
-| Qwen3-VL-2B | 275ms | — | **223ms** | 226ms | 1.23x |
-| Qwen2.5-VL-3B | 354ms | 629ms | **279ms** | 288ms | 1.27x |
-| Qwen3.5-4B | 407ms | 454ms | **337ms** | — | 1.20x |
-| Qwen3-VL-4B | 414ms | — | **335ms** | 341ms | 1.24x |
-| Qwen2.5-VL-7B | 522ms | 693ms | **384ms** | — | 1.36x |
-| Qwen3-VL-8B | 633ms | — | **503ms** | 516ms | 1.26x |
-| Qwen3.5-9B | 632ms | 694ms | **506ms** | — | 1.25x |
-| InternVL3-1B | 677ms | — | **577ms** | — | 1.17x |
-| InternVL3-2B | 967ms | — | **736ms** | — | 1.31x |
+| Model | Baseline | ToMe r=4 | Compressed 50% | Best Speedup |
+|---|---|---|---|---|
+| Qwen3.5-0.8B | 148ms | 167ms | **135ms** | 1.09x |
+| Qwen3.5-2B | 251ms | 297ms | **221ms** | 1.14x |
+| Qwen3-VL-2B | 275ms | — | **223ms** | 1.23x |
+| Qwen2.5-VL-3B | 354ms | 629ms | **279ms** | 1.27x |
+| Qwen3.5-4B | 407ms | 454ms | **337ms** | 1.20x |
+| Qwen3-VL-4B | 414ms | — | **335ms** | 1.24x |
+| Qwen2.5-VL-7B | 522ms | 693ms | **384ms** | 1.36x |
+| Qwen3-VL-8B | 633ms | — | **503ms** | 1.26x |
+| Qwen3.5-9B | 632ms | 694ms | **506ms** | 1.25x |
+| InternVL3-1B | 677ms | — | **577ms** | 1.17x |
+| InternVL3-2B | 967ms | — | **736ms** | 1.31x |
 
 ### Frame-to-frame (KV cache reuse, 480p 5-frame video)
 
@@ -567,7 +566,6 @@ Based on our [full benchmark analysis](research/benchmark-analysis.md) (11 model
 Optimization techniques used in TrioCore:
 
 - **ToMe** (Token Merging) — Bolya et al., "Token Merging: Your ViT But Faster", ICLR 2023. [arXiv:2210.09461](https://arxiv.org/abs/2210.09461)
-- **FastV** — Chen et al., "An Image is Worth 1/2 Tokens After Layer 2: Plug-and-Play Inference Acceleration for Large Vision-Language Models", ECCV 2024. [arXiv:2403.06764](https://arxiv.org/abs/2403.06764)
 - **StreamingLLM / StreamMem** — Xiao et al., "Efficient Streaming Language Models with Attention Sinks", ICLR 2024. [arXiv:2309.17453](https://arxiv.org/abs/2309.17453); Du et al., "StreamMem: Streaming KV Cache Management for Video Understanding", 2025. [arXiv:2504.08498](https://arxiv.org/abs/2504.08498)
 
 Evaluation benchmarks:

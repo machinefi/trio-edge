@@ -43,15 +43,10 @@ class ModelEntry:
     hf_id: str
     profile: ModelProfile
     tier: int = 1
-    _supports_fastv: bool = True
 
     @property
     def supports_tome(self) -> bool:
         return self.profile.supports_tome
-
-    @property
-    def supports_fastv(self) -> bool:
-        return self._supports_fastv
 
     @property
     def supports_kv_reuse(self) -> bool:
@@ -66,32 +61,32 @@ class ModelEntry:
         return self.profile.family
 
 
-def _entry(key: str, hf_id: str, *, tier: int = 1, supports_fastv: bool = True) -> ModelEntry:
+def _entry(key: str, hf_id: str, *, tier: int = 1) -> ModelEntry:
     return ModelEntry(
         key=key, hf_id=hf_id, profile=get_profile(hf_id),
-        tier=tier, _supports_fastv=supports_fastv,
+        tier=tier,
     )
 
 
 MODEL_REGISTRY: dict[str, ModelEntry] = {
     # Qwen2.5-VL
     "qwen2.5-vl-3b": _entry("qwen2.5-vl-3b", "mlx-community/Qwen2.5-VL-3B-Instruct-4bit"),
-    "qwen2.5-vl-7b": _entry("qwen2.5-vl-7b", "mlx-community/Qwen2.5-VL-7B-Instruct-4bit", supports_fastv=False),
+    "qwen2.5-vl-7b": _entry("qwen2.5-vl-7b", "mlx-community/Qwen2.5-VL-7B-Instruct-4bit"),
     # Qwen3-VL
-    "qwen3-vl-2b": _entry("qwen3-vl-2b", "mlx-community/Qwen3-VL-2B-Instruct-4bit", supports_fastv=False),
+    "qwen3-vl-2b": _entry("qwen3-vl-2b", "mlx-community/Qwen3-VL-2B-Instruct-4bit"),
     "qwen3-vl-4b": _entry("qwen3-vl-4b", "mlx-community/Qwen3-VL-4B-Instruct-4bit"),
     "qwen3-vl-8b": _entry("qwen3-vl-8b", "mlx-community/Qwen3-VL-8B-Instruct-4bit"),
-    # Qwen3.5 (DeltaNet hybrid) — FastV incompatible (DeltaNet layers have no self_attn)
-    "qwen3.5-0.8b": _entry("qwen3.5-0.8b", "mlx-community/Qwen3.5-0.8B-MLX-4bit", supports_fastv=False),
-    "qwen3.5-2b": _entry("qwen3.5-2b", "mlx-community/Qwen3.5-2B-4bit", supports_fastv=False),
-    "qwen3.5-4b": _entry("qwen3.5-4b", "mlx-community/Qwen3.5-4B-MLX-4bit", supports_fastv=False),
-    "qwen3.5-9b": _entry("qwen3.5-9b", "mlx-community/Qwen3.5-9B-MLX-4bit", supports_fastv=False),
-    # InternVL3 — FastV produces garbage, ToMe incompatible (pixel_shuffle)
-    "internvl3-1b": _entry("internvl3-1b", "mlx-community/InternVL3-1B-4bit", supports_fastv=False),
-    "internvl3-2b": _entry("internvl3-2b", "mlx-community/InternVL3-2B-4bit", supports_fastv=False),
+    # Qwen3.5 (DeltaNet hybrid)
+    "qwen3.5-0.8b": _entry("qwen3.5-0.8b", "mlx-community/Qwen3.5-0.8B-MLX-4bit"),
+    "qwen3.5-2b": _entry("qwen3.5-2b", "mlx-community/Qwen3.5-2B-4bit"),
+    "qwen3.5-4b": _entry("qwen3.5-4b", "mlx-community/Qwen3.5-4B-MLX-4bit"),
+    "qwen3.5-9b": _entry("qwen3.5-9b", "mlx-community/Qwen3.5-9B-MLX-4bit"),
+    # InternVL3 — ToMe incompatible (pixel_shuffle)
+    "internvl3-1b": _entry("internvl3-1b", "mlx-community/InternVL3-1B-4bit"),
+    "internvl3-2b": _entry("internvl3-2b", "mlx-community/InternVL3-2B-4bit"),
     # FastVLM — CoreML blocker, Tier 2
-    "fastvlm-0.5b": _entry("fastvlm-0.5b", "InsightKeeper/FastVLM-0.5B-MLX-4bit", tier=2, supports_fastv=False),
-    "fastvlm-1.5b": _entry("fastvlm-1.5b", "InsightKeeper/FastVLM-1.5B-MLX-4bit", tier=2, supports_fastv=False),
+    "fastvlm-0.5b": _entry("fastvlm-0.5b", "InsightKeeper/FastVLM-0.5B-MLX-4bit", tier=2),
+    "fastvlm-1.5b": _entry("fastvlm-1.5b", "InsightKeeper/FastVLM-1.5B-MLX-4bit", tier=2),
     # nanoLLaVA — demoted to T2 (upstream mlx_vlm issues, 0% POPE accuracy)
     "nanollava-1.5": _entry("nanollava-1.5", "mlx-community/nanoLLaVA-1.5-4bit", tier=2),
 }
@@ -148,27 +143,6 @@ OPTIM_PRESETS: dict[str, OptimConfig] = {
         description="Token Merging r=8",
         engine_kwargs={"tome_enabled": True, "tome_r": 8, "tome_metric": "hidden", "tome_min_keep_ratio": 0.3},
         requires=("supports_tome",),
-    ),
-    "fastv": OptimConfig(
-        name="fastv",
-        description="FastV attention pruning (ratio=0.5, layer=2)",
-        engine_kwargs={"fastv_enabled": True, "fastv_ratio": 0.5, "fastv_layer": 2},
-        requires=("supports_fastv",),
-    ),
-    "fastv_r30": OptimConfig(
-        name="fastv_r30",
-        description="FastV attention pruning (ratio=0.3, layer=2)",
-        engine_kwargs={"fastv_enabled": True, "fastv_ratio": 0.3, "fastv_layer": 2},
-        requires=("supports_fastv",),
-    ),
-    "tome_fastv": OptimConfig(
-        name="tome_fastv",
-        description="ToMe r=4 + FastV combined",
-        engine_kwargs={
-            "tome_enabled": True, "tome_r": 4, "tome_metric": "hidden", "tome_min_keep_ratio": 0.3,
-            "fastv_enabled": True, "fastv_ratio": 0.5, "fastv_layer": 2,
-        },
-        requires=("supports_tome", "supports_fastv"),
     ),
     "compressed_30": OptimConfig(
         name="compressed_30",

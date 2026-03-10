@@ -161,11 +161,11 @@ class TestLoadIdempotency:
 
 
 class TestBackendSwap:
-    """Backend swap logic in resolve_backend: ToMe-only vs FastV+ToMe."""
+    """Backend swap logic in resolve_backend: ToMe-only."""
 
     @patch("trio_core.backends.auto_backend")
     def test_tome_only_swaps_to_tome_backend(self, mock_auto):
-        """tome_enabled=True, fastv_enabled=False → ToMeMLXBackend."""
+        """tome_enabled=True → ToMeMLXBackend."""
         from trio_core.backends import resolve_backend
 
         base_backend = MagicMock()
@@ -184,56 +184,6 @@ class TestBackendSwap:
 
         assert result is mock_tome_instance
         mock_tb.assert_called_once()
-
-    @patch("trio_core.backends.auto_backend")
-    def test_fastv_plus_tome_compound(self, mock_auto):
-        """fastv_enabled=True + tome_enabled=True → FastVMLXBackend compound."""
-        from trio_core.backends import resolve_backend
-
-        base_backend = MagicMock()
-        base_backend.backend_name = "mlx"
-        base_backend.device_info.device_name = "Apple M3"
-        mock_auto.return_value = base_backend
-
-        mock_fastv_instance = MagicMock()
-        mock_fastv_instance.backend_name = "fastv_mlx"
-
-        config = EngineConfig(
-            fastv_enabled=True, fastv_ratio=0.5, fastv_layer=2,
-            tome_enabled=True, tome_r=4, tome_metric="hidden",
-        )
-
-        mock_fastv_cls = MagicMock(return_value=mock_fastv_instance)
-        with patch.dict("sys.modules", {"trio_core.fastv_backend": MagicMock(FastVMLXBackend=mock_fastv_cls)}):
-            result = resolve_backend(config)
-
-        mock_fastv_cls.assert_called_once()
-        call_kwargs = mock_fastv_cls.call_args
-        assert call_kwargs.kwargs.get("tome_r") == 4 or call_kwargs[1].get("tome_r") == 4
-
-    @patch("trio_core.backends.auto_backend")
-    def test_fastv_without_tome(self, mock_auto):
-        """fastv_enabled=True, tome_enabled=False → FastVMLXBackend without tome kwargs."""
-        from trio_core.backends import resolve_backend
-
-        base_backend = MagicMock()
-        base_backend.backend_name = "mlx"
-        base_backend.device_info.device_name = "Apple M3"
-        mock_auto.return_value = base_backend
-
-        mock_fastv_instance = MagicMock()
-        mock_fastv_instance.backend_name = "fastv_mlx"
-
-        config = EngineConfig(fastv_enabled=True, fastv_ratio=0.5, fastv_layer=2)
-
-        mock_fastv_cls = MagicMock(return_value=mock_fastv_instance)
-        with patch.dict("sys.modules", {"trio_core.fastv_backend": MagicMock(FastVMLXBackend=mock_fastv_cls)}):
-            result = resolve_backend(config)
-
-        mock_fastv_cls.assert_called_once()
-        call_kwargs = mock_fastv_cls.call_args
-        assert "tome_r" not in (call_kwargs.kwargs or {})
-
 
 class TestFeatureFlagMethods:
     """Feature flags: early_stop, visual_similarity, streaming_memory (lines 181, 185, 189)."""

@@ -6,7 +6,7 @@ Usage:
     python examples/run_bench.py --models qwen2.5-vl-3b --benchmarks pope -n 50
 
     # Full sweep
-    python examples/run_bench.py --benchmarks pope,gqa --configs baseline,tome_r4,fastv -n 100
+    python examples/run_bench.py --benchmarks pope,gqa --configs baseline,tome_r4,compressed_50 -n 100
 
     # Preview what will run
     python examples/run_bench.py --benchmarks pope --configs baseline,tome_r4 --dry-run
@@ -51,8 +51,6 @@ def cmd_list(args):
             caps = []
             if entry.supports_tome:
                 caps.append("tome")
-            if entry.supports_fastv:
-                caps.append("fastv")
             if entry.supports_kv_reuse:
                 caps.append("kv_reuse")
             print(f"{'':>20} caps: {', '.join(caps)}")
