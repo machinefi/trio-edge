@@ -143,6 +143,7 @@ def cmd_run(args):
         skip_existing=args.skip_existing,
         results_dir=Path(args.results_dir),
         benchmark_kwargs=bm_kwargs,
+        adapter_path=args.adapter_path,
     )
 
     if args.dry_run:
@@ -192,6 +193,7 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="Preview combos without running")
     parser.add_argument("--skip-existing", action="store_true", help="Skip combos with existing results")
     parser.add_argument("--results-dir", default="research/bench-results", help="Results directory")
+    parser.add_argument("--adapter-path", default=None, help="Path to LoRA adapter directory")
 
     # Benchmark-specific
     parser.add_argument("--split", default=None, help="POPE split (random/popular/adversarial)")

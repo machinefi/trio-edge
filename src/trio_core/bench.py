@@ -422,7 +422,7 @@ class ResultStore:
 # 6. Engine Factory
 # ---------------------------------------------------------------------------
 
-def build_engine(model: ModelEntry, config: OptimConfig, *, max_tokens: int = 16):
+def build_engine(model: ModelEntry, config: OptimConfig, *, max_tokens: int = 16, adapter_path: str | None = None):
     """Build and load an engine for benchmarking.
 
     Returns (engine_or_backend, is_mlxvlm_baseline).
@@ -461,6 +461,8 @@ def build_engine(model: ModelEntry, config: OptimConfig, *, max_tokens: int = 16
         "motion_enabled": False,
         "auto_optimize": False,
     }
+    if adapter_path:
+        config_kwargs["adapter_path"] = adapter_path
     for k, v in kwargs.items():
         if not k.startswith("_"):
             config_kwargs[k] = v
@@ -570,6 +572,7 @@ class BenchSweep:
         skip_existing: bool = False,
         results_dir: Path | str = RESULTS_DIR,
         benchmark_kwargs: dict[str, Any] | None = None,
+        adapter_path: str | None = None,
     ):
         self.models = models or get_models(tier=1)
         self.benchmark_names = benchmarks or ["pope"]
@@ -579,6 +582,7 @@ class BenchSweep:
         self.skip_existing = skip_existing
         self.store = ResultStore(results_dir)
         self.benchmark_kwargs = benchmark_kwargs or {}
+        self.adapter_path = adapter_path
 
     def plan(self) -> list[tuple[ModelEntry, str, OptimConfig]]:
         """Preview what will run, auto-filtering incompatible combos."""
@@ -658,7 +662,7 @@ class BenchSweep:
 
             try:
                 tic = time.perf_counter()
-                engine_or_backend, is_mlxvlm = build_engine(model, config, max_tokens=self.max_tokens)
+                engine_or_backend, is_mlxvlm = build_engine(model, config, max_tokens=self.max_tokens, adapter_path=self.adapter_path)
                 load_time = time.perf_counter() - tic
                 print(f"  Loaded in {load_time:.1f}s")
 

@@ -1,5 +1,5 @@
 {
-  "rank": 8,
-  "alpha": 16.0,
+  "rank": 4,
+  "alpha": 8.0,
   "dropout": 0.0
 }
