@@ -2,7 +2,7 @@
 
 Handles:
   - WebSocket connect/reconnect with exponential backoff
-  - Challenge-response handshake (protocol v3)
+  - Challenge-response handshake with Ed25519 device identity (protocol v3)
   - Device pairing (first-time registration)
   - Authenticated connection (subsequent runs with saved token)
   - Ping/pong keepalive (30s)
@@ -25,6 +25,7 @@ from .protocol import (
     InvokeResult,
     connect_params,
     generate_id,
+    load_or_create_identity,
     make_req,
     make_res,
     pair_request_params,
@@ -56,6 +57,10 @@ class ClawNode:
         self._ws: ClientConnection | None = None
         self._running = False
 
+        # Load or create Ed25519 device identity
+        self._device_id, self._private_key, self._raw_pub = load_or_create_identity()
+        logger.info("Device ID: %s", self._device_id[:16] + "...")
+
     # =========================================================================
     # Pairing — first-time device registration
     # =========================================================================
@@ -74,8 +79,21 @@ class ClawNode:
             if frame.get("event") != "connect.challenge":
                 raise RuntimeError(f"Expected connect.challenge, got: {frame}")
 
-            # 2. Send connect (no auth)
-            params = connect_params(self.node_id, token=None)
+            # Extract nonce from challenge
+            nonce = ""
+            payload_json = frame.get("payloadJSON", "{}")
+            if payload_json:
+                challenge = json.loads(payload_json)
+                nonce = challenge.get("nonce", "")
+
+            # 2. Send connect with device identity (no auth token for pairing)
+            params = connect_params(
+                self.node_id, token=None,
+                nonce=nonce,
+                device_id=self._device_id,
+                private_key=self._private_key,
+                raw_pub=self._raw_pub,
+            )
             await ws.send(json.dumps(make_req("connect", params)))
 
             # 3. Read hello response
@@ -188,14 +206,27 @@ class ClawNode:
             await ws.close()
 
     async def _handshake(self, ws: ClientConnection) -> None:
-        """Challenge-response handshake with auth token."""
+        """Challenge-response handshake with Ed25519 device identity."""
         # 1. Receive connect.challenge
         frame = json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
         if frame.get("event") != "connect.challenge":
             raise RuntimeError(f"Expected connect.challenge, got: {frame}")
 
-        # 2. Send connect with auth
-        params = connect_params(self.node_id, token=self.token)
+        # Extract nonce
+        nonce = ""
+        payload_json = frame.get("payloadJSON", "{}")
+        if payload_json:
+            challenge = json.loads(payload_json)
+            nonce = challenge.get("nonce", "")
+
+        # 2. Send connect with device identity + auth token
+        params = connect_params(
+            self.node_id, token=self.token,
+            nonce=nonce,
+            device_id=self._device_id,
+            private_key=self._private_key,
+            raw_pub=self._raw_pub,
+        )
         await ws.send(json.dumps(make_req("connect", params)))
 
         # 3. Expect hello-ok
