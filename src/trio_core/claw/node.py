@@ -189,7 +189,11 @@ class ClawNode:
                         await self._handle_event(ws, frame)
                     elif frame_type == "req":
                         await self._handle_request(ws, frame)
-                    # Ignore "res" frames
+                    elif frame_type == "res":
+                        logger.debug("Response frame (ignored): id=%s ok=%s",
+                                     frame.get("id"), frame.get("ok"))
+                    else:
+                        logger.debug("Unknown frame type: %s", frame_type)
             finally:
                 ping_task.cancel()
                 try:
@@ -232,25 +236,71 @@ class ClawNode:
     async def _handle_event(self, ws: ClientConnection, frame: dict) -> None:
         """Dispatch incoming events."""
         event = frame.get("event", "")
+        logger.debug("Event received: %s", event)
 
         if event == "node.invoke.request":
-            payload_json = frame.get("payloadJSON", "{}")
-            req = InvokeRequest.from_payload(payload_json)
-            # Dispatch asynchronously
-            asyncio.create_task(self._dispatch_invoke(ws, req))
+            # Try payloadJSON first, then payload, then top-level params
+            payload_json = frame.get("payloadJSON", "")
+            if payload_json and payload_json != "{}":
+                raw = payload_json
+            elif "payload" in frame:
+                p = frame["payload"]
+                raw = json.dumps(p) if isinstance(p, dict) else p
+            elif "params" in frame:
+                raw = json.dumps(frame["params"]) if isinstance(frame["params"], dict) else frame["params"]
+            else:
+                raw = "{}"
+
+            try:
+                req = InvokeRequest.from_payload(raw)
+            except Exception:
+                logger.exception("Failed to parse invoke payload: %s", raw[:500])
+                return
+            logger.info("Invoke received: command=%s id=%s", req.command, req.id)
+            # Dispatch asynchronously — use _safe_dispatch to log exceptions
+            asyncio.create_task(self._safe_dispatch(ws, req))
 
         elif event == "tick":
             pass  # Gateway heartbeat, ignore
 
         else:
-            logger.debug("Unknown event: %s", event)
+            logger.debug("Unhandled event: %s", event)
 
     async def _handle_request(self, ws: ClientConnection, frame: dict) -> None:
-        """Handle incoming request frames (e.g., ping)."""
+        """Handle incoming request frames (ping, invoke)."""
         method = frame.get("method", "")
+        logger.debug("Request received: method=%s id=%s", method, frame.get("id"))
+
         if method == "ping":
             res = make_res(frame.get("id", ""), ok=True)
             await ws.send(json.dumps(res))
+        elif method == "node.invoke":
+            # Gateway may send invokes as req frames instead of events
+            params = frame.get("params", {})
+            try:
+                req = InvokeRequest(
+                    id=params.get("id", frame.get("id", "")),
+                    node_id=params.get("nodeId", self.node_id),
+                    command=params.get("command", ""),
+                    params=params.get("params", {}),
+                )
+            except Exception:
+                logger.exception("Failed to parse invoke request: %s", frame)
+                return
+            if not req.command:
+                logger.warning("Invoke request missing command: %s", frame)
+                return
+            logger.info("Invoke via req: command=%s id=%s", req.command, req.id)
+            asyncio.create_task(self._safe_dispatch(ws, req))
+        else:
+            logger.debug("Unhandled request method: %s", method)
+
+    async def _safe_dispatch(self, ws: ClientConnection, req: InvokeRequest) -> None:
+        """Wrapper that ensures dispatch exceptions are always logged."""
+        try:
+            await self._dispatch_invoke(ws, req)
+        except Exception:
+            logger.exception("Unhandled error in dispatch for %s (id=%s)", req.command, req.id)
 
     async def _dispatch_invoke(self, ws: ClientConnection, req: InvokeRequest) -> None:
         """Execute a command and send the result back."""
@@ -269,10 +319,14 @@ class ClawNode:
                     error_code="INTERNAL_ERROR", error_message=str(e),
                 )
 
+        logger.info("Invoke result: command=%s ok=%s id=%s", req.command, result.ok, req.id)
+        frame = result.to_req_frame()
         try:
-            await ws.send(json.dumps(result.to_req_frame()))
+            payload = json.dumps(frame)
+            logger.debug("Sending result frame (%d bytes)", len(payload))
+            await ws.send(payload)
         except Exception:
-            logger.exception("Failed to send invoke result")
+            logger.exception("Failed to send invoke result for %s", req.id)
 
     async def _ping_loop(self, ws: ClientConnection) -> None:
         """Send WebSocket ping every 30 seconds."""

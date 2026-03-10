@@ -9,8 +9,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
-import shutil
-import subprocess
 import time
 
 import cv2
@@ -119,16 +117,23 @@ class CommandHandler:
         logger.info("Frame captured: %s, dtype=%s", frame_bgr.shape, frame_bgr.dtype)
 
         if self.engine is None:
+            logger.error("vision.analyze failed: engine is None (model not loaded)")
             return self._error(req, "ENGINE_NOT_LOADED", "VLM engine not loaded")
 
         # VLM inference (blocking → thread)
+        logger.info("Starting VLM inference...")
+
         def _infer():
             rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
             logger.info("RGB frame: %s, min=%.2f, max=%.2f", rgb.shape, rgb.min(), rgb.max())
             return self.engine.analyze_frame(rgb, question)
 
         t0 = time.monotonic()
-        result = await asyncio.to_thread(_infer)
+        try:
+            result = await asyncio.to_thread(_infer)
+        except Exception as e:
+            logger.exception("VLM inference failed")
+            return self._error(req, "INTERNAL_ERROR", f"VLM inference error: {e}")
         elapsed_ms = (time.monotonic() - t0) * 1000
         logger.info("VLM result: %r (%.0fms)", result.text[:100], elapsed_ms)
 
@@ -184,54 +189,32 @@ class CommandHandler:
         return device_id
 
     def _capture_frame(self, source: str) -> np.ndarray | None:
-        """Capture a single frame from the given source."""
-        is_rtsp = source.startswith("rtsp://")
+        """Capture a single frame from the given source.
 
-        if is_rtsp:
-            return self._capture_rtsp(source)
+        Uses OpenCV VideoCapture for both local cameras and RTSP streams.
+        OpenCV's built-in ffmpeg backend handles RTSP more reliably than
+        shelling out to the ffmpeg CLI (avoids Tailscale/tun routing issues).
+        """
+        masked = _mask_url(source) if "://" in source else source
+        logger.info("Capture starting: %s", masked)
 
-        # OpenCV VideoCapture for local cameras
         cap_source = int(source) if source.isdigit() else source
         cap = cv2.VideoCapture(cap_source)
         if not cap.isOpened():
+            logger.error("VideoCapture failed to open: %s", masked)
             return None
         try:
-            # Skip a few frames for camera warmup
+            # Skip a few frames for camera warmup / RTSP keyframe sync
             for _ in range(3):
                 cap.read()
             ret, frame = cap.read()
-            return frame if ret else None
+            if not ret or frame is None:
+                logger.error("VideoCapture read failed: %s", masked)
+                return None
+            logger.info("Frame captured: %s from %s", frame.shape, masked)
+            return frame
         finally:
             cap.release()
-
-    def _capture_rtsp(self, url: str) -> np.ndarray | None:
-        """Capture a single frame from RTSP using ffmpeg."""
-        if not shutil.which("ffmpeg"):
-            logger.error("ffmpeg not found")
-            return None
-
-        try:
-            # Use ffmpeg to grab one frame as JPEG
-            proc = subprocess.run(
-                [
-                    "ffmpeg", "-rtsp_transport", "tcp",
-                    "-i", url,
-                    "-vframes", "1", "-f", "image2pipe",
-                    "-vcodec", "mjpeg", "-q:v", "2",
-                    "-v", "error", "-",
-                ],
-                capture_output=True, timeout=10,
-            )
-            if proc.returncode != 0 or not proc.stdout:
-                logger.error("ffmpeg capture failed: %s", proc.stderr.decode()[:200])
-                return None
-
-            # Decode JPEG
-            arr = np.frombuffer(proc.stdout, dtype=np.uint8)
-            return cv2.imdecode(arr, cv2.IMREAD_COLOR)
-        except (subprocess.TimeoutExpired, Exception) as e:
-            logger.error("RTSP capture error: %s", e)
-            return None
 
     # =========================================================================
     # Result helpers

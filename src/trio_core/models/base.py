@@ -193,6 +193,16 @@ class KVCache:
         self.keys, self.values = v
         self.offset = self.keys.shape[2]
 
+    @property
+    def is_trimmable(self):
+        return True
+
+    def trim(self, n):
+        """Trim the cache by removing the last n entries."""
+        n = min(n, self.offset)
+        self.offset -= n
+        return n
+
 
 # ── Rotating KV Cache (bounded size, from mlx_lm) ──────────────────────────
 

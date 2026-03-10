@@ -265,10 +265,12 @@ class InvokeRequest:
     @classmethod
     def from_payload(cls, payload_json: str) -> InvokeRequest:
         data = json.loads(payload_json)
-        # params may be double-encoded
+        # Gateway may use "paramsJSON" (string) or "params" (dict/string)
         params = data.get("params", {})
+        if not params and "paramsJSON" in data:
+            params = data["paramsJSON"]
         if isinstance(params, str):
-            params = json.loads(params)
+            params = json.loads(params) if params else {}
         return cls(
             id=data["id"],
             node_id=data.get("nodeId", ""),
