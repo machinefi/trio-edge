@@ -775,31 +775,35 @@ def claw(
             raise typer.Exit(1)
         return
 
-    # Normal mode — load engine, connect as node
-    from trio_core import TrioCore, EngineConfig
+    # Normal mode — load engine (optional), connect as node
+    engine = None
+    if model or not camera:
+        # Load VLM engine if model specified or no camera-only mode
+        try:
+            from trio_core import TrioCore, EngineConfig
+            config_kwargs = {}
+            if model:
+                config_kwargs["model"] = model
+            if adapter:
+                config_kwargs["adapter_path"] = adapter
+            config = EngineConfig(**config_kwargs)
 
-    config_kwargs = {}
-    if model:
-        config_kwargs["model"] = model
-    if adapter:
-        config_kwargs["adapter_path"] = adapter
-    config = EngineConfig(**config_kwargs)
+            typer.echo(f"Loading model: {config.model} ...")
+            engine = TrioCore(config)
+            engine.load()
 
-    typer.echo(f"Loading model: {config.model} ...")
-    engine = TrioCore(config)
-    try:
-        engine.load()
-    except Exception as e:
-        _die_load_error(e, config.model)
-
-    health = engine.health()
-    typer.echo(f"Backend: {health.get('backend', {}).get('backend', 'unknown')}")
-    typer.echo(f"Device: {health.get('backend', {}).get('device', 'unknown')}")
+            health = engine.health()
+            typer.echo(f"Backend: {health.get('backend', {}).get('backend', 'unknown')}")
+            typer.echo(f"Device: {health.get('backend', {}).get('device', 'unknown')}")
+        except Exception as e:
+            typer.echo(f"Warning: VLM engine not loaded ({e}). Camera-only mode.", err=True)
 
     # Set up camera sources
     sources = list(camera) if camera else ["0"]
     handler = CommandHandler(engine=engine, camera_sources=sources)
     node = ClawNode(gateway_url=gateway, handler=handler)
+    if token:
+        node.token = token
 
     typer.echo(f"Connecting to Gateway: {gateway}")
     typer.echo(f"Cameras: {sources}")
