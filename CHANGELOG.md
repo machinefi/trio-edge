@@ -12,6 +12,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Accuracy regression test suite (POPE + TextVQA gate)
 - Native engine plan and inference pipeline documentation
 
+## [0.8.2] - 2026-03-10
+
+### Added
+- OpenClaw integration: `trio claw` connects to Gateway as a WebSocket node
+- `vision.watch` + `vision.watch.stop` for continuous remote camera monitoring
+- Ed25519 device identity for Gateway authentication
+- `camera.snap`, `camera.list`, `vision.analyze`, `vision.status` commands
+- Production hardening: graceful shutdown (SIGINT/SIGTERM), signal-based model reload (SIGHUP)
+- Health endpoint with detailed status (`/health`)
+- Structured JSON logging (`--json-logs` / `TRIO_LOG_JSON=1`)
+- Request body size limit (10 MB) and resolution clamping (4K max)
+
+### Fixed
+- Watch loop reconnect on RTSP failure
+- `<think>` tag stripping for Qwen3.5 models in all backends
+
+## [0.8.1] - 2026-03-09
+
+### Added
+- SurveillanceVQA benchmark: 1,827 samples across 13 UCF-Crime anomaly categories
+- LoRA fine-tuning pipeline (`scripts/prepare_surveillance_lora.py`)
+- Shipped LoRA adapter: `adapters/surveillance-qwen35-2b/` (97.6% detection, POPE 89%)
+- `--adapter-path` flag for bench.py and EngineConfig
+- mlx-vlm 0.4.0 compatibility patches (4 bugs fixed)
+
+### Changed
+- bench.py auto-bumps `max_tokens` for thinking models on MCQ benchmarks
+- BenchmarkRunner strips `<think>...</think>` tags from model output
+
+## [0.8.0] - 2026-03-07
+
+### Added
+- ModelAdapter abstraction: per-architecture dispatch for token IDs, merge, RoPE, vision encoder
+- 5 adapters: Qwen2.5-VL, Qwen3-VL, Qwen3.5, InternVL3, nanoLLaVA
+- InternVL3 (1B/2B) promoted to Tier 1 with Compressed backend support
+- nanoLLaVA promoted to Tier 1 with ToMe support (SigLIP ViT)
+- Unified benchmark framework: `bench.py` + `examples/run_bench.py` with 12 models, sweep configs, anomaly detection
+- 5 benchmark suites: POPE (100), TextVQA (50), GQA (50), MMBench (50), MVBench (12x5)
+- `--skip-existing`, `--dry-run`, `--report` modes for benchmark sweeps
+
+### Fixed
+- FastV backend: model-agnostic via `adapter.call_layer()`, MRoPE guarded with `adapter.uses_mrope`
+- Compressed/ToMe backends: proper guards for non-Qwen architectures
+- bench.py: `auto_optimize=False` to prevent baseline pollution
+
+### Results
+- InternVL3-2B: POPE 95%, MMBench 98% (new best)
+- Compressed 50% on 4B+ models acts as regularization, often improving accuracy
+- FastV: mostly harmful, default disabled
+
 ## [0.2.1] - 2026-03-06
 
 ### Added
@@ -55,7 +105,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Callback system with 10 lifecycle events
 - 120 unit tests
 
-[Unreleased]: https://github.com/machinefi/trio-core/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/machinefi/trio-core/compare/v0.8.2...HEAD
+[0.8.2]: https://github.com/machinefi/trio-core/compare/v0.8.1...v0.8.2
+[0.8.1]: https://github.com/machinefi/trio-core/compare/v0.8.0...v0.8.1
+[0.8.0]: https://github.com/machinefi/trio-core/compare/v0.2.1...v0.8.0
 [0.2.1]: https://github.com/machinefi/trio-core/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/machinefi/trio-core/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/machinefi/trio-core/releases/tag/v0.1.0
