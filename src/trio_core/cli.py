@@ -724,5 +724,88 @@ def _die_load_error(e: Exception, model: str) -> None:
     raise typer.Exit(1)
 
 
+@app.command()
+def claw(
+    gateway: str = typer.Option("ws://127.0.0.1:18789", "--gateway", "-g",
+                                help="OpenClaw Gateway WebSocket URL"),
+    pair: bool = typer.Option(False, "--pair", help="Pair with Gateway (first-time setup)"),
+    name: str = typer.Option("trio-core", "--name", "-n", help="Display name for this node"),
+    model: str = typer.Option(None, "--model", "-m", help="Override model"),
+    camera: list[str] = typer.Option([], "--camera", "-c",
+                                     help="Camera source (RTSP URL or device index). Repeatable."),
+    adapter: str = typer.Option(None, "--adapter", "-a", help="LoRA adapter directory"),
+):
+    """Connect trio-core as an OpenClaw node (replaces TrioClaw).
+
+    First-time setup:
+        trio claw --pair --gateway ws://host:18789
+
+    Run as node:
+        trio claw --gateway ws://host:18789 --camera "rtsp://admin:pass@ip/stream"
+
+    The node connects to the OpenClaw Gateway via WebSocket and handles
+    vision/camera commands directly — no intermediate Go binary needed.
+    """
+    import asyncio
+    import os
+
+    os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
+    os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+
+    try:
+        from trio_core.claw.node import ClawNode
+        from trio_core.claw.commands import CommandHandler
+    except ImportError as e:
+        typer.echo(f"Missing dependency: {e}")
+        typer.echo("Install with: pip install 'trio-core[claw]'")
+        raise typer.Exit(1)
+
+    if pair:
+        # Pairing mode — no engine needed
+        node = ClawNode(gateway_url=gateway)
+        try:
+            token = asyncio.run(node.pair(display_name=name))
+            typer.echo(f"Paired! Token saved to ~/.trio/claw_state.json")
+        except Exception as e:
+            typer.echo(f"Pairing failed: {e}", err=True)
+            raise typer.Exit(1)
+        return
+
+    # Normal mode — load engine, connect as node
+    from trio_core import TrioCore, EngineConfig
+
+    config_kwargs = {}
+    if model:
+        config_kwargs["model"] = model
+    if adapter:
+        config_kwargs["adapter_path"] = adapter
+    config = EngineConfig(**config_kwargs)
+
+    typer.echo(f"Loading model: {config.model} ...")
+    engine = TrioCore(config)
+    try:
+        engine.load()
+    except Exception as e:
+        _die_load_error(e, config.model)
+
+    health = engine.health()
+    typer.echo(f"Backend: {health.get('backend', {}).get('backend', 'unknown')}")
+    typer.echo(f"Device: {health.get('backend', {}).get('device', 'unknown')}")
+
+    # Set up camera sources
+    sources = list(camera) if camera else ["0"]
+    handler = CommandHandler(engine=engine, camera_sources=sources)
+    node = ClawNode(gateway_url=gateway, handler=handler)
+
+    typer.echo(f"Connecting to Gateway: {gateway}")
+    typer.echo(f"Cameras: {sources}")
+    typer.echo("Press Ctrl+C to stop.\n")
+
+    try:
+        asyncio.run(node.run())
+    except KeyboardInterrupt:
+        typer.echo("\nDisconnected.")
+
+
 if __name__ == "__main__":
     app()
