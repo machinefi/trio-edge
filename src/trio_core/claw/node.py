@@ -76,22 +76,10 @@ class ClawNode:
         try:
             # 1. Receive connect.challenge
             frame = json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
-            logger.info("Challenge frame: %s", json.dumps(frame, indent=2))
             if frame.get("event") != "connect.challenge":
                 raise RuntimeError(f"Expected connect.challenge, got: {frame}")
 
-            # Extract nonce — may be in payloadJSON (double-encoded) or payload
-            nonce = ""
-            if "payloadJSON" in frame:
-                challenge = json.loads(frame["payloadJSON"])
-                nonce = challenge.get("nonce", "")
-            if not nonce and "payload" in frame:
-                payload = frame["payload"]
-                if isinstance(payload, str):
-                    payload = json.loads(payload)
-                nonce = payload.get("nonce", "")
-            if not nonce:
-                nonce = frame.get("nonce", "")
+            nonce = _extract_nonce(frame)
 
             # 2. Send connect with device identity (+ gateway token if provided)
             params = connect_params(
@@ -101,15 +89,7 @@ class ClawNode:
                 private_key=self._private_key,
                 raw_pub=self._raw_pub,
             )
-            req_frame = make_req("connect", params)
-            logger.info("Challenge nonce: %r", nonce)
-            logger.info("Connect params keys: %s", list(params.keys()))
-            logger.info("Device in params: %s", "device" in params)
-            if "device" in params:
-                d = params["device"]
-                logger.info("Device ID: %s..., pubkey len: %d, sig len: %d, nonce: %r",
-                            d["id"][:16], len(d["publicKey"]), len(d["signature"]), d["nonce"])
-            await ws.send(json.dumps(req_frame))
+            await ws.send(json.dumps(make_req("connect", params)))
 
             # 3. Read hello response
             res = json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
@@ -227,12 +207,8 @@ class ClawNode:
         if frame.get("event") != "connect.challenge":
             raise RuntimeError(f"Expected connect.challenge, got: {frame}")
 
-        # Extract nonce
-        nonce = ""
-        payload_json = frame.get("payloadJSON", "{}")
-        if payload_json:
-            challenge = json.loads(payload_json)
-            nonce = challenge.get("nonce", "")
+        # Extract nonce — may be in payloadJSON (double-encoded) or payload
+        nonce = _extract_nonce(frame)
 
         # 2. Send connect with device identity + auth token
         params = connect_params(
@@ -312,6 +288,27 @@ class ClawNode:
         if self._ws:
             await self._ws.close()
             self._ws = None
+
+
+# =============================================================================
+# Helpers
+# =============================================================================
+
+def _extract_nonce(frame: dict) -> str:
+    """Extract nonce from a connect.challenge frame."""
+    if "payloadJSON" in frame:
+        challenge = json.loads(frame["payloadJSON"])
+        nonce = challenge.get("nonce", "")
+        if nonce:
+            return nonce
+    if "payload" in frame:
+        payload = frame["payload"]
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+        nonce = payload.get("nonce", "")
+        if nonce:
+            return nonce
+    return frame.get("nonce", "")
 
 
 # =============================================================================
