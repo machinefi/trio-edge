@@ -8,15 +8,29 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import json
 import logging
 import time
+from dataclasses import dataclass, field
 
 import cv2
 import numpy as np
 
-from .protocol import InvokeRequest, InvokeResult
+from .protocol import InvokeRequest, InvokeResult, generate_id, make_req
 
 logger = logging.getLogger("trio.claw")
+
+
+@dataclass
+class WatchTask:
+    """Tracks a running vision.watch loop."""
+    watch_id: str
+    condition: str
+    interval: float
+    task: asyncio.Task | None = None
+    stop_event: asyncio.Event = field(default_factory=asyncio.Event)
+    checks: int = 0
+    alerts: int = 0
 
 
 class CommandHandler:
@@ -32,6 +46,9 @@ class CommandHandler:
         self.engine = engine
         self.camera_sources = camera_sources or ["0"]
         self.node_id = ""
+        self._watches: dict[str, WatchTask] = {}
+        self._ws = None  # WebSocket ref, set by node.py before dispatch
+        self._max_watches = 5
 
     async def handle(self, req: InvokeRequest) -> InvokeResult:
         """Dispatch invoke request to appropriate handler."""
@@ -41,6 +58,8 @@ class CommandHandler:
             "camera.snap": self._camera_snap,
             "camera.list": self._camera_list,
             "vision.analyze": self._vision_analyze,
+            "vision.watch": self._vision_watch,
+            "vision.watch.stop": self._vision_watch_stop,
             "vision.status": self._vision_status,
         }
 
@@ -158,7 +177,18 @@ class CommandHandler:
     # =========================================================================
 
     async def _vision_status(self, req: InvokeRequest) -> InvokeResult:
-        status = {"watches": []}
+        status = {
+            "watches": [
+                {
+                    "watchId": w.watch_id,
+                    "condition": w.condition,
+                    "interval": w.interval,
+                    "checks": w.checks,
+                    "alerts": w.alerts,
+                }
+                for w in self._watches.values()
+            ],
+        }
         if self.engine:
             health = self.engine.health()
             backend = health.get("backend", {})
@@ -166,6 +196,201 @@ class CommandHandler:
             status["device"] = backend.get("device", "unknown")
             status["backend"] = backend.get("backend", "unknown")
         return self._ok(req, status)
+
+    # =========================================================================
+    # vision.watch — continuous monitoring with condition alerting
+    # =========================================================================
+
+    async def _vision_watch(self, req: InvokeRequest) -> InvokeResult:
+        question = req.params.get("question", "")
+        if not question:
+            return self._error(req, "INVALID_PARAMS", "question is required")
+
+        if self.engine is None:
+            return self._error(req, "ENGINE_NOT_LOADED", "VLM engine not loaded")
+
+        if self._ws is None:
+            return self._error(req, "NO_WS", "No WebSocket connection for streaming results")
+
+        if len(self._watches) >= self._max_watches:
+            return self._error(req, "LIMIT_REACHED",
+                               f"Max {self._max_watches} concurrent watches")
+
+        interval = float(req.params.get("interval", 10))
+        interval = max(interval, 2.0)  # floor at 2s to avoid hammering
+        device_id = req.params.get("deviceId", "")
+        source = self._resolve_source(device_id)
+
+        watch_id = generate_id(12)
+
+        watch = WatchTask(
+            watch_id=watch_id,
+            condition=question,
+            interval=interval,
+        )
+        self._watches[watch_id] = watch
+
+        watch.task = asyncio.create_task(
+            self._watch_loop(watch, source, req.id)
+        )
+
+        logger.info("vision.watch started: id=%s question=%r interval=%.0fs",
+                     watch_id, question, interval)
+
+        return self._ok(req, {
+            "watchId": watch_id,
+            "status": "started",
+            "condition": question,
+            "interval": interval,
+        })
+
+    # =========================================================================
+    # vision.watch.stop — stop one or all watches
+    # =========================================================================
+
+    async def stop_all_watches(self) -> None:
+        """Stop all active watches. Called by node.py on WebSocket disconnect."""
+        for w in list(self._watches.values()):
+            w.stop_event.set()
+            if w.task and not w.task.done():
+                w.task.cancel()
+        self._watches.clear()
+        logger.info("All watches stopped (disconnect cleanup)")
+
+    async def _vision_watch_stop(self, req: InvokeRequest) -> InvokeResult:
+        watch_id = req.params.get("watchId")
+
+        if watch_id:
+            # Stop specific watch
+            watch = self._watches.get(watch_id)
+            if watch is None:
+                return self._error(req, "NOT_FOUND", f"No watch with id {watch_id}")
+            summary = await self._stop_watch(watch)
+            return self._ok(req, summary)
+
+        # Stop all watches
+        summaries = []
+        for w in list(self._watches.values()):
+            summaries.append(await self._stop_watch(w))
+        return self._ok(req, {"stopped": summaries})
+
+    async def _stop_watch(self, watch: WatchTask) -> dict:
+        """Signal a watch to stop and wait for cleanup."""
+        watch.stop_event.set()
+        if watch.task and not watch.task.done():
+            try:
+                await asyncio.wait_for(watch.task, timeout=5)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                watch.task.cancel()
+        self._watches.pop(watch.watch_id, None)
+        logger.info("vision.watch stopped: id=%s checks=%d alerts=%d",
+                     watch.watch_id, watch.checks, watch.alerts)
+        return {
+            "watchId": watch.watch_id,
+            "status": "stopped",
+            "checks": watch.checks,
+            "alerts": watch.alerts,
+        }
+
+    # =========================================================================
+    # Watch loop — periodic capture + VLM + send results via WebSocket
+    # =========================================================================
+
+    async def _watch_loop(self, watch: WatchTask, source: str, invoke_id: str) -> None:
+        """Core watch loop: capture → VLM → send result → sleep → repeat."""
+        try:
+            while not watch.stop_event.is_set():
+                t0 = time.monotonic()
+
+                # Capture frame
+                frame_bgr = await asyncio.to_thread(self._capture_frame, source)
+                if frame_bgr is None:
+                    logger.warning("Watch %s: capture failed, retrying in %.0fs",
+                                   watch.watch_id, watch.interval)
+                    await self._interruptible_sleep(watch.stop_event, watch.interval)
+                    continue
+
+                # VLM inference
+                def _infer():
+                    rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+                    return self.engine.analyze_frame(rgb, watch.condition)
+
+                try:
+                    result = await asyncio.to_thread(_infer)
+                except Exception:
+                    logger.exception("Watch %s: VLM inference failed", watch.watch_id)
+                    await self._interruptible_sleep(watch.stop_event, watch.interval)
+                    continue
+
+                elapsed_ms = (time.monotonic() - t0) * 1000
+                watch.checks += 1
+
+                answer = result.text.strip()
+                triggered = _detect_triggered(answer)
+                if triggered:
+                    watch.alerts += 1
+
+                # Build result payload
+                payload = {
+                    "watchId": watch.watch_id,
+                    "answer": answer,
+                    "triggered": triggered,
+                    "latency_ms": round(elapsed_ms),
+                    "checks": watch.checks,
+                    "alerts": watch.alerts,
+                }
+
+                # Include frame on alerts
+                if triggered:
+                    _, jpeg = cv2.imencode(".jpg", frame_bgr, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                    payload["frame"] = base64.b64encode(jpeg.tobytes()).decode()
+
+                # Send result back through WebSocket
+                if not await self._send_watch_result(invoke_id, payload):
+                    logger.info("Watch %s: stopping due to WebSocket disconnect",
+                                watch.watch_id)
+                    break
+
+                logger.info("Watch %s: check #%d triggered=%s (%.0fms)",
+                            watch.watch_id, watch.checks, triggered, elapsed_ms)
+
+                await self._interruptible_sleep(watch.stop_event, watch.interval)
+
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            logger.exception("Watch %s: loop crashed", watch.watch_id)
+        finally:
+            self._watches.pop(watch.watch_id, None)
+
+    async def _send_watch_result(self, invoke_id: str, payload: dict) -> bool:
+        """Send a watch check result back to the gateway via WebSocket.
+
+        Returns False if the send failed (ws gone), signaling the loop should stop.
+        """
+        if self._ws is None:
+            return False
+        frame = make_req("node.invoke.result", {
+            "id": invoke_id,
+            "nodeId": self.node_id,
+            "ok": True,
+            "payloadJSON": json.dumps(payload),
+            "streaming": True,
+        })
+        try:
+            await self._ws.send(json.dumps(frame))
+            return True
+        except Exception:
+            logger.warning("Watch: WebSocket send failed, stopping loop")
+            return False
+
+    @staticmethod
+    async def _interruptible_sleep(event: asyncio.Event, seconds: float) -> None:
+        """Sleep that can be interrupted by the stop event."""
+        try:
+            await asyncio.wait_for(event.wait(), timeout=seconds)
+        except asyncio.TimeoutError:
+            pass  # Normal — event wasn't set during the sleep
 
     # =========================================================================
     # Camera capture helpers
@@ -230,6 +455,31 @@ class CommandHandler:
             id=req.id, node_id=self.node_id, ok=False,
             error_code=code, error_message=message,
         )
+
+
+def _detect_triggered(answer: str) -> bool | None:
+    """Detect yes/no from VLM answer.
+
+    Returns True for affirmative, False for negative, None for descriptive/ambiguous.
+    """
+    lower = answer.lower().strip()
+    if lower.startswith(("yes", "yeah", "yep")):
+        return True
+    if lower.startswith(("no", "nope")):
+        return False
+    first_sentence = lower.split(".")[0]
+    neg_patterns = ("there is no", "there are no", "there isn't", "there aren't",
+                    "i don't see", "i do not see", "no ", "not ", "cannot see",
+                    "can't see", "nothing", "nobody", "no one")
+    pos_patterns = ("there is a", "there are", "i see a", "i can see",
+                    "someone", "a person", "a package", "a delivery")
+    for pat in neg_patterns:
+        if pat in first_sentence:
+            return False
+    for pat in pos_patterns:
+        if pat in first_sentence:
+            return True
+    return None
 
 
 def _mask_url(url: str) -> str:
