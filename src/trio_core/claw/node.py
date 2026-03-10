@@ -76,15 +76,22 @@ class ClawNode:
         try:
             # 1. Receive connect.challenge
             frame = json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
+            logger.info("Challenge frame: %s", json.dumps(frame, indent=2))
             if frame.get("event") != "connect.challenge":
                 raise RuntimeError(f"Expected connect.challenge, got: {frame}")
 
-            # Extract nonce from challenge
+            # Extract nonce — may be in payloadJSON (double-encoded) or payload
             nonce = ""
-            payload_json = frame.get("payloadJSON", "{}")
-            if payload_json:
-                challenge = json.loads(payload_json)
+            if "payloadJSON" in frame:
+                challenge = json.loads(frame["payloadJSON"])
                 nonce = challenge.get("nonce", "")
+            if not nonce and "payload" in frame:
+                payload = frame["payload"]
+                if isinstance(payload, str):
+                    payload = json.loads(payload)
+                nonce = payload.get("nonce", "")
+            if not nonce:
+                nonce = frame.get("nonce", "")
 
             # 2. Send connect with device identity (no auth token for pairing)
             params = connect_params(
