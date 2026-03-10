@@ -803,7 +803,8 @@ def claw(
     handler = CommandHandler(engine=engine, camera_sources=sources)
     node = ClawNode(gateway_url=gateway, handler=handler)
     if token:
-        node.token = token
+        node.token = token  # CLI --token overrides saved token
+    typer.echo(f"Token set: {bool(node.token)}, len={len(node.token) if node.token else 0}")
 
     typer.echo(f"Connecting to Gateway: {gateway}")
     typer.echo(f"Cameras: {sources}")
