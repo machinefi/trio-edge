@@ -754,6 +754,9 @@ def claw(
     os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
     os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
 
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s", datefmt="%H:%M:%S")
+    logging.getLogger("trio.claw").setLevel(logging.DEBUG)
+
     try:
         from trio_core.claw.node import ClawNode
         from trio_core.claw.commands import CommandHandler
