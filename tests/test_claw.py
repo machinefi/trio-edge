@@ -301,9 +301,12 @@ class TestClawNode:
             node = ClawNode(gateway_url=f"ws://127.0.0.1:{port}")
             node.token = "tok"
 
+            task = asyncio.create_task(node.run())
+            await asyncio.wait_for(pong_received.wait(), timeout=5)
+            await node.stop()
             try:
-                await asyncio.wait_for(node.run(), timeout=3)
-            except Exception:
-                pass
+                await asyncio.wait_for(task, timeout=2)
+            except (asyncio.TimeoutError, Exception):
+                task.cancel()
 
         assert pong_received.is_set()
