@@ -44,6 +44,7 @@ async def main():
                 "mode": "cli",
             },
             "role": "operator",
+            "scopes": ["operator.admin", "operator.write", "operator.read", "operator.approvals", "operator.pairing"],
             "auth": {"token": TOKEN},
             "caps": [],
             "commands": [],
