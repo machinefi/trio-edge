@@ -161,7 +161,10 @@ def draw_overlay(frame: np.ndarray, description: str, metrics: str = "",
     if digest_events:
         panel_y = 10
         log_line_h = 26
-        show_events = digest_events[-12:]  # show last 12
+        # Only show events that haven't expired (5s per event, newest lives longest)
+        now = time.monotonic()
+        visible = [e for e in digest_events if e.get("expire", now + 1) > now]
+        show_events = visible[-8:]  # max 8 on screen
         panel_h = len(show_events) * log_line_h + 20
         panel_w = min(w - 20, 650)
         # Dark semi-transparent background
@@ -264,6 +267,8 @@ def main():
                         help="Count people, cars, and dogs (cumulative)")
     parser.add_argument("--digest", action="store_true",
                         help="Smart event timeline — logs activities with scene understanding")
+    parser.add_argument("--adapter", default=None,
+                        help="LoRA adapter directory path")
     args = parser.parse_args()
 
     watch_mode = args.watch is not None
@@ -313,6 +318,8 @@ def main():
     config_kwargs = {"max_tokens": args.max_tokens}
     if args.model:
         config_kwargs["model"] = args.model
+    if args.adapter:
+        config_kwargs["adapter_path"] = args.adapter
     config = EngineConfig(**config_kwargs)
 
     engine = TrioCore(config, backend=args.backend)
@@ -341,13 +348,16 @@ def main():
             return
         # Auto-proxy for Tailscale on macOS
         from trio_core._rtsp_proxy import ensure_rtsp_url
-        source = ensure_rtsp_url(source)
+        proxied = ensure_rtsp_url(source)
+        if proxied != source:
+            time.sleep(1)  # let proxy settle
+            source = proxied
         probe = subprocess.run(
             ["ffprobe", "-v", "error", "-rtsp_transport", "tcp",
              "-select_streams", "v:0",
              "-show_entries", "stream=width,height",
              "-of", "csv=p=0", source],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True, text=True, timeout=20,
         )
         if not probe.stdout.strip():
             print(f"Error: Cannot probe RTSP stream: {source}")
@@ -428,6 +438,7 @@ def main():
     # Motion detection baseline (for digest mode)
     baseline_frame: np.ndarray | None = None
     MOTION_THRESHOLD = 0.005  # fraction of pixels that must change
+    motion_mask: np.ndarray | None = None  # binary mask of moving regions
 
     def _alert(text):
         """Play audio alert on macOS."""
@@ -443,7 +454,7 @@ def main():
         nonlocal description, metrics_text, latest_frame_for_vlm, running
         nonlocal triggered, triggered_until, prev_description
         nonlocal total_counts, prev_visible, nothing_count
-        nonlocal baseline_frame
+        nonlocal baseline_frame, motion_mask
 
         while running:
             force_analyze.wait(timeout=args.interval)
@@ -481,16 +492,35 @@ def main():
                 baseline_frame = cv2.addWeighted(baseline_frame, 0.95, current_gray, 0.05, 0).astype(np.uint8)
                 if motion_pixels < MOTION_THRESHOLD:
                     nothing_count += 1
+                    motion_mask = None
                     if nothing_count % 100 == 1:
                         print(f"  ... no motion ({nothing_count}) score={motion_pixels:.4f}")
                     with lock:
                         description = f"Monitoring... (motion: {motion_pixels:.4f})"
                     continue
+                # Build motion mask — dilate to cover full moving objects
+                raw_mask = (diff > 15).astype(np.uint8) * 255
+                kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (31, 31))
+                motion_mask = cv2.dilate(raw_mask, kernel, iterations=2)
+                motion_mask = cv2.GaussianBlur(motion_mask, (41, 41), 0)
                 print(f"  [MOTION DETECTED: {motion_pixels:.4f}]")
 
             # Resize + convert BGR uint8 -> RGB float32, stack as (N, C, H, W)
+            # In digest mode, dim static regions so VLM focuses on motion
             rgb_frames = []
             for f in selected:
+                # Apply motion highlight: darken static areas
+                if digest_mode and motion_mask is not None:
+                    fh, fw = f.shape[:2]
+                    mh, mw = motion_mask.shape[:2]
+                    if (fh, fw) != (mh, mw):
+                        mask_resized = cv2.resize(motion_mask, (fw, fh))
+                    else:
+                        mask_resized = motion_mask
+                    # Blend: moving regions stay bright, static dims to 30%
+                    alpha = mask_resized.astype(np.float32) / 255.0
+                    alpha = alpha[:, :, np.newaxis]  # (H,W,1) for broadcasting
+                    f = (f * (0.3 + 0.7 * alpha)).astype(np.uint8)
                 # Downscale for faster inference
                 if args.resolution:
                     rh, rw = f.shape[:2]
@@ -555,14 +585,16 @@ def main():
                         # Dedup: skip if too similar to last event
                         last_raw = digest_events[-1]["raw"] if digest_events else ""
                         if _text_similar(event_text, last_raw):
-                            # Same event continuing — update timestamp only
+                            # Same event continuing — refresh expiry
                             digest_events[-1]["time"] = ts
                             digest_events[-1]["text"] = f"[{ts}] {event_text}"
+                            digest_events[-1]["expire"] = time.monotonic() + 8.0
                         else:
                             digest_events.append({
                                 "time": ts,
                                 "text": f"[{ts}] {event_text}",
                                 "raw": event_text,
+                                "expire": time.monotonic() + 8.0,
                             })
                             print(f"  [{ts}] {event_text}")
 

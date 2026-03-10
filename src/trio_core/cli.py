@@ -601,6 +601,7 @@ def cam(
     no_sound: bool = typer.Option(False, "--no-sound", help="Disable audio alerts"),
     count: bool = typer.Option(False, "--count", "-c", help="Count people, cars, dogs, cats (cumulative)"),
     digest: bool = typer.Option(False, "--digest", "-d", help="Smart event timeline with scene understanding"),
+    adapter: str = typer.Option(None, "--adapter", "-a", help="LoRA adapter directory path"),
 ):
     """IP camera monitor with ONVIF discovery and AI analysis.
 
@@ -694,6 +695,8 @@ def cam(
         sys.argv += ["--count"]
     if digest:
         sys.argv += ["--digest"]
+    if adapter:
+        sys.argv += ["--adapter", adapter]
 
     try:
         from trio_core._webcam_gui import main
