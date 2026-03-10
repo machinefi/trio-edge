@@ -734,11 +734,13 @@ def claw(
     camera: list[str] = typer.Option([], "--camera", "-c",
                                      help="Camera source (RTSP URL or device index). Repeatable."),
     adapter: str = typer.Option(None, "--adapter", "-a", help="LoRA adapter directory"),
+    token: str = typer.Option(None, "--token", "-t",
+                              help="Gateway auth token (pre-shared secret)"),
 ):
     """Connect trio-core as an OpenClaw node (replaces TrioClaw).
 
     First-time setup:
-        trio claw --pair --gateway ws://host:18789
+        trio claw --pair --gateway ws://host:18789 --token <gateway-secret>
 
     Run as node:
         trio claw --gateway ws://host:18789 --camera "rtsp://admin:pass@ip/stream"
@@ -763,8 +765,10 @@ def claw(
     if pair:
         # Pairing mode — no engine needed
         node = ClawNode(gateway_url=gateway)
+        if token:
+            node.token = token  # gateway auth token for initial connect
         try:
-            token = asyncio.run(node.pair(display_name=name))
+            device_token = asyncio.run(node.pair(display_name=name))
             typer.echo(f"Paired! Token saved to ~/.trio/claw_state.json")
         except Exception as e:
             typer.echo(f"Pairing failed: {e}", err=True)

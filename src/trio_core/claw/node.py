@@ -93,9 +93,9 @@ class ClawNode:
             if not nonce:
                 nonce = frame.get("nonce", "")
 
-            # 2. Send connect with device identity (no auth token for pairing)
+            # 2. Send connect with device identity (+ gateway token if provided)
             params = connect_params(
-                self.node_id, token=None,
+                self.node_id, token=self.token,
                 nonce=nonce,
                 device_id=self._device_id,
                 private_key=self._private_key,
