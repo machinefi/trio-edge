@@ -35,6 +35,7 @@ Controls:
 """
 
 import argparse
+import re
 import shutil
 import subprocess
 import threading
@@ -47,7 +48,6 @@ import numpy as np
 
 def _parse_counts(text):
     """Parse 'COUNT people:N cars:N dogs:N cats:N' from VLM response."""
-    import re
     counts = {}
     for key in ("people", "cars", "dogs", "cats"):
         m = re.search(rf"{key}:\s*(\d+)", text, re.IGNORECASE)
@@ -69,7 +69,6 @@ def _text_similar(a: str, b: str, threshold: float = 0.6) -> bool:
 
 def _parse_digest(text):
     """Parse digest response: 'EVENT: ...' or 'NOTHING' from VLM."""
-    import re
     text = re.sub(r"</?think>", "", text).strip()
     # Check for "nothing" / "no change" variants
     lower = text.lower()
@@ -415,7 +414,6 @@ def main():
     lock = threading.Lock()
     description = "Waiting for first analysis..."
     metrics_text = ""
-    latest_frame_for_vlm: np.ndarray | None = None
     frame_buffer: list[np.ndarray] = []  # recent frames for multi-frame analysis
     force_analyze = threading.Event()
     running = True
@@ -451,7 +449,7 @@ def main():
             pass
 
     def inference_loop():
-        nonlocal description, metrics_text, latest_frame_for_vlm, running
+        nonlocal description, metrics_text, running
         nonlocal triggered, triggered_until, prev_description
         nonlocal total_counts, prev_visible, nothing_count
         nonlocal baseline_frame, motion_mask
@@ -531,7 +529,6 @@ def main():
                 rgb_frames.append(rgb.transpose(2, 0, 1))  # HWC -> CHW
             video_array = np.stack(rgb_frames)  # (N, C, H, W)
 
-            # Build prompt with temporal context
             # Build prompt — digest mode skips prev_context to avoid hallucination feedback
             if digest_mode:
                 current_prompt = prompt
@@ -547,7 +544,6 @@ def main():
                                               max_tokens=args.max_tokens)
                 elapsed = time.monotonic() - t0
                 text = result.text.strip().replace("\n", " ")
-                import re
                 # Strip thinking tags
                 answer = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
                 answer = re.sub(r"</?think>", "", answer).strip()
@@ -573,8 +569,7 @@ def main():
                             if zero_streak[key] >= DEBOUNCE_FRAMES:
                                 prev_visible[key] = 0
                     # Strip COUNT line from display text
-                    import re as _re
-                    answer = _re.sub(r"\s*COUNT\s+people:\d+\s+cars:\d+\s+dogs:\d+\s+cats:\d+", "", answer).strip()
+                    answer = re.sub(r"\s*COUNT\s+people:\d+\s+cars:\d+\s+dogs:\d+\s+cats:\d+", "", answer).strip()
 
                 # Digest mode: motion gate already confirmed activity, log it
                 if digest_mode:
@@ -597,6 +592,9 @@ def main():
                                 "expire": time.monotonic() + 8.0,
                             })
                             print(f"  [{ts}] {event_text}")
+                        # Prune expired events to prevent unbounded growth
+                        now = time.monotonic()
+                        digest_events[:] = [e for e in digest_events if e.get("expire", now + 1) > now - 60]
 
                 with lock:
                     description = answer
@@ -658,7 +656,6 @@ def main():
         rgb = cv2.cvtColor(frame_for_chat, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
         try:
             result = engine.analyze_frame(rgb, question, max_tokens=80)
-            import re
             answer = re.sub(r"<think>.*?</think>", "", result.text.strip(), flags=re.DOTALL).strip()
             answer = re.sub(r"</?think>", "", answer).strip()
             answer = re.sub(r"\s*user\b.*", "", answer, flags=re.IGNORECASE).strip()
@@ -688,7 +685,6 @@ def main():
                 continue
 
             with lock:
-                latest_frame_for_vlm = frame
                 frame_buffer.append(frame.copy())
                 # Keep buffer bounded
                 max_buf = args.frames * 3
