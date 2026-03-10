@@ -1,0 +1,99 @@
+#!/usr/bin/env python3
+"""Quick test: invoke a command on a trio-core node via OpenClaw Gateway."""
+
+import asyncio
+import json
+import sys
+
+import websockets
+
+from trio_core.claw.protocol import (
+    connect_params,
+    load_or_create_identity,
+    make_req,
+)
+
+GATEWAY = "ws://127.0.0.1:18789"
+TOKEN = sys.argv[1] if len(sys.argv) > 1 else ""
+NODE_ID = sys.argv[2] if len(sys.argv) > 2 else ""
+COMMAND = sys.argv[3] if len(sys.argv) > 3 else "camera.list"
+PARAMS = json.loads(sys.argv[4]) if len(sys.argv) > 4 else {}
+
+
+async def main():
+    if not TOKEN:
+        print("Usage: python test_invoke.py <gateway-token> <node-id> [command] [params-json]")
+        print("Example: python test_invoke.py mytoken 11e600d228cc5f42 camera.list")
+        return
+
+    device_id, private_key, raw_pub = load_or_create_identity()
+
+    ws = await websockets.connect(GATEWAY)
+    try:
+        # 1. Challenge
+        frame = json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
+        nonce = ""
+        if "payloadJSON" in frame:
+            nonce = json.loads(frame["payloadJSON"]).get("nonce", "")
+        if not nonce and "payload" in frame:
+            p = frame["payload"]
+            if isinstance(p, str):
+                p = json.loads(p)
+            nonce = p.get("nonce", "")
+        if not nonce:
+            nonce = frame.get("nonce", "")
+
+        # 2. Connect as operator
+        params = connect_params(
+            "test-operator", token=TOKEN,
+            nonce=nonce, device_id=device_id,
+            private_key=private_key, raw_pub=raw_pub,
+        )
+        # Override to operator role
+        params["client"]["id"] = "cli"
+        params["client"]["mode"] = "cli"
+        params["role"] = "operator"
+        params["caps"] = []
+        params["commands"] = []
+
+        await ws.send(json.dumps(make_req("connect", params)))
+
+        # 3. Hello
+        res = json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
+        if not res.get("ok"):
+            print(f"Connect failed: {res}")
+            return
+        print("Connected as operator")
+
+        # 4. Send invoke
+        invoke_id = "test-inv-1"
+        invoke_req = make_req("node.invoke", {
+            "nodeId": NODE_ID,
+            "command": COMMAND,
+            "params": PARAMS,
+        })
+        invoke_req["id"] = invoke_id
+        await ws.send(json.dumps(invoke_req))
+        print(f"Sent invoke: {COMMAND} -> node {NODE_ID}")
+
+        # 5. Wait for result
+        while True:
+            raw = await asyncio.wait_for(ws.recv(), timeout=30)
+            msg = json.loads(raw)
+
+            if msg.get("type") == "res" and msg.get("id") == invoke_id:
+                print(f"\nResult (ok={msg.get('ok')}):")
+                print(json.dumps(msg, indent=2, ensure_ascii=False)[:2000])
+                break
+            elif msg.get("type") == "event" and msg.get("event") == "node.invoke.result":
+                payload = json.loads(msg.get("payloadJSON", "{}"))
+                print(f"\nResult event:")
+                print(json.dumps(payload, indent=2, ensure_ascii=False)[:2000])
+                break
+            # skip other events
+
+    finally:
+        await ws.close()
+
+
+asyncio.run(main())
