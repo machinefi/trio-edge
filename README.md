@@ -229,6 +229,104 @@ Request body size is capped at 10 MB. Resolutions are clamped to 4K max to preve
 | `/v1/models` | GET | Loaded model info |
 | `/v1/admin/reload` | POST | Hot reload model (with rollback on failure) |
 
+## OpenClaw Integration
+
+TrioCore can connect directly to an [OpenClaw](https://openclaw.ai) Gateway as a node, enabling remote camera monitoring and VLM inference via WebSocket — no HTTP server needed.
+
+### Setup
+
+```bash
+pip install 'trio-core[claw]'
+
+# First time: pair with the Gateway
+trio claw --pair -g ws://127.0.0.1:18789 --token <gateway-token>
+
+# Run as node (subsequent times)
+trio claw -g ws://127.0.0.1:18789 --token <gateway-token> \
+  -m mlx-community/Qwen2.5-VL-3B-Instruct-4bit \
+  -c "rtsp://admin:pass@192.168.1.100:554/stream"
+```
+
+### Gateway Configuration
+
+Add trio-core commands to the Gateway allowlist:
+
+```bash
+openclaw config set gateway.nodes.allowCommands \
+  '["camera.snap","camera.list","vision.analyze","vision.watch","vision.watch.stop","vision.status"]'
+openclaw gateway restart
+```
+
+### Supported Commands
+
+| Command | Description | Params |
+|---|---|---|
+| `camera.list` | List configured cameras | — |
+| `camera.snap` | Capture a single JPEG frame | `deviceId`, `maxWidth`, `quality` |
+| `vision.analyze` | Capture + VLM inference (one-shot) | `question` (required), `deviceId` |
+| `vision.watch` | Start continuous monitoring loop | `question` (required), `interval` (default 10s), `deviceId` |
+| `vision.watch.stop` | Stop one or all watches | `watchId` (optional — omit to stop all) |
+| `vision.status` | Report model, device, active watches | — |
+
+### Invoking Commands
+
+#### Via OpenClaw CLI
+
+```bash
+# One-shot: ask a question about the current camera frame
+openclaw nodes invoke --node <node-id> --command vision.analyze \
+  --params '{"question": "What do you see?"}'
+
+# Snap a JPEG frame
+openclaw nodes invoke --node <node-id> --command camera.snap \
+  --params '{"maxWidth": 640}'
+
+# Start continuous watch (checks every 10s)
+openclaw nodes invoke --node <node-id> --command vision.watch \
+  --params '{"question": "Are there people at the door?", "interval": 10}'
+
+# Stop a specific watch
+openclaw nodes invoke --node <node-id> --command vision.watch.stop \
+  --params '{"watchId": "<id from start response>"}'
+
+# Stop all watches
+openclaw nodes invoke --node <node-id> --command vision.watch.stop
+
+# Check status (model info + active watches)
+openclaw nodes invoke --node <node-id> --command vision.status
+```
+
+#### Via WhatsApp / Telegram (natural language)
+
+If your Gateway has a chat channel linked (WhatsApp, Telegram, etc.), you can talk to the agent directly:
+
+| What you want | Example message |
+|---|---|
+| One-shot check | *"What's on my front door camera right now?"* |
+| Start watching | *"Watch my camera and tell me if anyone shows up"* |
+| Start with interval | *"Monitor the front door every 30 seconds for packages"* |
+| Stop watching | *"Stop the camera watch"* |
+| Check status | *"What's the camera node status?"* |
+| Snap a photo | *"Take a photo from the front door camera"* |
+
+The Gateway agent automatically maps these to the correct `vision.*` / `camera.*` commands on the trio-core node.
+
+### Architecture
+
+```
+WhatsApp / Telegram / Discord
+    ↕ natural language
+OpenClaw Gateway (WebSocket)
+    ↕ node.invoke.request / node.invoke.result
+TrioCore Node (trio claw)
+    ├── OpenCV VideoCapture → RTSP / USB camera
+    └── VLM Engine (MLX) → on-device inference
+```
+
+The node connects via WebSocket with Ed25519 device identity, advertises its command surface, and dispatches invoke commands directly to the VLM engine — no intermediate HTTP layer. All inference runs locally on Apple Silicon.
+
+---
+
 ## How It Works
 
 TrioCore optimizes **every stage** of VLM inference. Each technique is independent and they compound:

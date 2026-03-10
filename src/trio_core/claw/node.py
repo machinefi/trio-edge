@@ -202,6 +202,9 @@ class ClawNode:
                     pass
         finally:
             self._ws = None
+            # Stop all watches — they can't send results without a WebSocket
+            if self.handler and hasattr(self.handler, "stop_all_watches"):
+                await self.handler.stop_all_watches()
             await ws.close()
 
     async def _handshake(self, ws: ClientConnection) -> None:
@@ -310,6 +313,8 @@ class ClawNode:
                 error_code="UNAVAILABLE", error_message="No handler configured",
             )
         else:
+            # Give handler access to the WebSocket for streaming results (vision.watch)
+            self.handler._ws = ws
             try:
                 result = await self.handler.handle(req)
             except Exception as e:
