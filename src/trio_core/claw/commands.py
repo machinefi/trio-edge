@@ -108,11 +108,15 @@ class CommandHandler:
 
         device_id = req.params.get("deviceId", "")
         source = self._resolve_source(device_id)
+        logger.info("vision.analyze: question=%r, source=%r", question, source)
 
         # Capture (blocking I/O → thread)
         frame_bgr = await asyncio.to_thread(self._capture_frame, source)
         if frame_bgr is None:
+            logger.error("Frame capture returned None for source=%r", source)
             return self._error(req, "CAPTURE_FAILED", f"Cannot capture from {source}")
+
+        logger.info("Frame captured: %s, dtype=%s", frame_bgr.shape, frame_bgr.dtype)
 
         if self.engine is None:
             return self._error(req, "ENGINE_NOT_LOADED", "VLM engine not loaded")
@@ -120,11 +124,13 @@ class CommandHandler:
         # VLM inference (blocking → thread)
         def _infer():
             rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+            logger.info("RGB frame: %s, min=%.2f, max=%.2f", rgb.shape, rgb.min(), rgb.max())
             return self.engine.analyze_frame(rgb, question)
 
         t0 = time.monotonic()
         result = await asyncio.to_thread(_infer)
         elapsed_ms = (time.monotonic() - t0) * 1000
+        logger.info("VLM result: %r (%.0fms)", result.text[:100], elapsed_ms)
 
         # Encode frame as JPEG for response
         _, jpeg = cv2.imencode(".jpg", frame_bgr, [cv2.IMWRITE_JPEG_QUALITY, 85])
