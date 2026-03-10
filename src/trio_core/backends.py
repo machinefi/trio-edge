@@ -968,7 +968,7 @@ def auto_backend(
 def resolve_backend(config, *, backend_override: str | None = None) -> BaseBackend:
     """Create the right backend from an EngineConfig.
 
-    Handles feature flags (FastV, ToMe, compound mode) so the engine
+    Handles feature flags (ToMe, Compressed) so the engine
     doesn't need to know about backend subclasses.
 
     Args:
@@ -983,37 +983,13 @@ def resolve_backend(config, *, backend_override: str | None = None) -> BaseBacke
     if base.backend_name != "mlx":
         return base
 
-    # Compress is exclusive with FastV/ToMe (no compound implementation)
-    if config.compress_enabled and (config.fastv_enabled or config.tome_enabled):
-        winner = "fastv" if config.fastv_enabled else "tome"
+    # Compress is exclusive with ToMe (no compound implementation)
+    if config.compress_enabled and config.tome_enabled:
         logger.warning(
-            "compress_enabled ignored: %s takes priority (no compound mode).",
-            winner,
+            "compress_enabled ignored: tome takes priority (no compound mode).",
         )
 
-    # FastV (optionally compound with ToMe)
-    if config.fastv_enabled:
-        from trio_core.fastv_backend import FastVMLXBackend
-
-        tome_kwargs = {}
-        if config.tome_enabled:
-            logger.info("Compound mode: ToMe (vision) + FastV (LLM)")
-            tome_kwargs = dict(
-                tome_r=config.tome_r,
-                tome_metric=config.tome_metric,
-                tome_min_keep_ratio=config.tome_min_keep_ratio,
-                tome_adaptive=config.tome_adaptive,
-            )
-        return FastVMLXBackend(
-            config.model,
-            prune_ratio=config.fastv_ratio,
-            prune_after_layer=config.fastv_layer,
-            device_info=base.device_info,
-            adapter_path=base.adapter_path,
-            **tome_kwargs,
-        )
-
-    # ToMe only
+    # ToMe
     if config.tome_enabled:
         from trio_core.tome_backend import ToMeMLXBackend
 

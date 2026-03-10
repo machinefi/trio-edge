@@ -17,7 +17,7 @@ Every VLM inference decomposes into 5 stages. This is the map we optimize agains
 ```
 Stage 0: 输入 (Video Pipeline)      ██████████ 100%   done
 Stage 1: Vision Encoder + ToMe      ██████████ 100%   ToMe + adaptive r + native ViT + content-aware done
-Stage 2: Visual Token Count          ██████████ 100%   mid-stream FastV + content-aware adaptive ratio done
+Stage 2: Visual Token Count          ██████████ 100%   post-encoder compression + content-aware adaptive ratio done
 Stage 3: LLM Prefill                 █████████░  90%   generate loop + prefix cache + native loading wired in
 Stage 4: KV Cache                    █████████░  90%   4-tier cache + KV reuse + StreamMem + attention sink done
 Stage 5: Decode                      ███░░░░░░░  30%   streaming done; speculative decode removed (0% accept for VLM)
@@ -59,7 +59,7 @@ Stage 5: Decode                      ███░░░░░░░  30%   strea
   (three-tier: exact hit > prefix hit > full miss), early stopping,
   native model loading for all T1 models (qwen2_5_vl, qwen3_vl, qwen3_5 — bit-identical),
   load_native() wired into MLXBackend as primary path with mlx-vlm fallback
-- TODO: update ToMe/FastV imports to use native models (low priority while mlx-vlm still installed)
+- TODO: update ToMe imports to use native models (low priority while mlx-vlm still installed)
 
 **Stage 4 — KV Cache** -- 90%
 - Done: persistent KVCache with buffer reuse, quantized KV cache,
@@ -121,7 +121,7 @@ Stage 5: Decode
 Key takeaway: Qwen family shares the same LLM layer loop (Stage 3-5).
 Differences are in Stage 1-2 (ViT architecture, token merge signature),
 already abstracted via wrappers + `_is_qwen3` flag.
-Gemma/SmolVLM have entirely different ViT — ToMe/FastV not yet supported.
+Gemma/SmolVLM have entirely different ViT — ToMe not yet supported.
 
 ## Documents
 
@@ -405,7 +405,6 @@ Target use case: Frigate-style security/surveillance monitoring.
 - [x] **Native model loading (T1)** — vendored qwen2_5_vl (1080 lines), qwen3_vl (1240 lines), qwen3_5 (640 lines, reuses qwen3_vl vision). All bit-identical with mlx-vlm. Fixed upstream mx.eval() deepstack bug.
 - [x] **Wire native loading into MLXBackend** — load_native() as primary path, mlx-vlm fallback for T2 models
 - [ ] **Benchmark: Baseline vs ToMe (r=4)** — measure quality/speed tradeoff per model
-- [ ] **Benchmark: Baseline vs FastV (ratio=0.5)** — visual token pruning impact
 - [ ] **Benchmark: Baseline vs KV Reuse (threshold=0.95)** — frame-to-frame speedup per model
 - [ ] **Benchmark: InternVL3 / nanoLLaVA** — POPE + eval for newly promoted Tier 1 models
 - [ ] Phase 3: Full native engine — zero mlx-vlm dependency for T1 models

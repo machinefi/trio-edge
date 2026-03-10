@@ -64,7 +64,7 @@ class ToMeMLXBackend(MLXBackend):
         if not self._adapter.supports_tome:
             logger.warning(
                 "[ToMe] Model family '%s' does not support in-ViT ToMe. "
-                "ToMe will be disabled. Consider using FastV instead.",
+                "ToMe will be disabled. Consider using Compressed instead.",
                 self._adapter.family,
             )
             self._native_vision = None
