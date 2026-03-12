@@ -11,6 +11,8 @@ import pytest
 import websockets
 from websockets.asyncio.server import serve
 
+pytest.importorskip("cv2", reason="OpenCV optional dependency not installed")
+
 from trio_core.claw.protocol import (
     InvokeRequest,
     InvokeResult,

@@ -1,5 +1,8 @@
 """Test counting logic — debounce + cumulative tracking."""
 import pytest
+
+pytest.importorskip("cv2", reason="OpenCV optional dependency not installed")
+
 from trio_core._webcam_gui import _parse_counts
 
 

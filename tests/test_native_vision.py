@@ -1,7 +1,8 @@
 """Tests for trio_core.native_vision — native ViT with built-in ToMe."""
 
-import mlx.core as mx
 import pytest
+
+mx = pytest.importorskip("mlx.core", reason="MLX optional dependency not installed")
 
 
 # ---------------------------------------------------------------------------

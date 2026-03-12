@@ -1,7 +1,8 @@
 """Tests for trio_core.tome_backend and trio_core.tome_vision — integration layer."""
 
-import mlx.core as mx
 import pytest
+
+mx = pytest.importorskip("mlx.core", reason="MLX optional dependency not installed")
 
 from trio_core.tome_vision import BaseToMeVisionWrapper
 

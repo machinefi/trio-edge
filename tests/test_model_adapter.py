@@ -3,6 +3,8 @@
 from unittest.mock import MagicMock, PropertyMock
 import pytest
 
+pytest.importorskip("mlx.core", reason="MLX optional dependency not installed")
+
 from trio_core.model_adapter import (
     ModelAdapter, Qwen25VLAdapter, Qwen3VLAdapter,
     InternVLAdapter, LLaVAAdapter, FastVLMAdapter,
@@ -486,7 +488,7 @@ class TestQwen25Methods:
         pos_ids = mx.zeros((3, 1, 4))
 
         with patch(
-            "mlx_vlm.models.qwen2_5_vl.language.apply_multimodal_rotary_pos_emb",
+            "trio_core.mlx_utils.apply_multimodal_rotary_pos_emb",
             return_value=(q, k),
         ) as mock_rope:
             q_out, k_out = a.apply_rope_at_layer(q, k, v, pos_ids, layer)
@@ -614,7 +616,7 @@ class TestQwen3Methods:
         pos_ids = mx.zeros((3, 1, 4))
 
         with patch(
-            "mlx_vlm.models.qwen3_vl.language.apply_multimodal_rotary_pos_emb",
+            "trio_core.mlx_utils.apply_multimodal_rotary_pos_emb",
             return_value=(q, k),
         ) as mock_rope:
             q_out, k_out = a.apply_rope_at_layer(q, k, v, pos_ids, layer)
@@ -658,7 +660,7 @@ class TestInternVLMethods:
         model.mlp1 = [mlp_layer]
 
         with patch(
-            "mlx_vlm.models.base.pixel_shuffle",
+            "trio_core.mlx_utils.pixel_shuffle",
             side_effect=lambda x, shuffle_ratio: x,
         ) as mock_ps:
             a = InternVLAdapter(model)

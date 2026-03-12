@@ -31,6 +31,18 @@ async def _noop_lifespan(app):
     yield
 
 
+def _mock_read_chunks(*chunks: bytes) -> MagicMock:
+    """Return a mock read() that yields chunks then EOF forever."""
+    queue = list(chunks)
+
+    def _read(*_args, **_kwargs):
+        if queue:
+            return queue.pop(0)
+        return b""
+
+    return MagicMock(side_effect=_read)
+
+
 @pytest.fixture
 def client():
     """Create test client with mocked engine (no model loading)."""
@@ -265,11 +277,7 @@ class TestWatchEndpoints:
         frame2 = np.full(frame_bytes, 128, dtype=np.uint8)
 
         mock_stdout = MagicMock()
-        mock_stdout.read = MagicMock(side_effect=[
-            frame1.tobytes(),
-            frame2.tobytes(),
-            b"",  # EOF
-        ])
+        mock_stdout.read = _mock_read_chunks(frame1.tobytes(), frame2.tobytes(), b"")
         mock_proc = MagicMock()
         mock_proc.stdout = mock_stdout
         mock_proc.poll.return_value = None
@@ -277,7 +285,8 @@ class TestWatchEndpoints:
         mock_proc.wait = MagicMock()
 
         with patch("trio_core._rtsp_proxy.ensure_rtsp_url", return_value="rtsp://test"), \
-             patch("subprocess.Popen", return_value=mock_proc):
+             patch("subprocess.Popen", return_value=mock_proc), \
+             patch("trio_core.api.server._WATCH_MAX_RECONNECTS", 0):
 
             resp = client.post("/v1/watch", json={
                 "source": "rtsp://test:554/stream",
@@ -318,10 +327,7 @@ class TestWatchEndpoints:
         frame1 = np.random.randint(0, 255, frame_bytes, dtype=np.uint8)
 
         mock_stdout = MagicMock()
-        mock_stdout.read = MagicMock(side_effect=[
-            frame1.tobytes(),
-            b"",  # EOF
-        ])
+        mock_stdout.read = _mock_read_chunks(frame1.tobytes(), b"")
         mock_proc = MagicMock()
         mock_proc.stdout = mock_stdout
         mock_proc.poll.return_value = None
@@ -329,7 +335,8 @@ class TestWatchEndpoints:
         mock_proc.wait = MagicMock()
 
         with patch("trio_core._rtsp_proxy.ensure_rtsp_url", return_value="rtsp://test"), \
-             patch("subprocess.Popen", return_value=mock_proc):
+             patch("subprocess.Popen", return_value=mock_proc), \
+             patch("trio_core.api.server._WATCH_MAX_RECONNECTS", 0):
 
             resp = client.post("/v1/watch", json={
                 "source": "rtsp://test:554/stream",
@@ -363,7 +370,7 @@ class TestWatchEndpoints:
         frame1 = np.random.randint(0, 255, frame_bytes, dtype=np.uint8)
 
         mock_stdout = MagicMock()
-        mock_stdout.read = MagicMock(side_effect=[frame1.tobytes(), b""])
+        mock_stdout.read = _mock_read_chunks(frame1.tobytes(), b"")
         mock_proc = MagicMock()
         mock_proc.stdout = mock_stdout
         mock_proc.poll.return_value = None
@@ -371,7 +378,8 @@ class TestWatchEndpoints:
         mock_proc.wait = MagicMock()
 
         with patch("trio_core._rtsp_proxy.ensure_rtsp_url", return_value="rtsp://test"), \
-             patch("subprocess.Popen", return_value=mock_proc):
+             patch("subprocess.Popen", return_value=mock_proc), \
+             patch("trio_core.api.server._WATCH_MAX_RECONNECTS", 0):
 
             resp = client.post("/v1/watch", json={
                 "source": "rtsp://test",
@@ -400,7 +408,7 @@ class TestWatchEndpoints:
         frame1 = np.random.randint(0, 255, frame_bytes, dtype=np.uint8)
 
         mock_stdout = MagicMock()
-        mock_stdout.read = MagicMock(side_effect=[frame1.tobytes(), b""])
+        mock_stdout.read = _mock_read_chunks(frame1.tobytes(), b"")
         mock_proc = MagicMock()
         mock_proc.stdout = mock_stdout
         mock_proc.poll.return_value = None
@@ -408,7 +416,8 @@ class TestWatchEndpoints:
         mock_proc.wait = MagicMock()
 
         with patch("trio_core._rtsp_proxy.ensure_rtsp_url", return_value="rtsp://test"), \
-             patch("subprocess.Popen", return_value=mock_proc):
+             patch("subprocess.Popen", return_value=mock_proc), \
+             patch("trio_core.api.server._WATCH_MAX_RECONNECTS", 0):
 
             resp = client.post("/v1/watch", json={
                 "source": "rtsp://test",
@@ -480,7 +489,7 @@ class TestWatchCustomResolution:
         frame1 = np.random.randint(0, 255, frame_bytes, dtype=np.uint8)
 
         mock_stdout = MagicMock()
-        mock_stdout.read = MagicMock(side_effect=[frame1.tobytes(), b""])
+        mock_stdout.read = _mock_read_chunks(frame1.tobytes(), b"")
         mock_proc = MagicMock()
         mock_proc.stdout = mock_stdout
         mock_proc.poll.return_value = None
@@ -495,7 +504,8 @@ class TestWatchCustomResolution:
             return mock_proc
 
         with patch("trio_core._rtsp_proxy.ensure_rtsp_url", return_value="rtsp://test"), \
-             patch("trio_core.api.server._start_ffmpeg", side_effect=capture_start_ffmpeg):
+             patch("trio_core.api.server._start_ffmpeg", side_effect=capture_start_ffmpeg), \
+             patch("trio_core.api.server._WATCH_MAX_RECONNECTS", 0):
 
             resp = client.post("/v1/watch", json={
                 "source": "rtsp://test",
@@ -531,7 +541,7 @@ class TestWatchReconnect:
 
         # First proc: 1 frame then EOF (simulating stream drop)
         mock_stdout1 = MagicMock()
-        mock_stdout1.read = MagicMock(side_effect=[frame1.tobytes(), b""])
+        mock_stdout1.read = _mock_read_chunks(frame1.tobytes(), b"")
         mock_proc1 = MagicMock()
         mock_proc1.stdout = mock_stdout1
         mock_proc1.poll.return_value = None
@@ -540,7 +550,7 @@ class TestWatchReconnect:
 
         # Second proc (reconnected): 1 frame then EOF
         mock_stdout2 = MagicMock()
-        mock_stdout2.read = MagicMock(side_effect=[frame2.tobytes(), b""])
+        mock_stdout2.read = _mock_read_chunks(frame2.tobytes(), b"")
         mock_proc2 = MagicMock()
         mock_proc2.stdout = mock_stdout2
         mock_proc2.poll.return_value = None
@@ -557,7 +567,8 @@ class TestWatchReconnect:
 
         with patch("trio_core._rtsp_proxy.ensure_rtsp_url", return_value="rtsp://test"), \
              patch("trio_core.api.server._start_ffmpeg", side_effect=mock_start_ffmpeg), \
-             patch("trio_core.api.server._WATCH_RECONNECT_DELAY", 0):  # no sleep in test
+             patch("trio_core.api.server._WATCH_RECONNECT_DELAY", 0), \
+             patch("trio_core.api.server._WATCH_MAX_RECONNECTS", 1):  # no extra retries in test
 
             resp = client.post("/v1/watch", json={
                 "source": "rtsp://test",

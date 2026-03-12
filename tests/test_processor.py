@@ -1,8 +1,13 @@
 """Verify custom QwenVLProcessor matches transformers AutoProcessor output."""
 
+import os
+
 import numpy as np
 import pytest
 from PIL import Image
+
+
+RUN_PROCESSOR_INTEGRATION = os.getenv("TRIO_RUN_PROCESSOR_INTEGRATION") == "1"
 
 # Test with a simple synthetic image
 def make_test_image(h=480, w=640):
@@ -40,6 +45,10 @@ class TestQwenVLProcessor:
         assert h % 32 == 0
         assert w % 32 == 0
 
+    @pytest.mark.skipif(
+        not RUN_PROCESSOR_INTEGRATION,
+        reason="Requires downloading model files; run manually with TRIO_RUN_PROCESSOR_INTEGRATION=1",
+    )
     def test_image_processing_shapes(self):
         from trio_core.processors.qwen_vl import load_processor
         import huggingface_hub
@@ -65,6 +74,10 @@ class TestQwenVLProcessor:
         embed_dim = 3 * 2 * 16 * 16  # = 1536
         assert result["pixel_values"].shape[1] == embed_dim
 
+    @pytest.mark.skipif(
+        not RUN_PROCESSOR_INTEGRATION,
+        reason="Requires downloading model files; run manually with TRIO_RUN_PROCESSOR_INTEGRATION=1",
+    )
     def test_video_processing_shapes(self):
         from trio_core.processors.qwen_vl import load_processor
         import huggingface_hub
@@ -88,6 +101,10 @@ class TestQwenVLProcessor:
         embed_dim = 3 * 2 * 16 * 16  # = 1536
         assert result["pixel_values_videos"].shape[1] == embed_dim
 
+    @pytest.mark.skipif(
+        not RUN_PROCESSOR_INTEGRATION,
+        reason="Requires downloading model files; run manually with TRIO_RUN_PROCESSOR_INTEGRATION=1",
+    )
     def test_token_count_matches_grid(self):
         """Verify the number of pad tokens in input_ids matches grid_thw."""
         from trio_core.processors.qwen_vl import load_processor
@@ -115,7 +132,10 @@ class TestQwenVLProcessor:
         assert n_pads == expected, f"Token count {n_pads} != expected {expected} from grid {grid}"
 
 
-@pytest.mark.skipif(True, reason="Run manually: compares custom vs transformers processor")
+@pytest.mark.skipif(
+    not RUN_PROCESSOR_INTEGRATION,
+    reason="Requires downloading model files; run manually with TRIO_RUN_PROCESSOR_INTEGRATION=1",
+)
 class TestProcessorComparison:
     """Compare custom processor output with transformers AutoProcessor."""
 

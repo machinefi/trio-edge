@@ -1,8 +1,9 @@
 """Tests for trio_core.tome — core ToMe algorithm (bipartite matching + merging)."""
 
-import mlx.core as mx
-import mlx.nn as nn
 import pytest
+
+mx = pytest.importorskip("mlx.core", reason="MLX optional dependency not installed")
+nn = pytest.importorskip("mlx.nn", reason="MLX optional dependency not installed")
 
 from trio_core.tome import bipartite_soft_matching, merge_tokens, compute_k_metric
 

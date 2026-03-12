@@ -2,9 +2,11 @@
 
 import hashlib
 
-import mlx.core as mx
 import numpy as np
 import pytest
+
+mx = pytest.importorskip("mlx.core", reason="MLX optional dependency not installed")
+pytest.importorskip("mlx_lm.models.cache", reason="MLX-LM optional dependency not installed")
 
 
 # ---------------------------------------------------------------------------
