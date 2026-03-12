@@ -109,6 +109,38 @@ trio cam --discover
 
 Auto-calibrates resolution for ~500ms inference on any Mac. Green = clear, red = alert with audio notification. No ML training needed — just describe what to monitor.
 
+### Trigger Actions — Shell Commands & Webhooks
+
+Run a shell command or POST a webhook when a watch condition triggers (or clears):
+
+```bash
+# Run different commands on trigger and clear (e.g. turn lights on/off)
+trio webcam -w "Is there a person at the door?" \
+  --on-trigger "./lights_on.sh" --on-clear "./lights_off.sh"
+
+# Webhook — POSTs JSON on both trigger and clear events
+trio cam --host 192.168.1.100 -p pass -w "Is there a person in the frame?" \
+  --webhook "https://hooks.slack.com/services/T.../B.../xxx"
+
+# Home Assistant integration
+trio cam --rtsp "rtsp://admin:pass@192.168.1.100:554/stream" \
+  -w "Is there a package on the doorstep?" \
+  --webhook "http://homeassistant.local:8123/api/webhook/trio" \
+  --cooldown 60
+
+# Combine webhook + shell + disable default audio alert
+trio webcam -w "Is there a person in the frame?" \
+  --webhook "http://homeassistant.local:8123/api/webhook/trio" \
+  --on-trigger "./notify.sh" --no-sound
+```
+
+Shell commands receive environment variables: `TRIO_EVENT` (trigger/clear), `TRIO_CONDITION`, `TRIO_EXPLANATION`, `TRIO_TIMESTAMP`, `TRIO_FRAME` (path to JPEG on trigger).
+
+Webhook payload:
+```json
+{"event": "trigger", "condition": "Is there a person at the door?", "explanation": "A person is standing at the front door", "triggered": true, "timestamp": "2026-03-12T15:30:00+00:00"}
+```
+
 ### Video Analysis
 
 ```bash

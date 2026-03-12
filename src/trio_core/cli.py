@@ -525,6 +525,10 @@ def webcam(
     resolution: int = typer.Option(240, "--resolution", help="Max resolution (lower=faster)"),
     no_sound: bool = typer.Option(False, "--no-sound", help="Disable audio alerts"),
     count: bool = typer.Option(False, "--count", "-c", help="Count people, cars, dogs, cats (cumulative)"),
+    on_trigger: str = typer.Option(None, "--on-trigger", help="Shell command on trigger (env: TRIO_EVENT, TRIO_CONDITION, TRIO_EXPLANATION, TRIO_TIMESTAMP, TRIO_FRAME)"),
+    on_clear: str = typer.Option(None, "--on-clear", help="Shell command when condition clears"),
+    webhook: str = typer.Option(None, "--webhook", help="HTTP POST URL for trigger/clear events"),
+    cooldown: float = typer.Option(30.0, "--cooldown", help="Seconds between callbacks (default: 30)"),
 ):
     """Live webcam/camera monitor with VLM analysis and alerts.
 
@@ -537,6 +541,8 @@ def webcam(
         trio webcam -w "someone at the door" -s 1            # iPhone Continuity Camera
         trio webcam -w "package on doorstep" -s rtsp://...   # IP camera
         trio webcam --count                                  # Count objects
+        trio webcam -w "Is there a person at the door?" --on-trigger "./lights_on.sh" --on-clear "./lights_off.sh"
+        trio webcam -w "Is there a person in the frame?" --webhook "http://homeassistant.local:8123/api/webhook/trio"
     """
     import os
     import sys
@@ -575,6 +581,14 @@ def webcam(
         sys.argv += ["--no-sound"]
     if count:
         sys.argv += ["--count"]
+    if on_trigger:
+        sys.argv += ["--on-trigger", on_trigger]
+    if on_clear:
+        sys.argv += ["--on-clear", on_clear]
+    if webhook:
+        sys.argv += ["--webhook", webhook]
+    if cooldown != 30.0:
+        sys.argv += ["--cooldown", str(cooldown)]
 
     try:
         from trio_core._webcam_gui import main
@@ -602,6 +616,10 @@ def cam(
     count: bool = typer.Option(False, "--count", "-c", help="Count people, cars, dogs, cats (cumulative)"),
     digest: bool = typer.Option(False, "--digest", "-d", help="Smart event timeline with scene understanding"),
     adapter: str = typer.Option(None, "--adapter", "-a", help="LoRA adapter directory path"),
+    on_trigger: str = typer.Option(None, "--on-trigger", help="Shell command on trigger"),
+    on_clear: str = typer.Option(None, "--on-clear", help="Shell command when condition clears"),
+    webhook: str = typer.Option(None, "--webhook", help="HTTP POST URL for trigger/clear events"),
+    cooldown: float = typer.Option(30.0, "--cooldown", help="Seconds between callbacks (default: 30)"),
 ):
     """IP camera monitor with ONVIF discovery and AI analysis.
 
@@ -614,6 +632,7 @@ def cam(
         trio cam --rtsp "rtsp://admin:pass@IP:554/stream"      # direct RTSP
         trio cam -w "someone at the door" --host 192.168.1.100 -p pass
         trio cam --rtsp "rtsp://..." --count                   # count objects
+        trio cam -w "Is there a person in the frame?" --webhook "http://homeassistant.local:8123/api/webhook/trio" --host 192.168.1.100 -p pass
     """
     import os
     import sys
@@ -697,6 +716,14 @@ def cam(
         sys.argv += ["--digest"]
     if adapter:
         sys.argv += ["--adapter", adapter]
+    if on_trigger:
+        sys.argv += ["--on-trigger", on_trigger]
+    if on_clear:
+        sys.argv += ["--on-clear", on_clear]
+    if webhook:
+        sys.argv += ["--webhook", webhook]
+    if cooldown != 30.0:
+        sys.argv += ["--cooldown", str(cooldown)]
 
     try:
         from trio_core._webcam_gui import main

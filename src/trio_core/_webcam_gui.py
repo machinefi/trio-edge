@@ -23,6 +23,13 @@ Usage:
     # Custom prompt:
     python examples/webcam_gui.py --prompt "What is the person doing?"
 
+    # Trigger callbacks — shell command, webhook, or both:
+    python examples/webcam_gui.py --watch "Is there a person at the door?" --on-trigger "./lights_on.sh" --on-clear "./lights_off.sh"
+    python examples/webcam_gui.py --watch "Is there a person in the frame?" --webhook "https://hooks.slack.com/services/..."
+    python examples/webcam_gui.py --watch "Is there a package on the floor?" --webhook "http://homeassistant.local:8123/api/webhook/trio" --cooldown 60
+
+    # Shell env vars: TRIO_EVENT (trigger|clear), TRIO_CONDITION, TRIO_EXPLANATION, TRIO_TIMESTAMP, TRIO_FRAME
+
 Camera sources:
     0           — Built-in Mac webcam
     1           — iPhone via macOS Continuity Camera (zero config, just bring iPhone near Mac)
@@ -35,12 +42,17 @@ Controls:
 """
 
 import argparse
+import base64
+import json
+import os
 import re
 import shutil
 import subprocess
+import tempfile
 import threading
 import time
-from datetime import datetime
+import urllib.request
+from datetime import datetime, timezone
 
 import cv2
 import numpy as np
@@ -268,6 +280,15 @@ def main():
                         help="Smart event timeline — logs activities with scene understanding")
     parser.add_argument("--adapter", default=None,
                         help="LoRA adapter directory path")
+    parser.add_argument("--on-trigger", default=None,
+                        help="Shell command to run when watch condition triggers "
+                             "(env: TRIO_EVENT, TRIO_CONDITION, TRIO_EXPLANATION, TRIO_TIMESTAMP, TRIO_FRAME)")
+    parser.add_argument("--on-clear", default=None,
+                        help="Shell command to run when watch condition clears")
+    parser.add_argument("--webhook", default=None,
+                        help="HTTP POST URL for trigger and clear events (JSON payload)")
+    parser.add_argument("--cooldown", type=float, default=30.0,
+                        help="Minimum seconds between trigger/clear callbacks (default: 30)")
     args = parser.parse_args()
 
     watch_mode = args.watch is not None
@@ -448,6 +469,83 @@ def main():
         except FileNotFoundError:
             pass
 
+    # Callback state
+    last_trigger_cb_time = 0.0
+    last_clear_cb_time = 0.0
+
+    def _save_frame_jpeg(buf):
+        """Save latest frame from buffer to a temp JPEG, return path."""
+        if not buf:
+            return None
+        try:
+            fd, path = tempfile.mkstemp(suffix=".jpg", prefix="trio_")
+            os.close(fd)
+            cv2.imwrite(path, buf[-1], [cv2.IMWRITE_JPEG_QUALITY, 80])
+            return path
+        except Exception:
+            return None
+
+    def _run_shell_callback(cmd, condition, explanation, timestamp, frame_path, event_type):
+        """Run shell command with TRIO_ env vars."""
+        env = os.environ.copy()
+        env["TRIO_EVENT"] = event_type
+        env["TRIO_CONDITION"] = condition or ""
+        env["TRIO_EXPLANATION"] = explanation or ""
+        env["TRIO_TIMESTAMP"] = timestamp
+        env["TRIO_FRAME"] = frame_path or ""
+        try:
+            subprocess.run(cmd, shell=True, env=env, timeout=30,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception as e:
+            print(f"  on-{event_type} error: {e}")
+        finally:
+            if frame_path:
+                try:
+                    os.unlink(frame_path)
+                except OSError:
+                    pass
+
+    def _send_webhook(url, condition, explanation, is_triggered, timestamp, buf):
+        """POST JSON to webhook URL."""
+        payload = {
+            "event": "trigger" if is_triggered else "clear",
+            "condition": condition or "",
+            "explanation": explanation or "",
+            "triggered": is_triggered,
+            "timestamp": timestamp,
+        }
+        data = json.dumps(payload).encode()
+        req = urllib.request.Request(url, data=data, method="POST",
+                                     headers={"Content-Type": "application/json"})
+        try:
+            urllib.request.urlopen(req, timeout=10)
+        except Exception as e:
+            print(f"  webhook error: {e}")
+
+    def _fire_callbacks(event_type, condition, explanation, buf):
+        """Fire on-trigger/on-clear shell commands and webhook."""
+        nonlocal last_trigger_cb_time, last_clear_cb_time
+        now = time.monotonic()
+        if event_type == "trigger":
+            if now - last_trigger_cb_time < args.cooldown:
+                return
+            last_trigger_cb_time = now
+        else:
+            if now - last_clear_cb_time < args.cooldown:
+                return
+            last_clear_cb_time = now
+
+        ts = datetime.now(timezone.utc).isoformat()
+        cmd = args.on_trigger if event_type == "trigger" else args.on_clear
+        if cmd:
+            frame_path = _save_frame_jpeg(buf) if event_type == "trigger" else None
+            threading.Thread(target=_run_shell_callback, daemon=True,
+                             args=(cmd, condition, explanation, ts, frame_path, event_type)).start()
+        if args.webhook:
+            threading.Thread(target=_send_webhook, daemon=True,
+                             args=(args.webhook, condition, explanation,
+                                   event_type == "trigger", ts, buf)).start()
+
     def inference_loop():
         nonlocal description, metrics_text, running
         nonlocal triggered, triggered_until, prev_description
@@ -615,6 +713,10 @@ def main():
                     if watch_mode:
                         upper = answer.upper()
                         is_alert = upper.startswith("YES")
+                        if not is_alert and triggered:
+                            triggered = False
+                            clear_reason = answer[2:].lstrip(".,!: ") if upper.startswith("NO") and len(answer) > 2 else answer
+                            _fire_callbacks("clear", args.watch, clear_reason, buf)
                         if is_alert:
                             was_triggered = triggered
                             triggered = True
@@ -625,9 +727,10 @@ def main():
                                 "text": f"[{ts}] {reason[:55]}",
                                 "triggered": True,
                             })
-                            # Only speak on state change (CLEAR -> ALERT)
+                            # Only fire on state change (CLEAR -> ALERT)
                             if not was_triggered:
                                 _alert(f"Alert: {args.watch}")
+                                _fire_callbacks("trigger", args.watch, reason, buf)
 
                 if not digest_mode:
                     print(f"\n> {answer}")
