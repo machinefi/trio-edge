@@ -738,7 +738,13 @@ async def auto_report(
         "data_points": data["total_events"],
         "model": model_used,
         "report": report_text,
-        "metrics_summary": metrics_summary,
+        "metrics_summary": {
+            **metrics_summary,
+            "drink_sizes": data.get("drink_sizes", {}),
+            "food_mentions": data.get("food_mentions", 0),
+            "laptop_usage": data.get("laptop_mentions", 0),
+            "phone_usage": data.get("phone_mentions", 0),
+        },
     }
 
 
