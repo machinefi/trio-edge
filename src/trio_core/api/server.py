@@ -595,7 +595,7 @@ def _register_routes(app: FastAPI) -> None:
         }
 
     # Console API routes
-    from .routers import events, cameras, chat, alerts, reports, metrics, analytics, report_export
+    from .routers import events, cameras, chat, alerts, reports, metrics, analytics, report_export, insights
     app.include_router(events.router)
     app.include_router(cameras.router)
     app.include_router(chat.router)
@@ -604,6 +604,7 @@ def _register_routes(app: FastAPI) -> None:
     app.include_router(metrics.router)
     app.include_router(analytics.router)
     app.include_router(report_export.router)
+    app.include_router(insights.router)
 
 
 async def _reload_engine() -> None:
