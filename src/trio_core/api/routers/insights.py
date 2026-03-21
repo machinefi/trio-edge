@@ -739,7 +739,7 @@ async def auto_report(
         response = client.models.generate_content(
             model=GEMINI_MODEL,
             contents=prompt,
-            config={"temperature": 0.4, "max_output_tokens": 3000},
+            config={"temperature": 0.4, "max_output_tokens": 4096},
         )
         report_text = response.text or "Report generation failed."
         model_used = GEMINI_MODEL
