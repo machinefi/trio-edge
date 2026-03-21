@@ -268,6 +268,25 @@ class EventStore:
             return None
         return os.path.abspath(os.path.join(self.frames_dir, row[0]))
 
+    # ── Camera Snapshots ──────────────────────────────────────────────────────
+
+    async def save_camera_snapshot(self, camera_id: str, jpeg_bytes: bytes) -> str:
+        """Save a camera snapshot to disk and return the file path."""
+        cam_dir = os.path.join(self.frames_dir, camera_id)
+        os.makedirs(cam_dir, exist_ok=True)
+        path = os.path.join(cam_dir, "latest.jpg")
+        with open(path, "wb") as f:
+            f.write(jpeg_bytes)
+        return path
+
+    async def get_camera_snapshot(self, camera_id: str) -> bytes | None:
+        """Read the latest snapshot for a camera from disk, or None."""
+        path = os.path.join(self.frames_dir, camera_id, "latest.jpg")
+        if not os.path.isfile(path):
+            return None
+        with open(path, "rb") as f:
+            return f.read()
+
     # ── Cameras ──────────────────────────────────────────────────────────────
 
     async def list_cameras(self) -> list[dict]:

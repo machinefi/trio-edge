@@ -64,6 +64,8 @@ class CameraOut(BaseModel):
     enabled: bool = True
     created_at: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)
+    has_snapshot: bool = False
+    snapshot_url: str = ""
 
 
 # ── Chat ─────────────────────────────────────────────────────────────────────
