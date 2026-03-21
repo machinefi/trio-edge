@@ -616,9 +616,10 @@ async def _reload_engine() -> None:
         logger.error("Reload failed, rolled back: %s", e)
 
     # Console API routes
-    from .routers import events, cameras
+    from .routers import events, cameras, chat
     app.include_router(events.router)
     app.include_router(cameras.router)
+    app.include_router(chat.router)
 
 
 def _strip_think_tags(text: str) -> str:
