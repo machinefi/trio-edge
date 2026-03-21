@@ -77,6 +77,19 @@ class EventStore:
             );
             CREATE INDEX IF NOT EXISTS idx_alert_history_rule ON alert_history(rule_id);
             CREATE INDEX IF NOT EXISTS idx_alert_history_ts ON alert_history(triggered_at);
+
+            CREATE TABLE IF NOT EXISTS metrics (
+                id TEXT PRIMARY KEY,
+                timestamp TEXT NOT NULL,
+                camera_id TEXT NOT NULL,
+                metric_type TEXT NOT NULL,
+                value REAL NOT NULL,
+                confidence REAL DEFAULT 1.0,
+                event_id TEXT,
+                metadata_json TEXT DEFAULT '{}'
+            );
+            CREATE INDEX IF NOT EXISTS idx_metrics_camera_type_ts ON metrics(camera_id, metric_type, timestamp);
+            CREATE INDEX IF NOT EXISTS idx_metrics_ts ON metrics(timestamp);
             """
         )
         await self._db.commit()
@@ -399,6 +412,153 @@ class EventStore:
         )
         await self._db.commit()
         return entry_id
+
+    # ── Metrics ──────────────────────────────────────────────────────────
+
+    async def insert_metric(self, metric: dict) -> str:
+        """Insert a metric data point and return its ID."""
+        assert self._db is not None
+        metric_id = metric.get("id") or f"met_{uuid.uuid4().hex[:12]}"
+        ts = metric.get("timestamp") or datetime.utcnow().isoformat() + "Z"
+
+        await self._db.execute(
+            """
+            INSERT INTO metrics (id, timestamp, camera_id, metric_type, value,
+                                 confidence, event_id, metadata_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                metric_id,
+                ts,
+                metric.get("camera_id", ""),
+                metric.get("metric_type", ""),
+                metric.get("value", 0.0),
+                metric.get("confidence", 1.0),
+                metric.get("event_id"),
+                json.dumps(metric.get("metadata", {})),
+            ),
+        )
+        await self._db.commit()
+        return metric_id
+
+    async def query_metrics(
+        self,
+        camera_id: str,
+        metric_type: str,
+        start: str | None = None,
+        end: str | None = None,
+        granularity: str = "hour",
+    ) -> list[dict]:
+        """Return time-bucketed metric aggregations."""
+        assert self._db is not None
+
+        substr_len = {"minute": 16, "hour": 13, "day": 10}.get(granularity, 13)
+
+        where_clauses = ["camera_id = ?", "metric_type = ?"]
+        params: list[str | int] = [camera_id, metric_type]
+        if start:
+            where_clauses.append("timestamp >= ?")
+            params.append(start)
+        if end:
+            where_clauses.append("timestamp <= ?")
+            params.append(end)
+
+        where = "WHERE " + " AND ".join(where_clauses)
+
+        cursor = await self._db.execute(
+            f"""
+            SELECT SUBSTR(timestamp, 1, {substr_len}) AS bucket,
+                   SUM(value) AS total_value,
+                   COUNT(*) AS cnt
+            FROM metrics {where}
+            GROUP BY bucket ORDER BY bucket
+            """,
+            params,
+        )
+        return [
+            {"timestamp": r[0], "value": r[1], "count": r[2]}
+            for r in await cursor.fetchall()
+        ]
+
+    async def latest_metrics(self, camera_id: str) -> dict:
+        """Return the latest value for each metric_type for a camera."""
+        assert self._db is not None
+        cursor = await self._db.execute(
+            """
+            SELECT metric_type, value, timestamp
+            FROM metrics
+            WHERE camera_id = ?
+              AND timestamp = (
+                  SELECT MAX(m2.timestamp)
+                  FROM metrics m2
+                  WHERE m2.camera_id = metrics.camera_id
+                    AND m2.metric_type = metrics.metric_type
+              )
+            GROUP BY metric_type
+            """,
+            (camera_id,),
+        )
+        return {r[0]: r[1] for r in await cursor.fetchall()}
+
+    async def metrics_summary(
+        self,
+        camera_id: str,
+        start: str | None = None,
+        end: str | None = None,
+    ) -> dict:
+        """Return aggregated metrics summary for a camera."""
+        assert self._db is not None
+        where_clauses = ["camera_id = ?"]
+        params: list[str] = [camera_id]
+        if start:
+            where_clauses.append("timestamp >= ?")
+            params.append(start)
+        if end:
+            where_clauses.append("timestamp <= ?")
+            params.append(end)
+        where = "WHERE " + " AND ".join(where_clauses)
+
+        # Total in/out
+        cursor = await self._db.execute(
+            f"SELECT COALESCE(SUM(value), 0) FROM metrics {where} AND metric_type = 'people_in'",
+            params,
+        )
+        total_in = (await cursor.fetchone())[0]
+
+        cursor = await self._db.execute(
+            f"SELECT COALESCE(SUM(value), 0) FROM metrics {where} AND metric_type = 'people_out'",
+            params,
+        )
+        total_out = (await cursor.fetchone())[0]
+
+        # Average queue length
+        cursor = await self._db.execute(
+            f"SELECT COALESCE(AVG(value), 0) FROM metrics {where} AND metric_type = 'queue_length'",
+            params,
+        )
+        avg_queue = round((await cursor.fetchone())[0], 2)
+
+        # Peak hour (by people_in)
+        cursor = await self._db.execute(
+            f"""
+            SELECT SUBSTR(timestamp, 1, 13) AS hour, SUM(value) AS cnt
+            FROM metrics {where} AND metric_type = 'people_in'
+            GROUP BY hour ORDER BY cnt DESC LIMIT 1
+            """,
+            params,
+        )
+        peak_row = await cursor.fetchone()
+        peak_hour = peak_row[0] if peak_row else None
+        peak_count = peak_row[1] if peak_row else 0
+
+        return {
+            "total_in": total_in,
+            "total_out": total_out,
+            "net_occupancy": total_in - total_out,
+            "avg_queue": avg_queue,
+            "peak_hour": peak_hour,
+            "peak_count": peak_count,
+        }
 
     # ── Reports ──────────────────────────────────────────────────────────
 
