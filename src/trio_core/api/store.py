@@ -55,6 +55,28 @@ class EventStore:
                 created_at TEXT NOT NULL,
                 metadata_json TEXT DEFAULT '{}'
             );
+
+            CREATE TABLE IF NOT EXISTS alert_rules (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                camera_id TEXT,
+                condition TEXT NOT NULL,
+                channels TEXT DEFAULT '[]',
+                cooldown_s INTEGER DEFAULT 60,
+                enabled INTEGER DEFAULT 1,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS alert_history (
+                id TEXT PRIMARY KEY,
+                rule_id TEXT NOT NULL,
+                event_id TEXT NOT NULL,
+                triggered_at TEXT NOT NULL,
+                channel TEXT NOT NULL,
+                status TEXT DEFAULT 'sent'
+            );
+            CREATE INDEX IF NOT EXISTS idx_alert_history_rule ON alert_history(rule_id);
+            CREATE INDEX IF NOT EXISTS idx_alert_history_ts ON alert_history(triggered_at);
             """
         )
         await self._db.commit()
@@ -273,6 +295,265 @@ class EventStore:
         cursor = await self._db.execute("DELETE FROM cameras WHERE id = ?", (cam_id,))
         await self._db.commit()
         return cursor.rowcount > 0
+
+
+    # ── Alert Rules ───────────────────────────────────────────────────────
+
+    async def list_alert_rules(self) -> list[dict]:
+        """List all alert rules."""
+        assert self._db is not None
+        cursor = await self._db.execute("SELECT * FROM alert_rules ORDER BY created_at DESC")
+        rows = await cursor.fetchall()
+        return [_row_to_alert_rule(r) for r in rows]
+
+    async def create_alert_rule(self, rule: dict) -> str:
+        """Create an alert rule and return its ID."""
+        assert self._db is not None
+        rule_id = f"rule_{uuid.uuid4().hex[:12]}"
+        now = datetime.utcnow().isoformat() + "Z"
+        channels = json.dumps(rule.get("channels", []))
+
+        await self._db.execute(
+            """
+            INSERT INTO alert_rules (id, name, camera_id, condition, channels, cooldown_s, enabled, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                rule_id,
+                rule.get("name", ""),
+                rule.get("camera_id"),
+                rule.get("condition", ""),
+                channels,
+                rule.get("cooldown_s", 60),
+                1 if rule.get("enabled", True) else 0,
+                now,
+            ),
+        )
+        await self._db.commit()
+        return rule_id
+
+    async def delete_alert_rule(self, rule_id: str) -> bool:
+        """Delete an alert rule. Returns True if it existed."""
+        assert self._db is not None
+        cursor = await self._db.execute("DELETE FROM alert_rules WHERE id = ?", (rule_id,))
+        await self._db.commit()
+        return cursor.rowcount > 0
+
+    async def list_alert_history(
+        self,
+        rule_id: str | None = None,
+        start: str | None = None,
+        end: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict:
+        """List alert history with filters. Returns {items, total}."""
+        assert self._db is not None
+        where_clauses: list[str] = []
+        params: list[str | int] = []
+
+        if rule_id:
+            where_clauses.append("rule_id = ?")
+            params.append(rule_id)
+        if start:
+            where_clauses.append("triggered_at >= ?")
+            params.append(start)
+        if end:
+            where_clauses.append("triggered_at <= ?")
+            params.append(end)
+
+        where = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+
+        cursor = await self._db.execute(f"SELECT COUNT(*) FROM alert_history {where}", params)
+        row = await cursor.fetchone()
+        total = row[0] if row else 0
+
+        cursor = await self._db.execute(
+            f"SELECT * FROM alert_history {where} ORDER BY triggered_at DESC LIMIT ? OFFSET ?",
+            [*params, limit, offset],
+        )
+        rows = await cursor.fetchall()
+        items = [_row_to_alert_history(r) for r in rows]
+
+        return {"items": items, "total": total}
+
+    async def insert_alert_history(self, entry: dict) -> str:
+        """Insert an alert history entry and return its ID."""
+        assert self._db is not None
+        entry_id = entry.get("id") or f"ah_{uuid.uuid4().hex[:12]}"
+        now = datetime.utcnow().isoformat() + "Z"
+
+        await self._db.execute(
+            """
+            INSERT INTO alert_history (id, rule_id, event_id, triggered_at, channel, status)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                entry_id,
+                entry.get("rule_id", ""),
+                entry.get("event_id", ""),
+                entry.get("triggered_at", now),
+                entry.get("channel", ""),
+                entry.get("status", "sent"),
+            ),
+        )
+        await self._db.commit()
+        return entry_id
+
+    # ── Reports ──────────────────────────────────────────────────────────
+
+    async def daily_report(self, date_str: str, camera_id: str | None = None) -> dict:
+        """Generate a daily report with hourly breakdown and per-camera stats."""
+        assert self._db is not None
+        day_start = f"{date_str}T00:00:00"
+        day_end = f"{date_str}T23:59:59"
+
+        where_clauses = ["timestamp >= ?", "timestamp <= ?"]
+        params: list[str] = [day_start, day_end]
+        if camera_id:
+            where_clauses.append("camera_id = ?")
+            params.append(camera_id)
+        where = "WHERE " + " AND ".join(where_clauses)
+
+        # Totals
+        cursor = await self._db.execute(
+            f"SELECT COUNT(*), SUM(alert_triggered) FROM events {where}", params
+        )
+        row = await cursor.fetchone()
+        total_events = row[0] if row else 0
+        total_alerts = int(row[1] or 0) if row else 0
+
+        # Hourly breakdown
+        cursor = await self._db.execute(
+            f"""
+            SELECT CAST(SUBSTR(timestamp, 12, 2) AS INTEGER) AS hour,
+                   COUNT(*) AS events,
+                   SUM(alert_triggered) AS alerts
+            FROM events {where}
+            GROUP BY hour ORDER BY hour
+            """,
+            params,
+        )
+        hourly = [
+            {"hour": r[0], "events": r[1], "alerts": int(r[2] or 0)}
+            for r in await cursor.fetchall()
+        ]
+
+        # Per-camera stats
+        cursor = await self._db.execute(
+            f"""
+            SELECT camera_id, camera_name, COUNT(*) AS events, SUM(alert_triggered) AS alerts
+            FROM events {where}
+            GROUP BY camera_id
+            """,
+            params,
+        )
+        cameras = [
+            {
+                "camera_id": r[0],
+                "camera_name": r[1] or r[0],
+                "events": r[2],
+                "alerts": int(r[3] or 0),
+            }
+            for r in await cursor.fetchall()
+        ]
+
+        # Anomalies (alert events)
+        cursor = await self._db.execute(
+            f"""
+            SELECT id, timestamp, camera_id, camera_name, description
+            FROM events {where} AND alert_triggered = 1
+            ORDER BY timestamp DESC
+            """,
+            params,
+        )
+        anomalies = [
+            {
+                "id": r[0],
+                "timestamp": r[1],
+                "camera_id": r[2],
+                "camera_name": r[3] or r[2],
+                "description": r[4] or "",
+            }
+            for r in await cursor.fetchall()
+        ]
+
+        return {
+            "date": date_str,
+            "total_events": total_events,
+            "total_alerts": total_alerts,
+            "hourly": hourly,
+            "cameras": cameras,
+            "anomalies": anomalies,
+        }
+
+    async def trend_report(
+        self, from_date: str, to_date: str, camera_id: str | None = None
+    ) -> dict:
+        """Generate a trend report over a date range."""
+        assert self._db is not None
+        day_start = f"{from_date}T00:00:00"
+        day_end = f"{to_date}T23:59:59"
+
+        where_clauses = ["timestamp >= ?", "timestamp <= ?"]
+        params: list[str] = [day_start, day_end]
+        if camera_id:
+            where_clauses.append("camera_id = ?")
+            params.append(camera_id)
+        where = "WHERE " + " AND ".join(where_clauses)
+
+        # Daily counts
+        cursor = await self._db.execute(
+            f"""
+            SELECT SUBSTR(timestamp, 1, 10) AS day,
+                   COUNT(*) AS events,
+                   SUM(alert_triggered) AS alerts
+            FROM events {where}
+            GROUP BY day ORDER BY day
+            """,
+            params,
+        )
+        days = [
+            {"date": r[0], "events": r[1], "alerts": int(r[2] or 0)}
+            for r in await cursor.fetchall()
+        ]
+
+        total_events = sum(d["events"] for d in days)
+        total_alerts = sum(d["alerts"] for d in days)
+
+        return {
+            "from_date": from_date,
+            "to_date": to_date,
+            "days": days,
+            "total_events": total_events,
+            "total_alerts": total_alerts,
+        }
+
+
+def _row_to_alert_rule(row: aiosqlite.Row) -> dict:
+    """Convert a database row to an alert rule dict."""
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "camera_id": row["camera_id"],
+        "condition": row["condition"],
+        "channels": json.loads(row["channels"] or "[]"),
+        "cooldown_s": row["cooldown_s"],
+        "enabled": bool(row["enabled"]),
+        "created_at": row["created_at"],
+    }
+
+
+def _row_to_alert_history(row: aiosqlite.Row) -> dict:
+    """Convert a database row to an alert history dict."""
+    return {
+        "id": row["id"],
+        "rule_id": row["rule_id"],
+        "event_id": row["event_id"],
+        "triggered_at": row["triggered_at"],
+        "channel": row["channel"],
+        "status": row["status"],
+    }
 
 
 def _row_to_event(row: aiosqlite.Row) -> dict:
