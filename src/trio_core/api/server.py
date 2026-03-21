@@ -111,6 +111,12 @@ async def lifespan(app: FastAPI):
         raise
     logger.info("Engine ready: backend=%s", _engine._backend.backend_name if _engine._backend else "none")
 
+    # Console event store
+    from .store import EventStore
+    store = EventStore()
+    await store.init()
+    app.state.event_store = store
+
     # SIGHUP → reload model (same as POST /v1/admin/reload)
     import signal
 
@@ -139,6 +145,9 @@ async def lifespan(app: FastAPI):
         await asyncio.sleep(0.1)
     if _active_requests > 0:
         logger.warning("Shutdown with %d request(s) still active", _active_requests)
+    # Close event store
+    if hasattr(app.state, "event_store"):
+        await app.state.event_store.close()
     logger.info("Shutdown complete")
 
 
@@ -605,6 +614,11 @@ async def _reload_engine() -> None:
         _engine = old_engine
         _engine._loaded = True
         logger.error("Reload failed, rolled back: %s", e)
+
+    # Console API routes
+    from .routers import events, cameras
+    app.include_router(events.router)
+    app.include_router(cameras.router)
 
 
 def _strip_think_tags(text: str) -> str:

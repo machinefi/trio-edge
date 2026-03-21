@@ -31,6 +31,7 @@ dependencies = [
     "typer>=0.9",
     "pydantic>=2.0",
     "pydantic-settings>=2.0",
+    "aiosqlite>=0.19",
 ]
 
 [project.urls]
