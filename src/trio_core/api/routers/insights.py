@@ -529,6 +529,18 @@ async def _gather_report_data(
         if e.get("description")
     ]
 
+    # Drink size analysis (Starbucks-specific but useful for any F&B)
+    import re
+    all_descs = " ".join(e.get("description", "").lower() for e in events)
+    drink_sizes = {
+        "tall": len(re.findall(r"\btall\b", all_descs)),
+        "grande": len(re.findall(r"\bgrande\b", all_descs)),
+        "venti": len(re.findall(r"\bventi\b", all_descs)),
+    }
+    food_mentions = len(re.findall(r"\b(pastry|sandwich|muffin|cake|cookie|food|croissant|bagel)\b", all_descs))
+    laptop_mentions = len(re.findall(r"\blaptop\b", all_descs))
+    phone_mentions = len(re.findall(r"\bphone\b", all_descs))
+
     # Time range string with actual date
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc)
@@ -544,6 +556,10 @@ async def _gather_report_data(
         "peak_hour": peak_hour,
         "top_descriptions": top_descriptions,
         "total_events": len(events),
+        "drink_sizes": drink_sizes,
+        "food_mentions": food_mentions,
+        "laptop_mentions": laptop_mentions,
+        "phone_mentions": phone_mentions,
     }
 
 
@@ -588,6 +604,11 @@ def _build_investment_prompt(data: dict) -> str:
         f"- Vehicle data: {vehicle_summary}\n"
         f"- Activity patterns: {behavioral_summary}\n"
         f"- Peak hour: {data['peak_hour']}\n"
+        f"- Drink sizes observed: Tall={data.get('drink_sizes',{}).get('tall',0)}, "
+        f"Grande={data.get('drink_sizes',{}).get('grande',0)}, "
+        f"Venti={data.get('drink_sizes',{}).get('venti',0)}\n"
+        f"- Food items mentioned: {data.get('food_mentions',0)} times\n"
+        f"- Laptop usage: {data.get('laptop_mentions',0)} | Phone usage: {data.get('phone_mentions',0)}\n"
         f"- Notable observations:\n{top_5}\n\n"
         "CONTEXT:\n"
         "- A typical Starbucks location serves 400-500 customers per day\n"
