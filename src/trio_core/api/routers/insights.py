@@ -541,6 +541,17 @@ async def _gather_report_data(
     laptop_mentions = len(re.findall(r"\blaptop\b", all_descs))
     phone_mentions = len(re.findall(r"\bphone\b", all_descs))
 
+    # Pre-compute ASP (average selling price)
+    total_drinks = drink_sizes["tall"] + drink_sizes["grande"] + drink_sizes["venti"]
+    if total_drinks > 0:
+        weighted_asp = (drink_sizes["tall"] * 4.25 + drink_sizes["grande"] * 5.45 + drink_sizes["venti"] * 6.25) / total_drinks
+        food_attach_rate = food_mentions / total_drinks * 100 if total_drinks > 0 else 0
+        estimated_asp_with_food = weighted_asp + (food_attach_rate / 100 * 3.50)
+    else:
+        weighted_asp = 0
+        food_attach_rate = 0
+        estimated_asp_with_food = 0
+
     # Time range string with actual date
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc)
@@ -560,6 +571,9 @@ async def _gather_report_data(
         "food_mentions": food_mentions,
         "laptop_mentions": laptop_mentions,
         "phone_mentions": phone_mentions,
+        "estimated_asp": round(weighted_asp, 2),
+        "food_attach_rate": round(food_attach_rate, 1),
+        "estimated_asp_with_food": round(estimated_asp_with_food, 2),
     }
 
 
@@ -610,6 +624,9 @@ def _build_investment_prompt(data: dict) -> str:
         f"  - Venti (20oz, ~$6.25): {data.get('drink_sizes',{}).get('venti',0)} observations\n"
         f"  - Food attach (pastry/sandwich): {data.get('food_mentions',0)} observations (~$3.50 add-on)\n"
         f"  - Laptop users (dwell time proxy): {data.get('laptop_mentions',0)}\n"
+        f"  ** PRE-COMPUTED ASP: ${data.get('estimated_asp',0):.2f} (drinks only), "
+        f"${data.get('estimated_asp_with_food',0):.2f} (incl food attach at {data.get('food_attach_rate',0):.1f}%)\n"
+        f"  ** vs Starbucks reported ASP: ~$5.50\n"
         f"- Notable observations:\n{top_5}\n\n"
         "CONTEXT:\n"
         "- A typical Starbucks location serves 400-500 customers per day\n"
@@ -745,6 +762,9 @@ async def auto_report(
             "food_mentions": data.get("food_mentions", 0),
             "laptop_usage": data.get("laptop_mentions", 0),
             "phone_usage": data.get("phone_mentions", 0),
+            "estimated_asp": data.get("estimated_asp", 0),
+            "food_attach_rate": data.get("food_attach_rate", 0),
+            "estimated_asp_with_food": data.get("estimated_asp_with_food", 0),
         },
     }
 
