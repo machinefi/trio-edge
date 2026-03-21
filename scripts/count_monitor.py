@@ -179,9 +179,17 @@ async def run(args):
                             },
                         })
 
-                        # Save crop as thumbnail + full frame
-                        _, crop_jpeg = cv2.imencode(".jpg", crop_info.crop, [cv2.IMWRITE_JPEG_QUALITY, 90])
+                        # Save upscaled crop (min 224x224 for clear thumbnails)
+                        save_crop = crop_info.crop.copy()
+                        ch, cw = save_crop.shape[:2]
+                        if ch < 224 or cw < 224:
+                            scale = max(224 / ch, 224 / cw)
+                            save_crop = cv2.resize(save_crop, (int(cw * scale), int(ch * scale)), interpolation=cv2.INTER_LANCZOS4)
+                        _, crop_jpeg = cv2.imencode(".jpg", save_crop, [cv2.IMWRITE_JPEG_QUALITY, 90])
                         await store.save_frame(event_id, args.camera_id, crop_jpeg.tobytes())
+                        # Save full frame as camera thumbnail
+                        _, full_jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                        await store.save_camera_snapshot(args.camera_id, full_jpeg.tobytes())
 
                         logger.info("VLM: %s", description[:120])
                     except Exception as e:
