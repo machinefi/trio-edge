@@ -127,6 +127,12 @@ async def camera_comparison(
     for r in await cursor.fetchall():
         met_rows.setdefault(r[0], {})[r[1]] = r[2]
 
+    # Get camera names from cameras table
+    cam_names = {}
+    cam_list = await store.list_cameras()
+    for c in cam_list:
+        cam_names[c["id"]] = c.get("name") or c["id"]
+
     # Merge
     all_camera_ids = set(event_rows.keys()) | set(met_rows.keys())
     cameras = []
@@ -135,7 +141,7 @@ async def camera_comparison(
         met = met_rows.get(cid, {})
         cameras.append({
             "camera_id": cid,
-            "camera_name": ev["camera_name"],
+            "camera_name": cam_names.get(cid) or ev["camera_name"],
             "total_in": met.get("people_in", 0),
             "total_out": met.get("people_out", 0),
             "total_events": ev["events"],
