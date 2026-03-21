@@ -554,7 +554,7 @@ async def export_report(
     request: Request,
     date_str: str = Query(None, alias="date", description="YYYY-MM-DD, default today"),
     camera_id: str | None = Query(None),
-    facility: str = Query("Facility Alpha", description="Facility name for the cover page"),
+    facility: str = Query("Data Center Operations", description="Facility name for the cover page"),
     format: str = Query("pdf", description="pdf or html"),
 ):
     """Export a professional intelligence report as PDF (or HTML fallback)."""
@@ -578,7 +578,9 @@ async def export_report(
 
     # Build HTML
     html = _build_html_report(report, all_events, summary, facility)
-    filename = f"trio-report-{date_str}"
+    # Sanitize facility name for filename
+    safe_facility = "".join(c if c.isalnum() or c in "-_ " else "" for c in facility).strip().replace(" ", "-").lower()
+    filename = f"trio-report-{safe_facility}-{date_str}" if safe_facility else f"trio-report-{date_str}"
 
     # Try PDF conversion
     if format == "pdf":

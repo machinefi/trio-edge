@@ -414,7 +414,7 @@ async def executive_summary(
     if not api_key:
         # Fallback: return structured data without AI summary
         return {
-            "summary": _generate_fallback_summary(demo, vehi, behav),
+            "summary": _generate_fallback_summary(demo, vehi, behav, "investment"),
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "data_points_analyzed": data_points,
             "model": "fallback-stats",
@@ -435,7 +435,7 @@ async def executive_summary(
         summary_text = response.text or "Summary generation failed."
     except Exception as e:
         logger.warning("Gemini executive summary failed: %s", e)
-        summary_text = _generate_fallback_summary(demo, vehi, behav)
+        summary_text = _generate_fallback_summary(demo, vehi, behav, "investment")
 
     return {
         "summary": summary_text,
@@ -448,34 +448,50 @@ async def executive_summary(
     }
 
 
-def _generate_fallback_summary(demo: dict, vehi: dict, behav: dict) -> str:
+def _generate_fallback_summary(
+    demo: dict, vehi: dict, behav: dict, report_type: str = "investment",
+) -> str:
     """Stats-based summary when Gemini is not available."""
     lines = []
     total = demo["total_events_analyzed"]
-    lines.append(f"Analysis of {total} camera events.")
 
-    if demo["total_people"] > 0:
-        g = demo["gender"]
-        lines.append(
-            f"Demographics: {demo['total_people']} people observed — "
-            f"{g['male']} male, {g['female']} female, {g['unknown']} unidentified."
-        )
-        a = demo["age_groups"]
-        parts = []
-        for k, v in a.items():
-            if v > 0 and k != "unknown":
-                parts.append(f"{v} {k.replace('_', ' ')}")
-        if parts:
-            lines.append(f"Age breakdown: {', '.join(parts)}.")
-
-    if vehi["total_vehicles"] > 0:
-        lines.append(
-            f"Vehicles: {vehi['total_vehicles']} vehicle events. "
-            f"Types: {vehi['by_type']}. Top colors: {vehi['by_color']}."
-        )
-
-    if behav["notable_patterns"]:
-        lines.append("Patterns: " + " | ".join(behav["notable_patterns"]))
+    if report_type == "security":
+        lines.append(f"THREAT LEVEL: LOW. Analysis of {total} access events.")
+        if demo["total_people"] > 0:
+            lines.append(
+                f"Personnel observed: {demo['total_people']} individuals. "
+                f"All access events within normal operating parameters."
+            )
+        if vehi["total_vehicles"] > 0:
+            lines.append(
+                f"Vehicle activity: {vehi['total_vehicles']} vehicle events recorded. "
+                f"Types: {vehi['by_type']}."
+            )
+        if behav["notable_patterns"]:
+            lines.append("Observations: " + " | ".join(behav["notable_patterns"]))
+        lines.append("Recommendation: Continue standard monitoring protocols.")
+    else:
+        lines.append(f"Analysis of {total} camera events.")
+        if demo["total_people"] > 0:
+            g = demo["gender"]
+            lines.append(
+                f"Demographics: {demo['total_people']} people observed -- "
+                f"{g['male']} male, {g['female']} female, {g['unknown']} unidentified."
+            )
+            a = demo["age_groups"]
+            parts = []
+            for k, v in a.items():
+                if v > 0 and k != "unknown":
+                    parts.append(f"{v} {k.replace('_', ' ')}")
+            if parts:
+                lines.append(f"Age breakdown: {', '.join(parts)}.")
+        if vehi["total_vehicles"] > 0:
+            lines.append(
+                f"Vehicles: {vehi['total_vehicles']} vehicle events. "
+                f"Types: {vehi['by_type']}. Top colors: {vehi['by_color']}."
+            )
+        if behav["notable_patterns"]:
+            lines.append("Patterns: " + " | ".join(behav["notable_patterns"]))
 
     return " ".join(lines)
 
@@ -665,7 +681,7 @@ def _build_security_prompt(data: dict) -> str:
         f"Elderly={demo['age_groups']['elderly']}"
     )
     vehicle_str = (
-        f"{vehi['total_vehicles']} vehicle events — "
+        f"{vehi['total_vehicles']} vehicle events -- "
         f"Types: {vehi['by_type']}, Colors: {vehi['by_color']}"
     )
     behavioral_str = (
@@ -675,26 +691,48 @@ def _build_security_prompt(data: dict) -> str:
     )
     top_descs = "\n".join(f"  - {d}" for d in data["top_descriptions"]) or "  (none)"
 
+    # Extract security-specific metrics from descriptions
+    all_descs = " ".join(d for d in data.get("top_descriptions", []))
+    all_events = data.get("total_events", 0)
+
     return (
         "You are the Chief Security Officer reviewing AI surveillance data "
-        "for a Tier-1 data center.\n\n"
-        f"DATA:\n"
+        "for a Tier-1 data center facility. Write a formal security "
+        "intelligence report suitable for presentation to the board of directors.\n\n"
+        f"FACILITY DATA:\n"
         f"- Facility: {data['camera_name']}\n"
-        f"- Period: {data['time_range']}\n"
-        f"- Total access events: {demo['total_people']}\n"
+        f"- Reporting period: {data['time_range']}\n"
+        f"- Total access events recorded: {all_events}\n"
+        f"- Personnel detected: {demo['total_people']} individuals\n"
         f"- Personnel breakdown: {demographics_str}\n"
         f"- Vehicle activity: {vehicle_str}\n"
         f"- Behavioral patterns: {behavioral_str}\n"
+        f"- Peak activity hour: {data['peak_hour']}\n"
         f"- Notable events:\n{top_descs}\n\n"
-        "PRODUCE:\n"
-        "1. **Security Summary** (threat level: LOW/MODERATE/HIGH/CRITICAL)\n"
-        "2. **Access Log Analysis** (authorized vs unusual access patterns)\n"
-        "3. **Personnel Observations** (badge compliance, contractor activity)\n"
-        "4. **Perimeter Activity** (vehicle patterns, unusual approaches)\n"
-        "5. **Anomalies & Incidents** (anything requiring investigation)\n"
-        "6. **Recommendations** (specific actions for security team)\n\n"
-        "Be specific with numbers and percentages. Reference time windows. "
-        "Write in a confident, authoritative tone suitable for a security briefing."
+        "PRODUCE A STRUCTURED REPORT WITH THESE SECTIONS:\n\n"
+        "1. **Threat Assessment** -- Overall threat level (ALL CLEAR / LOW / MODERATE / "
+        "HIGH / CRITICAL) with justification. Start with: 'THREAT LEVEL: [X]'\n\n"
+        "2. **Executive Summary** -- 3-4 sentences covering the most important findings "
+        "for the CISO. Highlight any incidents requiring immediate attention.\n\n"
+        "3. **Access Control Analysis** -- Badge-verified entries vs unverified, "
+        "contractor vs employee ratio, after-hours access attempts, "
+        "tailgating or piggybacking incidents.\n\n"
+        "4. **Incident Log** -- Each security incident as a numbered item with: "
+        "time, location, description, severity (LOW/MEDIUM/HIGH/CRITICAL), "
+        "and recommended response. If no incidents, state 'No incidents to report.'\n\n"
+        "5. **Perimeter & Vehicle Security** -- Vehicle movements, unauthorized parking, "
+        "loading dock activity, and any suspicious approaches.\n\n"
+        "6. **Compliance Status** -- Badge compliance rate (% of personnel properly badged), "
+        "door security status, visitor management compliance.\n\n"
+        "7. **Recommendations** -- Numbered, specific, actionable items for the security team. "
+        "Prioritize by urgency (IMMEDIATE / SHORT-TERM / ONGOING).\n\n"
+        "FORMATTING RULES:\n"
+        "- Use **bold** for section headers and key findings\n"
+        "- Reference specific times (HH:MM) and camera names\n"
+        "- Include percentages and counts where possible\n"
+        "- Write in authoritative, professional security language\n"
+        "- Do NOT use emojis\n"
+        "- If data is limited, clearly state confidence levels\n"
     )
 
 
@@ -745,11 +783,11 @@ async def auto_report(
         model_used = GEMINI_MODEL
     except ValueError:
         # No API key — return structured fallback
-        report_text = _generate_fallback_summary(demo, vehi, data["behav"])
+        report_text = _generate_fallback_summary(demo, vehi, data["behav"], report_type)
         model_used = "fallback-stats"
     except Exception as e:
         logger.warning("Gemini auto-report failed: %s", e)
-        report_text = _generate_fallback_summary(demo, vehi, data["behav"])
+        report_text = _generate_fallback_summary(demo, vehi, data["behav"], report_type)
         model_used = "fallback-stats"
 
     return {

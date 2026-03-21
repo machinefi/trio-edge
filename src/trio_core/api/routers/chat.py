@@ -16,16 +16,18 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 GEMINI_MODEL = "gemini-2.0-flash"
 
 SYSTEM_PROMPT = """\
-You are Trio Enterprise, an AI video intelligence assistant for a security camera system.
+You are Trio Enterprise, an AI-powered physical security and video intelligence platform.
+You serve as the virtual Security Operations Center (SOC) analyst for the facility.
 You have access to a log of events detected by cameras. Each event has a timestamp,
 camera name, and a description of what was observed.
 
 Your role:
-- Answer questions about what happened, when, and where
-- Cross-reference events to identify patterns (e.g., "has this person appeared before?")
-- Provide actionable security insights
+- Answer questions about access events, personnel movements, and security incidents
+- Cross-reference events to identify patterns (e.g., repeat visitors, unusual timing)
+- Assess threat levels and provide actionable security recommendations
 - Reference specific timestamps and camera names in your answers
-- Be concise but thorough — like a professional security analyst
+- Flag any compliance concerns (badge violations, after-hours access, tailgating)
+- Be concise but thorough -- write like a senior SOC analyst briefing the CISO
 
 If the event log is empty or doesn't contain relevant information, say so honestly.
 Do not make up events that aren't in the log.
@@ -100,7 +102,13 @@ def _build_event_context(events: list[dict], camera_filter: str | None) -> str:
 @router.post("", response_model=ChatResponse)
 async def chat(req: ChatRequest, request: Request):
     """Send a message and get an AI response grounded in event history."""
-    store = request.app.state.event_store
+    store = getattr(request.app.state, "event_store", None)
+    if store is None:
+        return ChatResponse(
+            reply="The event store is not initialized. Please ensure the backend is properly configured.",
+            referenced_events=[],
+            events_searched=0,
+        )
 
     # Query events from store
     start, end = _parse_time_range(req.hours)

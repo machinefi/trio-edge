@@ -14,17 +14,27 @@ router = APIRouter(prefix="/api/auto-alerts", tags=["auto-alerts"])
 
 # Keywords that trigger alert flagging
 ALERT_KEYWORDS = {
+    "critical": [
+        "weapon", "gun", "knife", "firearm", "explosive",
+        "break-in", "forced entry", "intruder", "breach",
+        "fire", "smoke", "explosion",
+    ],
     "high": [
-        "unauthorized", "tailgating", "weapon", "gun", "knife", "fight",
-        "person running", "people running", "screaming", "break-in", "forced entry", "suspicious",
+        "unauthorized", "tailgating", "piggybacking", "piggyback",
+        "fight", "assault", "threat",
+        "person running", "people running", "screaming",
+        "suspicious", "vandalism",
+        "evacuation", "alarm",
     ],
     "medium": [
         "loitering", "no badge", "without badge", "unidentified",
         "after hours", "overnight", "unusual", "anomaly", "tamper",
+        "door held open", "propped", "propped open",
+        "unknown vehicle", "unauthorized vehicle",
     ],
     "low": [
-        "door held open", "propped", "delivery", "unknown vehicle",
-        "unfamiliar", "new face",
+        "delivery", "unfamiliar", "new face",
+        "lingered", "departed without",
     ],
 }
 
@@ -35,7 +45,7 @@ def _classify_event(description: str) -> tuple[bool, str, str]:
     Returns (is_alert, severity, matched_keyword).
     """
     desc_lower = description.lower()
-    for severity in ["high", "medium", "low"]:
+    for severity in ["critical", "high", "medium", "low"]:
         for keyword in ALERT_KEYWORDS[severity]:
             if keyword in desc_lower:
                 return True, severity, keyword
@@ -63,19 +73,36 @@ async def scan_events(request: Request, hours: float = 24):
     for event in events:
         desc = event.get("description", "")
         is_alert, severity, keyword = _classify_event(desc)
+        # Also flag events that have alert_triggered set in the DB
+        if not is_alert and event.get("alert_triggered"):
+            is_alert = True
+            severity = "medium"
+            keyword = "flagged by system"
         if is_alert:
             flagged.append({
                 "event_id": event["id"],
                 "timestamp": event["timestamp"],
                 "camera_name": event.get("camera_name", ""),
+                "camera_id": event.get("camera_id", ""),
                 "description": desc[:200],
                 "severity": severity,
                 "trigger": keyword,
             })
+
+    # Compute overall threat level from most severe alert
+    severity_order = ["critical", "high", "medium", "low"]
+    threat_level = "LOW"
+    for s in severity_order:
+        if any(a["severity"] == s for a in flagged):
+            threat_level = s.upper()
+            break
+    if not flagged:
+        threat_level = "ALL CLEAR"
 
     return {
         "alerts": flagged,
         "scanned": len(events),
         "period_hours": hours,
         "generated_at": now.isoformat(),
+        "threat_level": threat_level,
     }
