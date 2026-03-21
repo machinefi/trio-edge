@@ -478,3 +478,243 @@ def _generate_fallback_summary(demo: dict, vehi: dict, behav: dict) -> str:
         lines.append("Patterns: " + " | ".join(behav["notable_patterns"]))
 
     return " ".join(lines)
+
+
+# ── Gemini client (shared with chat.py pattern) ─────────────────────────────
+
+def _get_gemini_client():
+    """Get Gemini client (lazy init)."""
+    from google import genai
+
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY not set")
+    return genai.Client(api_key=api_key)
+
+
+# ── Auto-report helpers ──────────────────────────────────────────────────────
+
+async def _gather_report_data(
+    request: Request,
+    camera_id: str | None,
+    hours: float,
+) -> dict:
+    """Gather all analytics data for auto-report generation."""
+    demo = await demographics(request, camera_id, None, None, hours)
+    vehi = await vehicles(request, camera_id, None, None, hours)
+    behav = await behavioral(request, camera_id, None, None, hours)
+
+    # Get camera name
+    camera_name = "All cameras"
+    if camera_id:
+        store = _get_store(request)
+        cameras = await store.list_cameras()
+        for cam in cameras:
+            if cam["id"] == camera_id:
+                camera_name = cam.get("name") or camera_id
+                break
+
+    # Compute peak hour from behavioral data
+    activity_by_hour = behav.get("activity_by_hour", {})
+    peak_hour = "N/A"
+    if activity_by_hour:
+        peak_h = max(activity_by_hour, key=lambda h: sum(activity_by_hour[h].values()))
+        peak_hour = f"{int(peak_h):02d}:00"
+
+    # Top 5 descriptions from events
+    events = await _fetch_descriptions(request, camera_id, None, None, hours)
+    top_descriptions = [
+        e.get("description", "")
+        for e in events[:5]
+        if e.get("description")
+    ]
+
+    # Time range string
+    time_range = f"Last {hours:.0f} hours" if hours == int(hours) else f"Last {hours} hours"
+
+    return {
+        "camera_name": camera_name,
+        "time_range": time_range,
+        "demo": demo,
+        "vehi": vehi,
+        "behav": behav,
+        "peak_hour": peak_hour,
+        "top_descriptions": top_descriptions,
+        "total_events": len(events),
+    }
+
+
+def _build_investment_prompt(data: dict) -> str:
+    """Build the investment analyst persona prompt."""
+    demo = data["demo"]
+    vehi = data["vehi"]
+    behav = data["behav"]
+
+    gender = demo["gender"]
+    gender_breakdown = (
+        f"Male={gender['male']}, Female={gender['female']}, "
+        f"Unknown={gender['unknown']}"
+    )
+    age = demo["age_groups"]
+    age_breakdown = (
+        f"Young={age['young']}, Middle-aged={age['middle_aged']}, "
+        f"Elderly={age['elderly']}, Unknown={age['unknown']}"
+    )
+    vehicle_summary = (
+        f"{vehi['total_vehicles']} vehicles — "
+        f"Types: {vehi['by_type']}, Colors: {vehi['by_color']}, "
+        f"Brands: {[b['brand'] for b in vehi['brands_detected'][:5]]}"
+    )
+    behavioral_summary = (
+        f"Activities: {behav['activities']}, "
+        f"Items: {behav['items_detected']}, "
+        f"Patterns: {behav['notable_patterns']}"
+    )
+    top_5 = "\n".join(f"  - {d}" for d in data["top_descriptions"]) or "  (none)"
+
+    return (
+        "You are a senior investment research analyst at a top-tier hedge fund. "
+        "You have been monitoring a retail location via AI-powered cameras.\n\n"
+        "Based on the following observational data, produce a structured intelligence brief "
+        "that would help a portfolio manager make investment decisions.\n\n"
+        f"DATA:\n"
+        f"- Location: {data['camera_name']}\n"
+        f"- Observation period: {data['time_range']}\n"
+        f"- Total foot traffic: {demo['total_people']} people observed\n"
+        f"- Demographics: {gender_breakdown}, {age_breakdown}\n"
+        f"- Vehicle data: {vehicle_summary}\n"
+        f"- Activity patterns: {behavioral_summary}\n"
+        f"- Peak hour: {data['peak_hour']}\n"
+        f"- Notable observations:\n{top_5}\n\n"
+        "PRODUCE:\n"
+        "1. **Executive Summary** (2-3 sentences, key finding)\n"
+        "2. **Customer Profile** (who shops here — demographics, affluence signals)\n"
+        "3. **Traffic Analysis** (patterns, peak times, capacity utilization)\n"
+        "4. **Competitive Intelligence** (what the data reveals about the business)\n"
+        "5. **Risk Factors** (anomalies, concerning patterns)\n"
+        "6. **Investment Thesis** (bullish or bearish signal, with evidence)\n\n"
+        "Be specific with numbers and percentages. Every claim must reference observed data.\n"
+        "Write as if presenting to a $5B fund's investment committee."
+    )
+
+
+def _build_security_prompt(data: dict) -> str:
+    """Build the security officer persona prompt."""
+    demo = data["demo"]
+    vehi = data["vehi"]
+    behav = data["behav"]
+
+    demographics_str = (
+        f"Gender: Male={demo['gender']['male']}, Female={demo['gender']['female']}; "
+        f"Age: Young={demo['age_groups']['young']}, "
+        f"Middle-aged={demo['age_groups']['middle_aged']}, "
+        f"Elderly={demo['age_groups']['elderly']}"
+    )
+    vehicle_str = (
+        f"{vehi['total_vehicles']} vehicle events — "
+        f"Types: {vehi['by_type']}, Colors: {vehi['by_color']}"
+    )
+    behavioral_str = (
+        f"Activities: {behav['activities']}, "
+        f"Items: {behav['items_detected']}, "
+        f"Patterns: {behav['notable_patterns']}"
+    )
+    top_descs = "\n".join(f"  - {d}" for d in data["top_descriptions"]) or "  (none)"
+
+    return (
+        "You are the Chief Security Officer reviewing AI surveillance data "
+        "for a Tier-1 data center.\n\n"
+        f"DATA:\n"
+        f"- Facility: {data['camera_name']}\n"
+        f"- Period: {data['time_range']}\n"
+        f"- Total access events: {demo['total_people']}\n"
+        f"- Personnel breakdown: {demographics_str}\n"
+        f"- Vehicle activity: {vehicle_str}\n"
+        f"- Behavioral patterns: {behavioral_str}\n"
+        f"- Notable events:\n{top_descs}\n\n"
+        "PRODUCE:\n"
+        "1. **Security Summary** (threat level: LOW/MODERATE/HIGH/CRITICAL)\n"
+        "2. **Access Log Analysis** (authorized vs unusual access patterns)\n"
+        "3. **Personnel Observations** (badge compliance, contractor activity)\n"
+        "4. **Perimeter Activity** (vehicle patterns, unusual approaches)\n"
+        "5. **Anomalies & Incidents** (anything requiring investigation)\n"
+        "6. **Recommendations** (specific actions for security team)\n\n"
+        "Be specific with numbers and percentages. Reference time windows. "
+        "Write in a confident, authoritative tone suitable for a security briefing."
+    )
+
+
+# ── Auto-Report Endpoints ────────────────────────────────────────────────────
+
+@router.get("/auto-report")
+async def auto_report(
+    request: Request,
+    camera_id: str | None = Query(None),
+    hours: float = Query(24, description="Hours back from now"),
+    report_type: str = Query("investment", description="Report type: investment or security"),
+):
+    """Auto-generated intelligence report — zero-config, plug camera and go.
+
+    Gathers all event data, runs demographic/vehicle/behavioral extraction,
+    then sends to Gemini with an analyst persona to produce an actionable brief.
+    """
+    data = await _gather_report_data(request, camera_id, hours)
+    demo = data["demo"]
+    vehi = data["vehi"]
+
+    # Pick prompt by report type
+    if report_type == "security":
+        prompt = _build_security_prompt(data)
+    else:
+        prompt = _build_investment_prompt(data)
+
+    # Metrics summary
+    metrics_summary = {
+        "total_people": demo["total_people"],
+        "total_vehicles": vehi["total_vehicles"],
+        "peak_hour": data["peak_hour"],
+        "demographics": {
+            "gender": demo["gender"],
+            "age_groups": demo["age_groups"],
+        },
+    }
+
+    # Call Gemini
+    try:
+        client = _get_gemini_client()
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config={"temperature": 0.4, "max_output_tokens": 3000},
+        )
+        report_text = response.text or "Report generation failed."
+        model_used = GEMINI_MODEL
+    except ValueError:
+        # No API key — return structured fallback
+        report_text = _generate_fallback_summary(demo, vehi, data["behav"])
+        model_used = "fallback-stats"
+    except Exception as e:
+        logger.warning("Gemini auto-report failed: %s", e)
+        report_text = _generate_fallback_summary(demo, vehi, data["behav"])
+        model_used = "fallback-stats"
+
+    return {
+        "report_type": report_type,
+        "camera_name": data["camera_name"],
+        "period": data["time_range"],
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "data_points": data["total_events"],
+        "model": model_used,
+        "report": report_text,
+        "metrics_summary": metrics_summary,
+    }
+
+
+@router.get("/auto-security-report")
+async def auto_security_report(
+    request: Request,
+    camera_id: str | None = Query(None),
+    hours: float = Query(24, description="Hours back from now"),
+):
+    """Convenience alias — auto-report with report_type=security."""
+    return await auto_report(request, camera_id=camera_id, hours=hours, report_type="security")
