@@ -641,10 +641,14 @@ def _build_investment_prompt(data: dict) -> str:
         "4. **Order Analysis** (MUST calculate weighted ASP from drink size mix: tall=$4.25, grande=$5.45, venti=$6.25 + food attach rate. Compare to SBUX reported ASP of $5.50)\n"
         "5. **Competitive Intelligence** (what the data reveals about brand positioning)\n"
         "6. **Risk Factors** (anomalies, concerning patterns, data limitations)\n"
-        "7. **Investment Thesis** (bullish or bearish signal, with evidence, confidence 1-10)\n\n"
+        "7. **Investment Thesis** (bullish or bearish signal, with evidence, confidence 1-10)\n"
+        "8. **Implied Financial Impact** (If ASP is lower/higher than reported, estimate EPS impact. "
+        "If foot traffic differs from company guidance, estimate revenue impact. "
+        "Reference SBUX current price ~$85, consensus EPS ~$3.50, P/E ~24x)\n\n"
         "Be specific with numbers and percentages. Every claim must reference observed data.\n"
         "Clearly state data limitations and confidence levels.\n"
-        "Write as if presenting to a $5B fund's investment committee."
+        "Write as if presenting to a $5B fund's investment committee.\n"
+        "End with a clear BUY / HOLD / SELL recommendation with price target range."
     )
 
 
