@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import tempfile
@@ -11,7 +12,7 @@ import time
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from fastapi.responses import Response
 
-from trio_core.api.console_models import CameraIn, CameraOut
+from trio_core.api.console_models import CameraIn, CameraOut, IntentConfigOut, IntentRequest
 
 logger = logging.getLogger(__name__)
 
@@ -173,6 +174,91 @@ async def delete_camera(request: Request, camera_id: str):
         raise HTTPException(404, f"Camera {camera_id} not found")
     # Clean up cache
     _snapshot_cache.pop(camera_id, None)
+
+
+DEFAULT_INTENT_CONFIG: dict = {
+    "persona": "general",
+    "customer_prompt": (
+        "Describe this person: age, gender, clothing, items carried, activity. One sentence."
+    ),
+    "scene_prompt": (
+        "Describe: number of people, busyness 1-10, what people are doing. Be specific."
+    ),
+    "report_type": "investment",
+    "key_metrics": ["foot_traffic", "demographics", "behavioral"],
+    "report_focus": "General activity patterns and demographics",
+    "comparison_target": "",
+}
+
+_GEMINI_SYSTEM_PROMPT = """You are configuring an AI video surveillance system.
+The user described their monitoring goal:
+"{user_intent}"
+
+Translate this into a structured JSON config with these fields:
+{{
+  "persona": "investment_analyst" or "security_officer" or "operations_manager" or "general",
+  "customer_prompt": "VLM prompt for describing each person detected",
+  "scene_prompt": "VLM prompt for periodic scene analysis",
+  "report_type": "investment" or "security" or "operations",
+  "key_metrics": ["foot_traffic", "demographics", "order_analysis", "dwell_time", etc],
+  "report_focus": "what the daily report should emphasize",
+  "comparison_target": "what to compare against (e.g. company reported numbers)"
+}}
+Return ONLY valid JSON, no explanation."""
+
+
+async def _call_gemini(intent: str) -> dict:
+    """Call Gemini API to translate natural language intent to structured config."""
+    import httpx
+
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    if not api_key:
+        logger.warning("GEMINI_API_KEY not set, returning default intent config")
+        return dict(DEFAULT_INTENT_CONFIG)
+
+    prompt = _GEMINI_SYSTEM_PROMPT.replace("{user_intent}", intent)
+    url = (
+        f"https://generativelanguage.googleapis.com/v1beta/models/"
+        f"gemini-2.0-flash:generateContent?key={api_key}"
+    )
+    payload = {"contents": [{"parts": [{"text": prompt}]}]}
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(url, json=payload)
+        resp.raise_for_status()
+
+    data = resp.json()
+    text = data["candidates"][0]["content"]["parts"][0]["text"]
+    # Strip markdown code fences if present
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+    if text.endswith("```"):
+        text = text[: text.rfind("```")]
+    return json.loads(text.strip())
+
+
+@router.post("/api/cameras/{camera_id}/configure-intent", response_model=IntentConfigOut)
+async def configure_intent(request: Request, camera_id: str, body: IntentRequest):
+    """Translate a natural language monitoring intent into structured VLM config via Gemini."""
+    store = _get_store(request)
+    cameras = await store.list_cameras()
+    cam = next((c for c in cameras if c["id"] == camera_id), None)
+    if cam is None:
+        raise HTTPException(404, f"Camera {camera_id} not found")
+
+    intent_text = body.intent.strip()
+    if not intent_text:
+        config = dict(DEFAULT_INTENT_CONFIG)
+    else:
+        try:
+            config = await _call_gemini(intent_text)
+        except Exception as exc:
+            logger.error("Gemini call failed for camera %s: %s", camera_id, exc)
+            config = dict(DEFAULT_INTENT_CONFIG)
+
+    await store.update_camera_intent(camera_id, intent_text, config)
+    return IntentConfigOut(**config)
 
 
 @router.get("/api/cameras/{camera_id}/snapshot")

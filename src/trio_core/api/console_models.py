@@ -50,6 +50,7 @@ class CameraIn(BaseModel):
     name: str
     source_url: str
     watch_condition: str = ""
+    intent: str = ""
     enabled: bool = True
     metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -61,11 +62,31 @@ class CameraOut(BaseModel):
     name: str
     source_url: str
     watch_condition: str = ""
+    intent: str = ""
+    intent_config: dict[str, Any] = Field(default_factory=dict)
     enabled: bool = True
     created_at: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)
     has_snapshot: bool = False
     snapshot_url: str = ""
+
+
+class IntentRequest(BaseModel):
+    """Configure intent request."""
+
+    intent: str
+
+
+class IntentConfigOut(BaseModel):
+    """Parsed intent configuration."""
+
+    persona: str = "general"
+    customer_prompt: str = ""
+    scene_prompt: str = ""
+    report_type: str = "investment"
+    key_metrics: list[str] = Field(default_factory=list)
+    report_focus: str = ""
+    comparison_target: str = ""
 
 
 # ── Chat ─────────────────────────────────────────────────────────────────────

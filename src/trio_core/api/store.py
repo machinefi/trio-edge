@@ -51,6 +51,8 @@ class EventStore:
                 name TEXT NOT NULL,
                 source_url TEXT NOT NULL,
                 watch_condition TEXT DEFAULT '',
+                intent TEXT DEFAULT '',
+                intent_config TEXT DEFAULT '{}',
                 enabled INTEGER DEFAULT 1,
                 created_at TEXT NOT NULL,
                 metadata_json TEXT DEFAULT '{}'
@@ -93,6 +95,16 @@ class EventStore:
             """
         )
         await self._db.commit()
+
+        # Migrations: add columns to existing databases
+        for col, default in [("intent", "''"), ("intent_config", "'{}'")]:
+            try:
+                await self._db.execute(
+                    f"ALTER TABLE cameras ADD COLUMN {col} TEXT DEFAULT {default}"
+                )
+                await self._db.commit()
+            except Exception:
+                pass  # column already exists
 
     async def close(self) -> None:
         """Close the database connection."""
@@ -304,16 +316,22 @@ class EventStore:
         now = datetime.utcnow().isoformat() + "Z"
         metadata = json.dumps(camera.get("metadata", {}))
 
+        intent = camera.get("intent", "")
+        intent_config = json.dumps(camera.get("intent_config", {}))
+
         await self._db.execute(
             """
-            INSERT INTO cameras (id, name, source_url, watch_condition, enabled, created_at, metadata_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO cameras (id, name, source_url, watch_condition, intent, intent_config,
+                                 enabled, created_at, metadata_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 cam_id,
                 camera.get("name", ""),
                 camera.get("source_url", ""),
                 camera.get("watch_condition", ""),
+                intent,
+                intent_config,
                 1 if camera.get("enabled", True) else 0,
                 now,
                 metadata,
@@ -321,6 +339,18 @@ class EventStore:
         )
         await self._db.commit()
         return cam_id
+
+    async def update_camera_intent(
+        self, cam_id: str, intent: str, intent_config: dict
+    ) -> bool:
+        """Update a camera's intent and intent_config. Returns True if found."""
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "UPDATE cameras SET intent = ?, intent_config = ? WHERE id = ?",
+            (intent, json.dumps(intent_config), cam_id),
+        )
+        await self._db.commit()
+        return cursor.rowcount > 0
 
     async def delete_camera(self, cam_id: str) -> bool:
         """Delete a camera. Returns True if it existed."""
@@ -757,6 +787,8 @@ def _row_to_camera(row: aiosqlite.Row) -> dict:
         "name": row["name"],
         "source_url": row["source_url"],
         "watch_condition": row["watch_condition"],
+        "intent": row["intent"] or "",
+        "intent_config": json.loads(row["intent_config"] or "{}"),
         "enabled": bool(row["enabled"]),
         "created_at": row["created_at"],
         "metadata": json.loads(row["metadata_json"] or "{}"),
