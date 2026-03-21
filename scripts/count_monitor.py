@@ -108,12 +108,12 @@ async def run(args):
             if now - last_metric_time > 30:
                 ts = datetime.now(timezone.utc).isoformat()
                 metrics = [
-                    {"camera_id": args.camera_id, "metric_type": "people_in", "value": result.total_in, "timestamp": ts},
-                    {"camera_id": args.camera_id, "metric_type": "people_out", "value": result.total_out, "timestamp": ts},
-                    {"camera_id": args.camera_id, "metric_type": "occupancy", "value": max(0, result.total_in - result.total_out), "timestamp": ts},
+                    {"camera_id": args.camera_id, "metric_type": "people_in", "value": int(result.total_in), "timestamp": ts},
+                    {"camera_id": args.camera_id, "metric_type": "people_out", "value": int(result.total_out), "timestamp": ts},
+                    {"camera_id": args.camera_id, "metric_type": "occupancy", "value": int(max(0, result.total_in - result.total_out)), "timestamp": ts},
                 ]
                 for cls_name, count in result.by_class.items():
-                    metrics.append({"camera_id": args.camera_id, "metric_type": f"count_{cls_name}", "value": count, "timestamp": ts})
+                    metrics.append({"camera_id": args.camera_id, "metric_type": f"count_{cls_name}", "value": int(count), "timestamp": ts})
 
                 for m in metrics:
                     await store.insert_metric(m)
@@ -170,12 +170,12 @@ async def run(args):
                             "timestamp": ts,
                             "metadata": {
                                 "class": crop_info.class_name,
-                                "track_id": crop_info.track_id,
-                                "confidence": round(crop_info.confidence, 3),
-                                "bbox": list(crop_info.bbox),
-                                "by_class": result.by_class,
-                                "total_in": result.total_in,
-                                "total_out": result.total_out,
+                                "track_id": int(crop_info.track_id),
+                                "confidence": round(float(crop_info.confidence), 3),
+                                "bbox": [int(x) for x in crop_info.bbox],
+                                "by_class": {k: int(v) for k, v in result.by_class.items()},
+                                "total_in": int(result.total_in),
+                                "total_out": int(result.total_out),
                             },
                         })
 
