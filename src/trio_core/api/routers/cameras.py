@@ -62,14 +62,28 @@ async def camera_snapshot(request: Request, camera_id: str):
     if cam is None:
         raise HTTPException(404, f"Camera {camera_id} not found")
 
+    from trio_core.source_resolver import resolve_source, detect_source_type
+
     source_url = cam["source_url"]
+    # Resolve YouTube/HLS URLs to direct stream
+    try:
+        resolved = await asyncio.to_thread(resolve_source, source_url)
+    except Exception as e:
+        raise HTTPException(502, f"Cannot resolve source: {e}")
+
+    source_type = detect_source_type(source_url)
     with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
         tmp_path = tmp.name
 
     try:
+        # Build ffmpeg command based on source type
+        ffmpeg_args = ["ffmpeg", "-y"]
+        if source_type == "rtsp":
+            ffmpeg_args += ["-rtsp_transport", "tcp"]
+        ffmpeg_args += ["-i", resolved, "-frames:v", "1", "-q:v", "2", tmp_path]
+
         proc = await asyncio.create_subprocess_exec(
-            "ffmpeg", "-y", "-rtsp_transport", "tcp",
-            "-i", source_url, "-frames:v", "1", "-q:v", "2", tmp_path,
+            *ffmpeg_args,
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
         )
