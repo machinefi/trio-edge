@@ -594,6 +594,14 @@ def _register_routes(app: FastAPI) -> None:
             "backend": _engine._backend.backend_name if _engine._backend else "none",
         }
 
+    # Console API routes
+    from .routers import events, cameras, chat, alerts, reports
+    app.include_router(events.router)
+    app.include_router(cameras.router)
+    app.include_router(chat.router)
+    app.include_router(alerts.router)
+    app.include_router(reports.router)
+
 
 async def _reload_engine() -> None:
     """Reload the current model (used by SIGHUP handler)."""
@@ -614,14 +622,6 @@ async def _reload_engine() -> None:
         _engine = old_engine
         _engine._loaded = True
         logger.error("Reload failed, rolled back: %s", e)
-
-    # Console API routes
-    from .routers import events, cameras, chat, alerts, reports
-    app.include_router(events.router)
-    app.include_router(cameras.router)
-    app.include_router(chat.router)
-    app.include_router(alerts.router)
-    app.include_router(reports.router)
 
 
 def _strip_think_tags(text: str) -> str:

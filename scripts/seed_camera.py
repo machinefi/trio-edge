@@ -87,6 +87,7 @@ async def run_monitor(
 
     prev_gray = None
     frame_count = 0
+    motion = 0.0
 
     logger.info("Monitoring %s (interval=%.0fs, motion_threshold=%.3f)", camera_name, interval, motion_threshold)
     logger.info("Press Ctrl+C to stop.\n")
