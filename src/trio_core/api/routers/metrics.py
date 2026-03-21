@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, HTTPException, Query, Request
+
+logger = logging.getLogger("trio.console.metrics")
 
 router = APIRouter(prefix="/api/metrics", tags=["console-metrics"])
 
@@ -27,6 +31,10 @@ async def query_metrics(
     store = _get_store(request)
     if granularity not in ("minute", "hour", "day"):
         raise HTTPException(400, "granularity must be 'minute', 'hour', or 'day'")
+    logger.debug(
+        "query_metrics camera_id=%s metric_type=%s start=%s end=%s granularity=%s",
+        camera_id, metric_type, start, end, granularity,
+    )
     data = await store.query_metrics(
         camera_id=camera_id,
         metric_type=metric_type,
@@ -34,6 +42,7 @@ async def query_metrics(
         end=end,
         granularity=granularity,
     )
+    logger.debug("query_metrics returned %d data points for camera_id=%s", len(data), camera_id)
     return {
         "data": data,
         "camera_id": camera_id,

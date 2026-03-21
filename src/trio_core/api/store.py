@@ -152,8 +152,9 @@ class EventStore:
         if alert_only:
             where_clauses.append("alert_triggered = 1")
         if q:
-            where_clauses.append("description LIKE ?")
-            params.append(f"%{q}%")
+            # Word-boundary-ish matching: add space padding
+            where_clauses.append("(' ' || LOWER(description) || ' ') LIKE ?")
+            params.append(f"% {q.lower()} %")
 
         where = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 

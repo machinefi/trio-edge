@@ -1,0 +1,109 @@
+{
+  "frame": "frame_12.jpg",
+  "yolo_detections": {
+    "car": 2,
+    "person": 7
+  },
+  "total_objects": 12,
+  "crops": [
+    {
+      "track_id": 1,
+      "class": "car",
+      "bbox": [
+        416,
+        184,
+        466,
+        223
+      ],
+      "confidence": 0.819
+    },
+    {
+      "track_id": 2,
+      "class": "person",
+      "bbox": [
+        251,
+        158,
+        275,
+        211
+      ],
+      "confidence": 0.669
+    },
+    {
+      "track_id": 3,
+      "class": "car",
+      "bbox": [
+        343,
+        148,
+        466,
+        202
+      ],
+      "confidence": 0.623
+    },
+    {
+      "track_id": 4,
+      "class": "person",
+      "bbox": [
+        6,
+        150,
+        35,
+        206
+      ],
+      "confidence": 0.587
+    },
+    {
+      "track_id": 5,
+      "class": "person",
+      "bbox": [
+        228,
+        259,
+        255,
+        331
+      ],
+      "confidence": 0.584
+    },
+    {
+      "track_id": 6,
+      "class": "person",
+      "bbox": [
+        44,
+        144,
+        77,
+        198
+      ],
+      "confidence": 0.521
+    },
+    {
+      "track_id": 7,
+      "class": "person",
+      "bbox": [
+        174,
+        140,
+        201,
+        214
+      ],
+      "confidence": 0.518
+    },
+    {
+      "track_id": 8,
+      "class": "person",
+      "bbox": [
+        360,
+        196,
+        387,
+        260
+      ],
+      "confidence": 0.511
+    },
+    {
+      "track_id": 9,
+      "class": "person",
+      "bbox": [
+        319,
+        156,
+        339,
+        213
+      ],
+      "confidence": 0.488
+    }
+  ]
+}

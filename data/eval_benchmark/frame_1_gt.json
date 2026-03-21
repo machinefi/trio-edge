@@ -1,0 +1,9 @@
+{
+  "frame": "frame_1.jpg",
+  "yolo_detections": {
+    "car": 2,
+    "person": 7
+  },
+  "total_objects": 12,
+  "crops": []
+}
