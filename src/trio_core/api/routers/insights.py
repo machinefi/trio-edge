@@ -529,8 +529,11 @@ async def _gather_report_data(
         if e.get("description")
     ]
 
-    # Time range string
-    time_range = f"Last {hours:.0f} hours" if hours == int(hours) else f"Last {hours} hours"
+    # Time range string with actual date
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    date_str = now.strftime("%B %d, %Y")
+    time_range = f"Last {hours:.0f} hours (as of {date_str})" if hours == int(hours) else f"Last {hours} hours (as of {date_str})"
 
     return {
         "camera_name": camera_name,
