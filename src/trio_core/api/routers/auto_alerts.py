@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/auto-alerts", tags=["auto-alerts"])
 ALERT_KEYWORDS = {
     "high": [
         "unauthorized", "tailgating", "weapon", "gun", "knife", "fight",
-        "running", "screaming", "break-in", "forced entry", "suspicious",
+        "person running", "people running", "screaming", "break-in", "forced entry", "suspicious",
     ],
     "medium": [
         "loitering", "no badge", "without badge", "unidentified",
