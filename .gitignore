@@ -43,3 +43,6 @@ surveillance_vqa/test_datasets
 # Benchmark results (large JSON files)
 research/bench-results/
 research/bench-results-v2/
+data/
+models/
+=0.19

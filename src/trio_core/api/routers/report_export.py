@@ -1,7 +1,8 @@
-"""PDF/HTML report export for Trio Enterprise."""
+"""PDF/HTML/CSV report export for Trio Enterprise."""
 
 from __future__ import annotations
 
+import csv
 import io
 import logging
 import os
@@ -602,5 +603,44 @@ async def export_report(
         content=html,
         headers={
             "Content-Disposition": f'attachment; filename="{filename}.html"',
+        },
+    )
+
+
+@router.get("/export-csv")
+async def export_csv(
+    request: Request,
+    date_str: str = Query(None, alias="date", description="YYYY-MM-DD, default today"),
+    camera_id: str | None = Query(None),
+):
+    """Export daily events as a CSV file."""
+    store = _get_store(request)
+    if date_str is None:
+        date_str = date.today().isoformat()
+
+    day_start = f"{date_str}T00:00:00"
+    day_end = f"{date_str}T23:59:59"
+    events_result = await store.list_events(
+        camera_id=camera_id, start=day_start, end=day_end, limit=100000
+    )
+    all_events = events_result.get("events", [])
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["timestamp", "camera_name", "description", "alert_triggered"])
+    for evt in all_events:
+        writer.writerow([
+            evt.get("timestamp", ""),
+            evt.get("camera_name") or evt.get("camera_id", ""),
+            evt.get("description", ""),
+            "yes" if evt.get("alert_triggered") else "no",
+        ])
+
+    filename = f"trio-events-{date_str}.csv"
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
         },
     )
