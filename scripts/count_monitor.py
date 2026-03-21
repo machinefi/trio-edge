@@ -119,44 +119,64 @@ async def run(args):
                     await store.insert_metric(m)
                 last_metric_time = now
 
-            # VLM enrichment for new targets (max once per 10 seconds)
-            if engine and result.new_track_ids and (now - last_vlm_time > 10):
+            # VLM enrichment: crop-then-describe each new target individually
+            if engine and result.new_crops and (now - last_vlm_time > 5):
                 last_vlm_time = now
-                # Crop the newest detection for VLM
-                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
 
-                # Build a specific prompt based on what's in frame
-                class_list = ", ".join(f"{v} {k}(s)" for k, v in result.by_class.items())
-                prompt = (
-                    f"Describe what you see. Currently detected: {class_list}. "
-                    "For each person, describe their apparent age, gender, clothing. "
-                    "For vehicles, identify the make/model/color if possible. "
-                    "Be concise — one line per subject."
-                )
+                # Describe up to 3 new targets per cycle
+                for crop_info in result.new_crops[:3]:
+                    if crop_info.crop is None or crop_info.crop.size == 0:
+                        continue
 
-                try:
-                    vlm_result = await asyncio.to_thread(engine.analyze_frame, rgb, prompt)
-                    description = vlm_result.text.strip() if vlm_result and vlm_result.text else ""
+                    # Build class-specific prompt
+                    if crop_info.class_name == "person":
+                        prompt = (
+                            "Describe this person in one sentence: approximate age, "
+                            "gender, ethnicity, clothing, what they are carrying, "
+                            "and what they appear to be doing."
+                        )
+                    elif crop_info.class_name in ("car", "truck", "bus"):
+                        prompt = (
+                            "Identify this vehicle in one sentence: type, color, "
+                            "make/model/brand if possible, and any distinguishing features."
+                        )
+                    elif crop_info.class_name in ("dog", "cat"):
+                        prompt = (
+                            "Describe this animal in one sentence: breed if identifiable, "
+                            "size, color, and whether it appears to be with an owner."
+                        )
+                    else:
+                        prompt = "Describe this object in one sentence."
 
-                    if description:
+                    try:
+                        crop_rgb = cv2.cvtColor(crop_info.crop, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+                        vlm_result = await asyncio.to_thread(engine.analyze_frame, crop_rgb, prompt)
+                        description = vlm_result.text.strip() if vlm_result and vlm_result.text else ""
+
+                        if not description:
+                            continue
+
                         # Store as event
                         ts = datetime.now(timezone.utc).isoformat()
                         event_id = await store.insert({
                             "camera_id": args.camera_id,
                             "camera_name": args.camera_name,
-                            "description": description,
+                            "description": f"[{crop_info.class_name} #{crop_info.track_id}] {description}",
                             "timestamp": ts,
                             "metadata": {
+                                "class": crop_info.class_name,
+                                "track_id": crop_info.track_id,
+                                "confidence": round(crop_info.confidence, 3),
+                                "bbox": list(crop_info.bbox),
                                 "by_class": result.by_class,
                                 "total_in": result.total_in,
                                 "total_out": result.total_out,
-                                "track_ids": result.new_track_ids[:5],
                             },
                         })
 
-                        # Save frame
-                        _, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
-                        await store.save_frame(event_id, args.camera_id, jpeg.tobytes())
+                        # Save crop as thumbnail + full frame
+                        _, crop_jpeg = cv2.imencode(".jpg", crop_info.crop, [cv2.IMWRITE_JPEG_QUALITY, 90])
+                        await store.save_frame(event_id, args.camera_id, crop_jpeg.tobytes())
 
                         logger.info("VLM: %s", description[:120])
                 except Exception as e:

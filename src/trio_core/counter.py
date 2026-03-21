@@ -1,15 +1,16 @@
-"""People counting pipeline — YOLOv10 + ByteTrack + LineZone.
+"""People counting + crop-describe pipeline — YOLO + ByteTrack + VLM.
 
 License-safe stack:
   - YOLOv10-nano: Apache 2.0 (THU-MIG)
   - supervision: MIT (Roboflow)
   - onnxruntime: MIT (Microsoft)
 
-Usage:
-    counter = PeopleCounter(model_path="models/yolov10n/onnx/model.onnx")
-    for frame in video_stream:
-        result = counter.process(frame)
-        # result.people_in, result.people_out, result.detections
+Architecture:
+  YOLO (30fps) → detect + track person/car/dog/etc
+      ↓ new target appears
+  VLM (on-demand) → crop bounding box → describe individual target
+      ↓
+  Event Store: "30s male, blue suit, carrying briefcase"
 """
 
 from __future__ import annotations
@@ -39,6 +40,16 @@ CONFIDENCE_THRESHOLD = 0.35
 
 
 @dataclass
+class CropInfo:
+    """A cropped detection for VLM description."""
+    track_id: int
+    class_name: str
+    bbox: tuple[int, int, int, int]  # x1, y1, x2, y2
+    confidence: float
+    crop: np.ndarray | None = None  # BGR crop of the bounding box
+
+
+@dataclass
 class CountResult:
     """Result from processing a single frame."""
     people_in: int = 0
@@ -49,6 +60,7 @@ class CountResult:
     detections: int = 0  # raw detection count this frame
     by_class: dict[str, int] = field(default_factory=dict)  # {"person": 3, "car": 1, "dog": 1}
     new_track_ids: list[int] = field(default_factory=list)  # IDs that appeared this frame
+    new_crops: list[CropInfo] = field(default_factory=list)  # cropped new targets for VLM
 
 
 class YOLOv10Detector:
@@ -181,13 +193,33 @@ class PeopleCounter:
                 name = COCO_CLASSES.get(int(cid), f"class_{cid}")
                 by_class[name] = by_class.get(name, 0) + 1
 
-        # Detect new track IDs
+        # Detect new track IDs + extract crops
         new_ids = []
+        new_crops = []
         if tracked.tracker_id is not None:
-            for tid in tracked.tracker_id:
+            for i, tid in enumerate(tracked.tracker_id):
                 if tid not in self._seen_ids:
                     self._seen_ids.add(tid)
                     new_ids.append(int(tid))
+                    # Extract crop with padding
+                    x1, y1, x2, y2 = tracked.xyxy[i].astype(int)
+                    h, w = frame.shape[:2]
+                    # Add 10% padding
+                    pad_x = int((x2 - x1) * 0.1)
+                    pad_y = int((y2 - y1) * 0.1)
+                    x1 = max(0, x1 - pad_x)
+                    y1 = max(0, y1 - pad_y)
+                    x2 = min(w, x2 + pad_x)
+                    y2 = min(h, y2 + pad_y)
+                    crop = frame[y1:y2, x1:x2].copy()
+                    cid = int(tracked.class_id[i]) if tracked.class_id is not None else 0
+                    new_crops.append(CropInfo(
+                        track_id=int(tid),
+                        class_name=COCO_CLASSES.get(cid, f"class_{cid}"),
+                        bbox=(x1, y1, x2, y2),
+                        confidence=float(tracked.confidence[i]) if tracked.confidence is not None else 0.0,
+                        crop=crop,
+                    ))
 
         return CountResult(
             people_in=self._line_zone.in_count,
@@ -198,6 +230,7 @@ class PeopleCounter:
             detections=len(detections),
             by_class=by_class,
             new_track_ids=new_ids,
+            new_crops=new_crops,
         )
 
     def annotate(self, frame: np.ndarray) -> np.ndarray:
