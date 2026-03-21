@@ -149,7 +149,12 @@ async def run(args):
                         prompt = "Describe this object in one sentence."
 
                     try:
-                        crop_rgb = cv2.cvtColor(crop_info.crop, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+                        crop = crop_info.crop
+                        ch, cw = crop.shape[:2]
+                        if ch < 56 or cw < 56:
+                            scale = max(56 / ch, 56 / cw)
+                            crop = cv2.resize(crop, (max(56, int(cw * scale)), max(56, int(ch * scale))))
+                        crop_rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
                         vlm_result = await asyncio.to_thread(engine.analyze_frame, crop_rgb, prompt)
                         description = vlm_result.text.strip() if vlm_result and vlm_result.text else ""
 
@@ -179,8 +184,8 @@ async def run(args):
                         await store.save_frame(event_id, args.camera_id, crop_jpeg.tobytes())
 
                         logger.info("VLM: %s", description[:120])
-                except Exception as e:
-                    logger.error("VLM error: %s", e)
+                    except Exception as e:
+                        logger.error("VLM error for %s #%d: %s", crop_info.class_name, crop_info.track_id, e)
 
             # Throttle to ~2fps
             await asyncio.sleep(0.5)
