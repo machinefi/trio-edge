@@ -102,16 +102,18 @@ class InsightExtractor:
         # Auto-detect scene if not provided
         if scene_type is None:
             scene_type = self._detect_scene(parsed)
+        self._scene = scene_type
 
         # Extract insights from different dimensions
         insights.extend(self._traffic_insights(parsed, events))
-        insights.extend(self._demographic_insights(parsed, events))
+        if scene_type != "security":
+            insights.extend(self._demographic_insights(parsed, events))
         insights.extend(self._behavioral_insights(parsed, events))
-        if scene_type in ("security", None):
+        if scene_type in ("security", "general"):
             insights.extend(self._security_insights(parsed, events))
         insights.extend(self._vehicle_insights(parsed, events))
         insights.extend(self._temporal_insights(parsed, events))
-        if scene_type in ("retail", "restaurant", None):
+        if scene_type in ("retail", "restaurant", "general"):
             insights.extend(self._retail_insights(parsed, events))
 
         # Deduplicate by checking text similarity
@@ -334,6 +336,7 @@ class InsightExtractor:
         """Activity patterns and behavioral signals."""
         insights = []
         total = p["total"] or 1
+        is_security = getattr(self, "_scene", "general") == "security"
 
         # Motion ratio
         walking = p["activities"].get("walking", 0)
@@ -344,37 +347,41 @@ class InsightExtractor:
         if walking + stationary > 4:
             motion_ratio = walking / (walking + stationary) * 100
             if motion_ratio > 75:
+                action = "verify all are authorized and badged" if is_security else "consider grab-and-go format"
                 insights.append(Insight(
                     insight_type="pattern",
-                    text=f"{motion_ratio:.0f}% of people are in transit ({walking} walking vs {stationary} stationary) — location is a pass-through, not a destination. Consider grab-and-go format",
+                    text=f"{motion_ratio:.0f}% of people are in transit ({walking} walking vs {stationary} stationary) — {action}",
                     evidence=[f"walking={walking}", f"stationary={stationary}"],
                 ))
             elif motion_ratio < 40:
+                action = "verify loitering is authorized activity" if is_security else "optimize for dwell time and upselling"
                 insights.append(Insight(
                     insight_type="pattern",
-                    text=f"{100-motion_ratio:.0f}% stationary ({stationary} standing/sitting vs {walking} walking) — location is a destination. Optimize for dwell time and upselling",
+                    text=f"{100-motion_ratio:.0f}% stationary ({stationary} standing/sitting vs {walking} walking) — {action}",
                     evidence=[f"walking={walking}", f"stationary={stationary}"],
                 ))
 
-        # Bag carrying (affluence signal)
+        # Bag carrying
         bags = p["activities"].get("carrying_bag", 0)
         if bags > 1:
             pct = bags / total * 100
+            bag_action = "verify items against asset removal policy" if is_security else "suggests shopping activity or commuter traffic"
             insights.append(Insight(
                 insight_type="pattern",
-                text=f"{pct:.0f}% carrying bags/backpacks ({bags}/{total} events) — high bag rate suggests shopping activity or commuter traffic",
+                text=f"{pct:.0f}% carrying bags/backpacks ({bags}/{total} events) — {bag_action}",
                 evidence=[f"bags={bags}"],
             ))
 
-        # Phone usage
-        phone = p["activities"].get("on_phone", 0)
-        if phone > 1:
-            pct = phone / total * 100
-            insights.append(Insight(
-                insight_type="pattern",
-                text=f"{pct:.0f}% using phones ({phone} observations) — high mobile engagement, consider mobile ordering/app promotions",
-                evidence=[f"phone={phone}"],
-            ))
+        # Phone usage — skip for security (not relevant)
+        if not is_security:
+            phone = p["activities"].get("on_phone", 0)
+            if phone > 1:
+                pct = phone / total * 100
+                insights.append(Insight(
+                    insight_type="pattern",
+                    text=f"{pct:.0f}% using phones ({phone} observations) — high mobile engagement, consider mobile ordering/app promotions",
+                    evidence=[f"phone={phone}"],
+                ))
 
         return insights
 
