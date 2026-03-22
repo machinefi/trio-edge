@@ -29,27 +29,8 @@ from trio_core.counter import PeopleCounter
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
 logger = logging.getLogger("overnight")
 
-# Camera sources — mix of RTSP + local video files
-CAMERAS = [
-    {
-        "id": "cam_255da486",
-        "name": "Data Center Entrance",
-        "source": "rtsp://admin:REDACTED@192.168.1.100:554/h264Preview_01_sub",
-        "type": "rtsp",
-    },
-    {
-        "id": "cam_501b5cf8",
-        "name": "Warehouse Loading Dock",
-        "source": "data/videos/warehouse_dock.mp4",
-        "type": "file",
-    },
-    {
-        "id": "cam_83487c86",
-        "name": "Parking Lot (Night)",
-        "source": "data/videos/parking_lot_night.mp4",
-        "type": "file",
-    },
-]
+# Camera sources loaded dynamically from DB
+CAMERAS = []  # Populated at startup from database
 
 METRIC_INTERVAL = 30  # Store metrics every 30 seconds
 FRAME_INTERVAL = 2.0  # Process frame every 2 seconds
@@ -131,14 +112,22 @@ async def main():
     store = EventStore()
     await store.init()
 
-    # Verify cameras exist
+    # Load cameras from DB dynamically
     cams = await store.list_cameras()
-    cam_ids = {c["id"] for c in cams}
-    for cam in CAMERAS:
-        if cam["id"] not in cam_ids:
-            logger.warning(f"Camera {cam['id']} ({cam['name']}) not in DB. Skipping.")
-
-    active_cams = [c for c in CAMERAS if c["id"] in cam_ids]
+    active_cams = []
+    for c in cams:
+        src = c.get("source_url", "")
+        # Skip YouTube URLs (expire) — only local files + RTSP
+        if "youtube.com" in src or "youtu.be" in src:
+            logger.info(f"Skipping YouTube camera: {c['name']}")
+            continue
+        cam_type = "rtsp" if src.startswith("rtsp") else "file"
+        active_cams.append({
+            "id": c["id"],
+            "name": c["name"],
+            "source": src,
+            "type": cam_type,
+        })
     logger.info(f"Monitoring {len(active_cams)} cameras overnight")
 
     counter = PeopleCounter(model_path="models/yolov10n/onnx/model.onnx")
