@@ -1,0 +1,174 @@
+[
+  {
+    "scenario": "sparse_20_events",
+    "events": 20,
+    "insights_count": 5,
+    "k3_met": true,
+    "insights": [
+      {
+        "type": "pattern",
+        "text": "Peak traffic at 06:00 (2 events) is 1.6x the hourly average \u2014 consider increasing staffing during this window"
+      },
+      {
+        "type": "anomaly",
+        "text": "1 suspicious activity event(s) detected \u2014 recommend reviewing footage and increasing patrol frequency during affected hours"
+      },
+      {
+        "type": "recommendation",
+        "text": "Badge compliance rate 9% (1/11 people) \u2014 below 80% target, recommend enforcing badge-visible policy"
+      },
+      {
+        "type": "pattern",
+        "text": "25% vehicle traffic (5/20 events) \u2014 consider optimizing parking layout and traffic flow for this volume"
+      },
+      {
+        "type": "pattern",
+        "text": "2 delivery vehicle event(s) observed \u2014 consider designating delivery windows to reduce congestion during peak hours"
+      }
+    ]
+  },
+  {
+    "scenario": "security_focused",
+    "events": 25,
+    "insights_count": 6,
+    "k3_met": true,
+    "insights": [
+      {
+        "type": "pattern",
+        "text": "83% in work uniforms (5/6) \u2014 indicates service/construction worker traffic, consider value-oriented offerings"
+      },
+      {
+        "type": "anomaly",
+        "text": "4 suspicious activity event(s) detected \u2014 recommend reviewing footage and increasing patrol frequency during affected hours"
+      },
+      {
+        "type": "anomaly",
+        "text": "6 unauthorized access event(s) (tailgating, propped doors, expired badges, unescorted visitors) \u2014 immediate security review recommended"
+      },
+      {
+        "type": "anomaly",
+        "text": "3 alarm/emergency event(s) detected (triggered alarms, unattended stations, blind spots) \u2014 investigate and address security gaps"
+      },
+      {
+        "type": "pattern",
+        "text": "5 patrol/escort event(s) recorded \u2014 indicates active security operations; verify patrol schedule adherence and coverage gaps"
+      },
+      {
+        "type": "anomaly",
+        "text": "3 after-hours access event(s) \u2014 review against authorized after-hours personnel list for compliance"
+      }
+    ]
+  },
+  {
+    "scenario": "retail_focused",
+    "events": 30,
+    "insights_count": 5,
+    "k3_met": true,
+    "insights": [
+      {
+        "type": "pattern",
+        "text": "Dominant age group: young (62% of identified visitors) \u2014 suggests tailoring product mix and pricing to this demographic"
+      },
+      {
+        "type": "pattern",
+        "text": "44% of visitors arrive in groups (8 group events) \u2014 indicates social destination; optimize for group seating and multi-item orders"
+      },
+      {
+        "type": "comparison",
+        "text": "Observed drink ASP $5.29 (tall=8, grande=10, venti=7) vs SBUX reported ~$5.50 \u2014 bearish signal for average ticket"
+      },
+      {
+        "type": "correlation",
+        "text": "3 laptop users observed among 13 coffee drinkers \u2014 indicates work-from-cafe segment with longer dwell time and higher spend potential"
+      },
+      {
+        "type": "pattern",
+        "text": "53% actively ordering (16/30 events) \u2014 high conversion rate indicates strong purchase intent at this location"
+      }
+    ]
+  },
+  {
+    "scenario": "vehicle_mixed",
+    "events": 20,
+    "insights_count": 6,
+    "k3_met": true,
+    "insights": [
+      {
+        "type": "pattern",
+        "text": "Peak traffic at 06:00 (2 events) is 1.6x the hourly average \u2014 consider increasing staffing during this window"
+      },
+      {
+        "type": "pattern",
+        "text": "75% of visitors arrive in groups (3 group events) \u2014 indicates social destination; optimize for group seating and multi-item orders"
+      },
+      {
+        "type": "pattern",
+        "text": "80% of people are in transit (4 walking vs 1 stationary) \u2014 location is a pass-through, not a destination. Consider grab-and-go format"
+      },
+      {
+        "type": "pattern",
+        "text": "1 patrol/escort event(s) recorded \u2014 indicates active security operations; verify patrol schedule adherence and coverage gaps"
+      },
+      {
+        "type": "pattern",
+        "text": "65% vehicle traffic (13/20 events) \u2014 consider optimizing parking layout and traffic flow for this volume"
+      },
+      {
+        "type": "pattern",
+        "text": "2 delivery vehicle event(s) observed \u2014 consider designating delivery windows to reduce congestion during peak hours"
+      }
+    ]
+  },
+  {
+    "scenario": "dense_500_events",
+    "events": 510,
+    "insights_count": 11,
+    "k3_met": true,
+    "insights": [
+      {
+        "type": "pattern",
+        "text": "Dominant age group: young (62% of identified visitors) \u2014 suggests tailoring product mix and pricing to this demographic"
+      },
+      {
+        "type": "pattern",
+        "text": "20% in work uniforms (17/85) \u2014 indicates service/construction worker traffic, consider value-oriented offerings"
+      },
+      {
+        "type": "pattern",
+        "text": "44% of visitors arrive in groups (136 group events) \u2014 indicates social destination; optimize for group seating and multi-item orders"
+      },
+      {
+        "type": "pattern",
+        "text": "100% stationary (51 standing/sitting vs 0 walking) \u2014 location is a destination. Optimize for dwell time and upselling"
+      },
+      {
+        "type": "pattern",
+        "text": "3% carrying bags/backpacks (17/510 events) \u2014 high bag rate suggests shopping activity or commuter traffic"
+      },
+      {
+        "type": "pattern",
+        "text": "3% using phones (17 observations) \u2014 high mobile engagement, consider mobile ordering/app promotions"
+      },
+      {
+        "type": "pattern",
+        "text": "17 delivery vehicle event(s) observed \u2014 consider designating delivery windows to reduce congestion during peak hours"
+      },
+      {
+        "type": "comparison",
+        "text": "Observed drink ASP $5.29 (tall=136, grande=170, venti=119) vs SBUX reported ~$5.50 \u2014 bearish signal for average ticket"
+      },
+      {
+        "type": "correlation",
+        "text": "51 laptop users observed among 221 coffee drinkers \u2014 indicates work-from-cafe segment with longer dwell time and higher spend potential"
+      },
+      {
+        "type": "pattern",
+        "text": "53% actively ordering (272/510 events) \u2014 high conversion rate indicates strong purchase intent at this location"
+      },
+      {
+        "type": "correlation",
+        "text": "17 browsing events \u2192 272 orders (1600% conversion) \u2014 optimize display placement to increase browse-to-purchase conversion"
+      }
+    ]
+  }
+]

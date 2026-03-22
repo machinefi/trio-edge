@@ -133,10 +133,12 @@ def calibrate_counter(
             continue
 
         # Get YOLO count on same frame
-        # Reset tracker for independent per-frame count
+        # Reset tracker + smoothing for independent per-frame count
         counter._seen_ids.clear()
         counter._tracker = None
         counter._initialized = False
+        counter._recent_raw_counts.clear()
+        counter._kalman = None
         result = counter.process(frame)
         yolo = result.by_class.get("person", 0)
 

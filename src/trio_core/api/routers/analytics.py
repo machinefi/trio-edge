@@ -236,3 +236,152 @@ async def detect_anomalies(
             })
 
     return {"anomalies": anomalies}
+
+
+# ── Temporal Aggregation Endpoints (Exp9) ────────────────────────────────────
+
+@router.get("/temporal/bins")
+async def temporal_bins(
+    request: Request,
+    camera_id: str = Query(..., description="Camera ID"),
+    start: str | None = Query(None, description="ISO timestamp lower bound"),
+    end: str | None = Query(None, description="ISO timestamp upper bound"),
+    level: str = Query("hourly", description="Aggregation level: bin (15-min), hourly, daily"),
+):
+    """Temporal aggregation of people count metrics.
+
+    Returns time-binned count data at 15-min, hourly, or daily granularity.
+    Uses mean aggregation (optimal for Kalman-smoothed input).
+    """
+    from trio_core.analytics.aggregator import Aggregator, Sample
+
+    store = _get_store(request)
+    db = store._db
+    assert db is not None
+
+    # Build query for raw metrics
+    where_clauses = ["camera_id = ?", "metric_type = 'people_count'"]
+    params: list[str] = [camera_id]
+    if start:
+        where_clauses.append("timestamp >= ?")
+        params.append(start)
+    if end:
+        where_clauses.append("timestamp <= ?")
+        params.append(end)
+    where = "WHERE " + " AND ".join(where_clauses)
+
+    cursor = await db.execute(
+        f"""
+        SELECT timestamp, value, confidence, metadata_json
+        FROM metrics {where}
+        ORDER BY timestamp
+        """,
+        params,
+    )
+    rows = await cursor.fetchall()
+
+    if not rows:
+        # Fallback: try people_in metric
+        where_clauses[1] = "metric_type = 'people_in'"
+        cursor = await db.execute(
+            f"""
+            SELECT timestamp, value, confidence, metadata_json
+            FROM metrics {where}
+            ORDER BY timestamp
+            """,
+            params,
+        )
+        rows = await cursor.fetchall()
+
+    if not rows:
+        return {"bins": [], "level": level, "total_samples": 0}
+
+    # Convert to Sample objects
+    samples = []
+    for r in rows:
+        try:
+            ts = datetime.fromisoformat(r[0].replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            continue
+        samples.append(Sample(
+            timestamp=ts,
+            count=int(r[1]),
+            raw_count=int(r[1]),
+            confidence=float(r[2]) if r[2] else 1.0,
+            camera_id=camera_id,
+        ))
+
+    agg = Aggregator(bin_minutes=15, agg_method="mean")
+    bins = agg.aggregate(samples, level=level)
+
+    return {
+        "level": level,
+        "total_samples": len(samples),
+        "bins": [
+            {
+                "start": b.start.isoformat(),
+                "end": b.end.isoformat(),
+                "count": b.count,
+                "mean": b.mean,
+                "median": b.median,
+                "min": b.min_count,
+                "max": b.max_count,
+                "samples": b.samples,
+                "confidence": b.confidence,
+                "velocity": b.velocity,
+            }
+            for b in bins
+        ],
+    }
+
+
+@router.get("/temporal/patterns")
+async def temporal_patterns(
+    request: Request,
+    camera_id: str = Query(..., description="Camera ID"),
+    start: str | None = Query(None),
+    end: str | None = Query(None),
+):
+    """Extract traffic patterns — peak hours, quiet hours, day shape.
+
+    Requires at least 8 hours of data for meaningful patterns.
+    """
+    # Get hourly bins
+    result = await temporal_bins(request, camera_id, start, end, level="hourly")
+    bins_data = result["bins"]
+
+    if len(bins_data) < 4:
+        return {"patterns": [], "message": "Need at least 4 hours of data"}
+
+    counts = [b["count"] for b in bins_data]
+    mean_hourly = statistics.mean(counts) if counts else 0
+    std_hourly = statistics.stdev(counts) if len(counts) > 1 else 0
+
+    # Peak hours (top 25%)
+    sorted_bins = sorted(bins_data, key=lambda b: b["count"], reverse=True)
+    n_peak = max(1, len(sorted_bins) // 4)
+    peak_hours = [b["start"][:13] for b in sorted_bins[:n_peak]]
+
+    # Quiet hours (bottom 25%)
+    quiet_hours = [b["start"][:13] for b in sorted_bins[-n_peak:]]
+
+    # Velocity trend
+    velocities = [b["velocity"] for b in bins_data if b["velocity"] != 0]
+    trend = "stable"
+    if velocities:
+        avg_vel = statistics.mean(velocities)
+        if avg_vel > 0.5:
+            trend = "increasing"
+        elif avg_vel < -0.5:
+            trend = "decreasing"
+
+    return {
+        "total_hours": len(bins_data),
+        "mean_hourly_count": round(mean_hourly, 1),
+        "std_hourly_count": round(std_hourly, 1),
+        "peak_hours": peak_hours,
+        "quiet_hours": quiet_hours,
+        "trend": trend,
+        "peak_count": sorted_bins[0]["count"] if sorted_bins else 0,
+        "trough_count": sorted_bins[-1]["count"] if sorted_bins else 0,
+    }

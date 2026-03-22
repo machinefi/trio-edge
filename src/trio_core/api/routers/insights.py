@@ -352,6 +352,45 @@ async def behavioral(
     }
 
 
+# ── Actionable Insights (K3) ──────────────────────────────────────────────────
+
+@router.get("/actionable")
+async def actionable_insights(
+    request: Request,
+    camera_id: str | None = Query(None),
+    start: str | None = Query(None),
+    end: str | None = Query(None),
+    hours: float = Query(24),
+):
+    """Structured actionable insights — K3 metric endpoint.
+
+    Returns typed, scored, deduplicated insights with evidence.
+    Each insight implies a specific decision or action.
+    """
+    from trio_core.insights import InsightExtractor
+
+    events = await _fetch_descriptions(request, camera_id, start, end, hours)
+    extractor = InsightExtractor()
+    insights = extractor.extract(events)
+
+    return {
+        "total_events_analyzed": len(events),
+        "k3_count": len(insights),
+        "k3_target": 5,
+        "k3_met": len(insights) >= 5,
+        "insights": [
+            {
+                "type": ins.insight_type,
+                "text": ins.text,
+                "evidence": ins.evidence,
+                "hour": ins.hour,
+                "confidence": ins.confidence,
+            }
+            for ins in insights
+        ],
+    }
+
+
 # ── Executive Summary ─────────────────────────────────────────────────────────
 
 @router.get("/executive-summary")
@@ -520,6 +559,12 @@ async def _gather_report_data(
     vehi = await vehicles(request, camera_id, None, None, hours)
     behav = await behavioral(request, camera_id, None, None, hours)
 
+    # K3: extract structured actionable insights
+    from trio_core.insights import InsightExtractor
+    events_for_insights = await _fetch_descriptions(request, camera_id, None, None, hours)
+    extractor = InsightExtractor()
+    k3_insights = extractor.extract(events_for_insights)
+
     # Get camera name
     camera_name = "All cameras"
     if camera_id:
@@ -605,6 +650,7 @@ async def _gather_report_data(
         "estimated_asp_with_food": round(estimated_asp_with_food, 2),
         "detected_scene": detected_scene,
         "scene_scores": scene_scores,
+        "k3_insights": k3_insights,
     }
 
 
@@ -659,6 +705,12 @@ def _build_investment_prompt(data: dict) -> str:
         f"${data.get('estimated_asp_with_food',0):.2f} (incl food attach at {data.get('food_attach_rate',0):.1f}%)\n"
         f"  ** vs Starbucks reported ASP: ~$5.50\n"
         f"- Notable observations:\n{top_5}\n\n"
+        "AI-EXTRACTED ACTIONABLE INSIGHTS:\n"
+        + "\n".join(
+            f"  [{ins.insight_type.upper()}] {ins.text}"
+            for ins in data.get("k3_insights", [])
+        )
+        + "\n\n"
         "CONTEXT:\n"
         "- A typical Starbucks location serves 400-500 customers per day\n"
         "- Industry average ticket: $5.50-6.50\n"
@@ -724,6 +776,12 @@ def _build_security_prompt(data: dict) -> str:
         f"- Behavioral patterns: {behavioral_str}\n"
         f"- Peak activity hour: {data['peak_hour']}\n"
         f"- Notable events:\n{top_descs}\n\n"
+        "AI-EXTRACTED ACTIONABLE INSIGHTS:\n"
+        + "\n".join(
+            f"  [{ins.insight_type.upper()}] {ins.text}"
+            for ins in data.get("k3_insights", [])
+        )
+        + "\n\n"
         "PRODUCE A STRUCTURED REPORT WITH THESE SECTIONS:\n\n"
         "1. **Threat Assessment** -- Overall threat level (ALL CLEAR / LOW / MODERATE / "
         "HIGH / CRITICAL) with justification. Start with: 'THREAT LEVEL: [X]'\n\n"
@@ -825,6 +883,16 @@ async def auto_report(
             "detected_scene": data.get("detected_scene", "general"),
             "scene_scores": data.get("scene_scores", {}),
         },
+        "actionable_insights": [
+            {
+                "type": ins.insight_type,
+                "text": ins.text,
+                "evidence": ins.evidence,
+            }
+            for ins in data.get("k3_insights", [])
+        ],
+        "k3_count": len(data.get("k3_insights", [])),
+        "k3_met": len(data.get("k3_insights", [])) >= 5,
     }
 
 

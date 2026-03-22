@@ -39,6 +39,7 @@ class EventSummary(BaseModel):
     total_alerts: int
     by_hour: dict[str, int] = Field(default_factory=dict)
     by_camera: dict[str, int] = Field(default_factory=dict)
+    ai_summary: str = ""
 
 
 # ── Cameras ──────────────────────────────────────────────────────────────────
@@ -69,6 +70,7 @@ class CameraOut(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
     has_snapshot: bool = False
     snapshot_url: str = ""
+    events_today: int = 0
 
 
 class IntentRequest(BaseModel):

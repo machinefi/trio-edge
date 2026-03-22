@@ -84,6 +84,9 @@ class _WatchState:
     stop_event: asyncio.Event | None = None
     resolution: str = "672x448"
     error: str | None = None
+    camera_id: str = ""
+    camera_name: str = ""
+    enable_counting: bool = True
 
 
 _watches: dict[str, _WatchState] = {}
@@ -423,7 +426,7 @@ def _register_routes(app: FastAPI) -> None:
     # ── Watch API (/v1/watch) ──────────────────────────────────────────────
 
     @app.post("/v1/watch")
-    async def start_watch(request: WatchRequest):
+    async def start_watch(request: WatchRequest, req: Request):
         """Start watching an RTSP stream. Returns SSE event stream."""
         engine = get_engine()
         watch_id = f"w_{uuid.uuid4().hex[:8]}"
@@ -437,11 +440,15 @@ def _register_routes(app: FastAPI) -> None:
             started_at=_time.time(),
             stop_event=stop_event,
             resolution=request.resolution,
+            camera_id=request.camera_id,
+            camera_name=request.camera_name,
+            enable_counting=request.enable_counting,
         )
         _watches[watch_id] = ws
 
+        store = getattr(req.app.state, "event_store", None)
         return StreamingResponse(
-            _watch_sse_stream(engine, ws),
+            _watch_sse_stream(engine, ws, store),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
@@ -848,14 +855,15 @@ def _kill_ffmpeg(proc) -> None:
 
 
 async def _watch_sse_stream(
-    engine: TrioCore, ws: _WatchState
+    engine: TrioCore, ws: _WatchState, store=None,
 ) -> AsyncIterator[str]:
-    """Core watch loop: RTSP → frames → motion gate → inference → SSE events.
+    """Core watch loop: RTSP → frames → motion gate → inference + counting → SSE events.
 
     Features:
     - Configurable frame resolution via WatchRequest.resolution
     - Heartbeat events every 30s so the client knows the connection is alive
     - Auto-reconnect on RTSP stream failure (up to 5 retries)
+    - YOLO people counting with metrics storage (when enable_counting=True)
     """
     import base64
     import io
@@ -870,6 +878,16 @@ async def _watch_sse_stream(
     motion_gate = MotionGate()
     frame_w, frame_h = _parse_resolution(ws.resolution)
     frame_bytes = frame_w * frame_h * 3
+
+    # Initialize people counter (YOLO + ByteTrack + Kalman)
+    counter = None
+    if ws.enable_counting:
+        try:
+            from trio_core.counter import PeopleCounter
+            counter = PeopleCounter()  # uses new defaults: tiled=True, c=0.25, f=1.6
+            logger.info("Watch %s: people counting enabled (tiled+Kalman)", watch_id)
+        except Exception as e:
+            logger.warning("Watch %s: counting unavailable: %s", watch_id, e)
 
     # Emit connecting status
     yield _sse_event("status", {"watch_id": watch_id, "state": "connecting"})
@@ -1011,9 +1029,76 @@ async def _watch_sse_stream(
 
             # Motion gate — skip inference on static scenes
             if not motion_gate.has_motion(frame_chw):
+                # Still run counter on static frames (people standing still count)
+                if counter is not None:
+                    try:
+                        frame_bgr = frame[:, :, ::-1].copy()  # RGB → BGR for OpenCV
+                        count_result = await loop.run_in_executor(None, counter.process, frame_bgr)
+                        if store and ws.camera_id:
+                            ts_now = _iso_now()
+                            await store.insert_metric({
+                                "timestamp": ts_now,
+                                "camera_id": ws.camera_id,
+                                "metric_type": "people_count",
+                                "value": count_result.by_class.get("person", 0),
+                                "confidence": count_result.kalman_confidence,
+                                "metadata": {
+                                    "raw": count_result.raw_count,
+                                    "velocity": count_result.velocity,
+                                },
+                            })
+                    except Exception as e:
+                        logger.debug("Watch %s: counting error: %s", watch_id, e)
                 continue
 
-            # Run inference for each condition
+            # ── Run people counting (YOLO + ByteTrack + Kalman) ──
+            count_data = None
+            if counter is not None:
+                try:
+                    frame_bgr = frame[:, :, ::-1].copy()  # RGB → BGR for OpenCV
+                    count_result = await loop.run_in_executor(None, counter.process, frame_bgr)
+                    person_count = count_result.by_class.get("person", 0)
+                    count_data = {
+                        "people_count": person_count,
+                        "people_in": int(count_result.people_in),
+                        "people_out": int(count_result.people_out),
+                        "velocity": round(count_result.velocity, 2),
+                        "raw_detections": count_result.raw_count,
+                        "confidence": round(count_result.kalman_confidence, 3),
+                    }
+
+                    # Store metrics to DB
+                    if store and ws.camera_id:
+                        ts_now = _iso_now()
+                        await store.insert_metric({
+                            "timestamp": ts_now,
+                            "camera_id": ws.camera_id,
+                            "metric_type": "people_count",
+                            "value": person_count,
+                            "confidence": count_result.kalman_confidence,
+                            "metadata": {
+                                "raw": count_result.raw_count,
+                                "velocity": count_result.velocity,
+                            },
+                        })
+                        if count_result.people_in > 0:
+                            await store.insert_metric({
+                                "timestamp": ts_now,
+                                "camera_id": ws.camera_id,
+                                "metric_type": "people_in",
+                                "value": count_result.people_in,
+                            })
+                        if count_result.people_out > 0:
+                            await store.insert_metric({
+                                "timestamp": ts_now,
+                                "camera_id": ws.camera_id,
+                                "metric_type": "people_out",
+                                "value": count_result.people_out,
+                            })
+                except Exception as e:
+                    logger.warning("Watch %s: counting error: %s", watch_id, e)
+
+            # ── Run VLM inference for each condition ──
             t0 = _time.monotonic()
             any_triggered = False
             condition_results = []
@@ -1047,28 +1132,48 @@ async def _watch_sse_stream(
                 frames_analyzed=1,
             )
 
+            # ── Store VLM event to DB ──
+            if store and ws.camera_id and condition_results:
+                description = condition_results[0].answer if condition_results else ""
+                event = {
+                    "timestamp": _iso_now(),
+                    "camera_id": ws.camera_id,
+                    "camera_name": ws.camera_name or ws.camera_id,
+                    "description": description,
+                    "alert_triggered": any_triggered,
+                    "metadata": {"count": count_data} if count_data else {},
+                }
+                try:
+                    event_id = await store.insert(event)
+                    # Save frame for evidence
+                    if any_triggered:
+                        img = Image.fromarray(frame)
+                        buf = io.BytesIO()
+                        img.save(buf, format="JPEG", quality=80)
+                        await store.save_frame(event_id, ws.camera_id, buf.getvalue())
+                except Exception as e:
+                    logger.debug("Watch %s: event store error: %s", watch_id, e)
+
+            # ── Emit SSE events ──
+            event_payload = {
+                "watch_id": watch_id,
+                "ts": _iso_now(),
+                "conditions": [c.model_dump() for c in condition_results],
+                "metrics": metrics.model_dump(),
+            }
+            if count_data:
+                event_payload["counting"] = count_data
+
             if any_triggered:
                 ws.alerts += 1
                 # Encode frame as base64 JPEG for the alert
                 img = Image.fromarray(frame)
                 buf = io.BytesIO()
                 img.save(buf, format="JPEG", quality=80)
-                frame_b64 = base64.b64encode(buf.getvalue()).decode()
-
-                yield _sse_event("alert", {
-                    "watch_id": watch_id,
-                    "ts": _iso_now(),
-                    "conditions": [c.model_dump() for c in condition_results],
-                    "metrics": metrics.model_dump(),
-                    "frame_b64": frame_b64,
-                })
+                event_payload["frame_b64"] = base64.b64encode(buf.getvalue()).decode()
+                yield _sse_event("alert", event_payload)
             else:
-                yield _sse_event("result", {
-                    "watch_id": watch_id,
-                    "ts": _iso_now(),
-                    "conditions": [c.model_dump() for c in condition_results],
-                    "metrics": metrics.model_dump(),
-                })
+                yield _sse_event("result", event_payload)
 
     except asyncio.CancelledError:
         pass

@@ -1,0 +1,167 @@
+{
+  "experiment": "exp9_temporal_aggregation",
+  "dataset": "Mall Dataset (2000 frames)",
+  "window_sweep": [
+    {
+      "window": 1,
+      "bins": 2000,
+      "mape": 13.11,
+      "label": "per-frame"
+    },
+    {
+      "window": 5,
+      "bins": 400,
+      "mape": 12.33,
+      "label": "window-5"
+    },
+    {
+      "window": 10,
+      "bins": 200,
+      "mape": 11.31,
+      "label": "window-10"
+    },
+    {
+      "window": 20,
+      "bins": 100,
+      "mape": 8.46,
+      "label": "window-20"
+    },
+    {
+      "window": 30,
+      "bins": 66,
+      "mape": 8.5,
+      "label": "window-30"
+    },
+    {
+      "window": 50,
+      "bins": 40,
+      "mape": 7.82,
+      "label": "window-50"
+    },
+    {
+      "window": 100,
+      "bins": 20,
+      "mape": 5.6,
+      "label": "window-100"
+    },
+    {
+      "window": 200,
+      "bins": 10,
+      "mape": 4.26,
+      "label": "window-200"
+    },
+    {
+      "window": 500,
+      "bins": 4,
+      "mape": 2.55,
+      "label": "window-500"
+    }
+  ],
+  "aggregator_pipeline": {
+    "bins_15m": 67,
+    "bins_hourly": 17,
+    "bins_daily": 2,
+    "mape_15m": 5.98,
+    "mape_hourly": 4.82,
+    "anomalies_detected": 2,
+    "anomaly_details": [
+      {
+        "time": "09:15",
+        "expected": 30.5,
+        "actual": 18,
+        "z": -2.1,
+        "severity": "low"
+      },
+      {
+        "time": "10:30",
+        "expected": 30.5,
+        "actual": 14,
+        "z": -2.77,
+        "severity": "medium"
+      }
+    ],
+    "sample_15m_bins": [
+      {
+        "start": "08:00",
+        "count": 42,
+        "samples": 30,
+        "confidence": 1.0
+      },
+      {
+        "start": "08:15",
+        "count": 24,
+        "samples": 30,
+        "confidence": 1.0
+      },
+      {
+        "start": "08:30",
+        "count": 21,
+        "samples": 30,
+        "confidence": 1.0
+      },
+      {
+        "start": "08:45",
+        "count": 26,
+        "samples": 30,
+        "confidence": 1.0
+      },
+      {
+        "start": "09:00",
+        "count": 26,
+        "samples": 30,
+        "confidence": 1.0
+      },
+      {
+        "start": "09:15",
+        "count": 18,
+        "samples": 30,
+        "confidence": 1.0
+      },
+      {
+        "start": "09:30",
+        "count": 26,
+        "samples": 30,
+        "confidence": 1.0
+      },
+      {
+        "start": "09:45",
+        "count": 23,
+        "samples": 30,
+        "confidence": 1.0
+      }
+    ],
+    "sample_hourly_bins": [
+      {
+        "start": "08:00",
+        "count": 113,
+        "samples": 120
+      },
+      {
+        "start": "09:00",
+        "count": 93,
+        "samples": 120
+      },
+      {
+        "start": "10:00",
+        "count": 87,
+        "samples": 120
+      },
+      {
+        "start": "11:00",
+        "count": 143,
+        "samples": 120
+      },
+      {
+        "start": "12:00",
+        "count": 105,
+        "samples": 120
+      },
+      {
+        "start": "13:00",
+        "count": 134,
+        "samples": 120
+      }
+    ]
+  },
+  "k1_hourly_met": true
+}

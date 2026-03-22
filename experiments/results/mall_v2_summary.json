@@ -1,0 +1,18 @@
+{
+  "dataset": "Mall Dataset",
+  "frames": 2000,
+  "config": {
+    "tiled": true,
+    "confidence": 0.25,
+    "correction_factor": 1.6,
+    "kalman": true
+  },
+  "metrics": {
+    "mae": 3.94,
+    "mape": 13.1,
+    "correlation": 0.8219,
+    "total_accuracy": 0.9796,
+    "total_gt": 62315,
+    "total_predicted": 61043
+  }
+}

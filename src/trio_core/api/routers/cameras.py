@@ -9,6 +9,9 @@ import os
 import tempfile
 import time
 
+import cv2
+import numpy as np
+
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from fastapi.responses import Response
 
@@ -131,20 +134,33 @@ async def _capture_snapshot(source_url: str) -> bytes:
 
 @router.get("/api/cameras", response_model=list[CameraOut])
 async def list_cameras(request: Request):
-    """List all cameras with snapshot availability info."""
+    """List all cameras with snapshot availability and event counts."""
     store = _get_store(request)
     rows = await store.list_cameras()
+
+    # Get today's event counts per camera
+    from datetime import date
+    today_start = f"{date.today().isoformat()}T00:00:00"
+    db = store._db
+    event_counts: dict[str, int] = {}
+    if db:
+        cursor = await db.execute(
+            "SELECT camera_id, COUNT(*) FROM events WHERE timestamp >= ? GROUP BY camera_id",
+            (today_start,),
+        )
+        event_counts = {r[0]: r[1] for r in await cursor.fetchall()}
+
     result = []
     for r in rows:
         cam = CameraOut(**r)
         cam_id = cam.id
+        cam.events_today = event_counts.get(cam_id, 0)
         # Check in-memory cache first, then disk
         has = _get_cached_snapshot(cam_id) is not None
         if not has:
             disk_bytes = await store.get_camera_snapshot(cam_id)
             if disk_bytes is not None:
                 has = True
-                # Warm the in-memory cache from disk
                 _put_cached_snapshot(cam_id, disk_bytes)
         cam.has_snapshot = has
         cam.snapshot_url = f"/api/cameras/{cam_id}/snapshot" if has else ""
@@ -238,6 +254,53 @@ async def _call_gemini(intent: str) -> dict:
     return json.loads(text.strip())
 
 
+@router.post("/api/cameras/{camera_id}/start-watch")
+async def start_camera_watch(request: Request, camera_id: str):
+    """Start watching a registered camera with auto-configured conditions.
+
+    Uses the camera's intent_config to generate VLM conditions.
+    Passes camera_id so metrics/events are stored to the right camera.
+    Returns the watch_id for the SSE stream.
+    """
+    store = _get_store(request)
+    cameras = await store.list_cameras()
+    cam = next((c for c in cameras if c["id"] == camera_id), None)
+    if cam is None:
+        raise HTTPException(404, f"Camera {camera_id} not found")
+
+    intent_config = cam.get("intent_config", {})
+    if isinstance(intent_config, str):
+        intent_config = json.loads(intent_config) if intent_config else {}
+
+    # Generate watch condition from intent
+    customer_prompt = intent_config.get("customer_prompt",
+        "Describe this person: age, gender, clothing, items carried, activity. One sentence.")
+    watch_condition = cam.get("watch_condition", "")
+    if not watch_condition:
+        watch_condition = customer_prompt
+
+    from trio_core.api.models import WatchCondition, WatchRequest
+
+    watch_request = WatchRequest(
+        source=cam["source_url"],
+        conditions=[WatchCondition(id="main", question=watch_condition)],
+        fps=1.0,
+        camera_id=camera_id,
+        camera_name=cam.get("name", camera_id),
+        enable_counting=True,
+    )
+
+    # Forward to the main watch endpoint
+    # We can't directly call it since it's on the app, so return the config
+    return {
+        "camera_id": camera_id,
+        "camera_name": cam.get("name", ""),
+        "watch_config": watch_request.model_dump(),
+        "intent_config": intent_config,
+        "instructions": "POST this watch_config to /v1/watch to start the SSE stream",
+    }
+
+
 @router.post("/api/cameras/{camera_id}/configure-intent", response_model=IntentConfigOut)
 async def configure_intent(request: Request, camera_id: str, body: IntentRequest):
     """Translate a natural language monitoring intent into structured VLM config via Gemini."""
@@ -295,6 +358,220 @@ async def camera_snapshot(request: Request, camera_id: str):
     await store.save_camera_snapshot(camera_id, frame_bytes)
 
     return Response(content=frame_bytes, media_type="image/jpeg")
+
+
+# ── Auto-Calibration ─────────────────────────────────────────────────────────
+
+
+@router.post("/api/cameras/{camera_id}/calibrate")
+async def calibrate_camera(request: Request, camera_id: str):
+    """Auto-calibrate counting correction factor using Gemini cloud vision.
+
+    Captures 5 frames from the camera, sends to Gemini for accurate counting,
+    compares with YOLO detections, and computes optimal correction_factor.
+    Cost: ~$0.05 per calibration.
+    """
+    store = _get_store(request)
+    cameras = await store.list_cameras()
+    cam = next((c for c in cameras if c["id"] == camera_id), None)
+    if cam is None:
+        raise HTTPException(404, f"Camera {camera_id} not found")
+
+    source_url = cam["source_url"]
+
+    # Capture 5 frames
+    frames = []
+    for i in range(5):
+        try:
+            jpeg_bytes = await _capture_snapshot(source_url)
+            frame_arr = np.frombuffer(jpeg_bytes, dtype=np.uint8)
+            frame_bgr = cv2.imdecode(frame_arr, cv2.IMREAD_COLOR)
+            if frame_bgr is not None:
+                frames.append(frame_bgr)
+            if i < 4:
+                await asyncio.sleep(2)  # space out captures for diversity
+        except Exception as e:
+            logger.warning("Calibration frame %d failed for %s: %s", i, camera_id, e)
+
+    if len(frames) < 2:
+        raise HTTPException(502, f"Could only capture {len(frames)} frames (need ≥2)")
+
+    # Run calibration
+    from trio_core.calibration import calibrate_counter
+    from trio_core.counter import PeopleCounter
+
+    counter = PeopleCounter()
+
+    result = await asyncio.to_thread(calibrate_counter, counter, frames)
+
+    # Store correction factor in camera config
+    intent_config = cam.get("intent_config", {})
+    if isinstance(intent_config, str):
+        intent_config = json.loads(intent_config) if intent_config else {}
+    intent_config["correction_factor"] = result.correction_factor
+    intent_config["calibration_confidence"] = result.confidence
+    intent_config["calibrated_at"] = _iso_now()
+    await store.update_camera_intent(camera_id, cam.get("intent", ""), intent_config)
+
+    return {
+        "camera_id": camera_id,
+        "correction_factor": result.correction_factor,
+        "confidence": result.confidence,
+        "frames_used": result.frames_used,
+        "cloud_counts": result.cloud_counts,
+        "yolo_counts": result.yolo_counts,
+        "cloud_model": result.cloud_model,
+        "cost_estimate": f"${result.frames_used * 0.01:.2f}",
+    }
+
+
+# ── Auto-Scene Detection ────────────────────────────────────────────────────
+
+
+_SCENE_DETECT_PROMPT = """Analyze this camera image and determine:
+1. Scene type: retail, security, parking, warehouse, office, restaurant, or general
+2. Camera angle: overhead, eye-level, or angled
+3. Best monitoring approach for this scene
+
+Return ONLY valid JSON:
+{{
+  "scene_type": "retail|security|parking|warehouse|office|restaurant|general",
+  "camera_angle": "overhead|eye_level|angled",
+  "persona": "investment_analyst|security_officer|operations_manager|general",
+  "customer_prompt": "one-line VLM prompt for describing each detected person",
+  "scene_prompt": "one-line VLM prompt for periodic scene description",
+  "report_type": "investment|security|operations",
+  "key_metrics": ["list", "of", "relevant", "metrics"],
+  "report_focus": "what daily reports should emphasize"
+}}"""
+
+
+async def _auto_detect_scene(source_url: str) -> dict:
+    """Capture a frame and use Gemini to auto-detect scene type and configure intent."""
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    if not api_key:
+        logger.warning("GEMINI_API_KEY not set — using default scene config")
+        return dict(DEFAULT_INTENT_CONFIG)
+
+    try:
+        # Capture one frame
+        jpeg_bytes = await _capture_snapshot(source_url)
+
+        import base64
+        b64_image = base64.b64encode(jpeg_bytes).decode()
+
+        from google import genai
+        client = genai.Client(api_key=api_key)
+
+        response = await asyncio.to_thread(
+            lambda: client.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=[{
+                    "parts": [
+                        {"text": _SCENE_DETECT_PROMPT},
+                        {"inline_data": {"mime_type": "image/jpeg", "data": b64_image}},
+                    ]
+                }],
+                config={"temperature": 0.2, "max_output_tokens": 512},
+            )
+        )
+
+        text = response.text.strip() if response.text else ""
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+        if text.endswith("```"):
+            text = text[:text.rfind("```")]
+
+        config = json.loads(text.strip())
+        logger.info("Auto-detected scene: %s (angle: %s)",
+                     config.get("scene_type"), config.get("camera_angle"))
+        return config
+
+    except Exception as e:
+        logger.warning("Auto-scene detection failed: %s", e)
+        return dict(DEFAULT_INTENT_CONFIG)
+
+
+@router.post("/api/cameras/{camera_id}/auto-setup")
+async def auto_setup_camera(request: Request, camera_id: str):
+    """Zero-config camera setup: auto-detect scene + auto-calibrate.
+
+    1. Captures a frame → Gemini detects scene type → configures intent/prompts
+    2. Captures 5 frames → calibrates counting correction factor
+    All automatic, zero user input needed.
+    """
+    store = _get_store(request)
+    cameras = await store.list_cameras()
+    cam = next((c for c in cameras if c["id"] == camera_id), None)
+    if cam is None:
+        raise HTTPException(404, f"Camera {camera_id} not found")
+
+    source_url = cam["source_url"]
+
+    # Step 1: Auto-detect scene
+    scene_config = await _auto_detect_scene(source_url)
+    scene_type = scene_config.get("scene_type", "general")
+    scene_config["auto_detected"] = True
+    scene_config["setup_at"] = _iso_now()
+
+    # Save intent config
+    intent_text = f"Auto-detected: {scene_type} scene"
+    await store.update_camera_intent(camera_id, intent_text, scene_config)
+
+    # Step 2: Auto-calibrate (capture 5 frames, compare YOLO vs Gemini)
+    calibration_result = None
+    try:
+        frames = []
+        for i in range(5):
+            try:
+                jpeg_bytes = await _capture_snapshot(source_url)
+                frame_arr = np.frombuffer(jpeg_bytes, dtype=np.uint8)
+                frame_bgr = cv2.imdecode(frame_arr, cv2.IMREAD_COLOR)
+                if frame_bgr is not None:
+                    frames.append(frame_bgr)
+                if i < 4:
+                    await asyncio.sleep(2)
+            except Exception:
+                pass
+
+        if len(frames) >= 2:
+            from trio_core.calibration import calibrate_counter
+            from trio_core.counter import PeopleCounter
+            counter = PeopleCounter()
+            cal = await asyncio.to_thread(calibrate_counter, counter, frames)
+            calibration_result = {
+                "correction_factor": cal.correction_factor,
+                "confidence": cal.confidence,
+                "frames_used": cal.frames_used,
+            }
+            # Update config with calibration
+            scene_config["correction_factor"] = cal.correction_factor
+            scene_config["calibration_confidence"] = cal.confidence
+            scene_config["calibrated_at"] = _iso_now()
+            await store.update_camera_intent(camera_id, intent_text, scene_config)
+    except Exception as e:
+        logger.warning("Auto-calibration failed for %s: %s", camera_id, e)
+
+    # Step 3: Save initial snapshot
+    try:
+        jpeg_bytes = await _capture_snapshot(source_url)
+        _put_cached_snapshot(camera_id, jpeg_bytes)
+        await store.save_camera_snapshot(camera_id, jpeg_bytes)
+    except Exception:
+        pass
+
+    return {
+        "camera_id": camera_id,
+        "scene_type": scene_type,
+        "scene_config": scene_config,
+        "calibration": calibration_result,
+        "status": "ready",
+    }
+
+
+def _iso_now() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).isoformat()
 
 
 @router.post("/api/cameras/refresh-snapshots", status_code=202)

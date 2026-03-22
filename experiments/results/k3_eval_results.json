@@ -1,0 +1,457 @@
+[
+  {
+    "label": "baseline_v0",
+    "total_events": 139,
+    "total_insights_generated": 4,
+    "insights_passing": 3,
+    "k3_score": 3,
+    "k3_target": 5,
+    "k3_met": false,
+    "insights": [
+      {
+        "text": "12% of observations involve people carrying bags or briefcases",
+        "type": "pattern",
+        "score": 0.562,
+        "specificity": 0.8,
+        "evidence": 0.6,
+        "actionability": 0.0,
+        "novelty": 0.846,
+        "passes": true
+      },
+      {
+        "text": "69% of people are in motion (walking) vs 31% stationary",
+        "type": "pattern",
+        "score": 0.496,
+        "specificity": 0.8,
+        "evidence": 0.3,
+        "actionability": 0.0,
+        "novelty": 0.882,
+        "passes": false
+      },
+      {
+        "text": "Peak activity at 12:00 with 11 observed behaviors",
+        "type": "pattern",
+        "score": 0.6,
+        "specificity": 0.8,
+        "evidence": 0.6,
+        "actionability": 0.0,
+        "novelty": 1.0,
+        "passes": true
+      },
+      {
+        "text": "13% of events involve parked vehicles",
+        "type": "pattern",
+        "score": 0.562,
+        "specificity": 0.8,
+        "evidence": 0.6,
+        "actionability": 0.0,
+        "novelty": 0.846,
+        "passes": true
+      }
+    ]
+  },
+  {
+    "label": "baseline_v0",
+    "total_events": 139,
+    "total_insights_generated": 4,
+    "insights_passing": 3,
+    "k3_score": 3,
+    "k3_target": 5,
+    "k3_met": false,
+    "insights": [
+      {
+        "text": "12% of observations involve people carrying bags or briefcases",
+        "type": "pattern",
+        "score": 0.562,
+        "specificity": 0.8,
+        "evidence": 0.6,
+        "actionability": 0.0,
+        "novelty": 0.846,
+        "passes": true
+      },
+      {
+        "text": "69% of people are in motion (walking) vs 31% stationary",
+        "type": "pattern",
+        "score": 0.496,
+        "specificity": 0.8,
+        "evidence": 0.3,
+        "actionability": 0.0,
+        "novelty": 0.882,
+        "passes": false
+      },
+      {
+        "text": "Peak activity at 12:00 with 11 observed behaviors",
+        "type": "pattern",
+        "score": 0.6,
+        "specificity": 0.8,
+        "evidence": 0.6,
+        "actionability": 0.0,
+        "novelty": 1.0,
+        "passes": true
+      },
+      {
+        "text": "13% of events involve parked vehicles",
+        "type": "pattern",
+        "score": 0.562,
+        "specificity": 0.8,
+        "evidence": 0.6,
+        "actionability": 0.0,
+        "novelty": 0.846,
+        "passes": true
+      }
+    ]
+  },
+  {
+    "label": "insight_extractor_v1",
+    "total_events": 139,
+    "total_insights_generated": 12,
+    "insights_passing": 12,
+    "k3_score": 12,
+    "k3_target": 5,
+    "k3_met": true,
+    "insights": [
+      {
+        "text": "Peak traffic at 16:00 (15 events) is 1.8x the hourly average \u2014 consider increasing staffing during this window",
+        "type": "pattern",
+        "score": 0.816,
+        "specificity": 0.8,
+        "evidence": 0.9,
+        "actionability": 0.7,
+        "novelty": 0.862,
+        "passes": true
+      },
+      {
+        "text": "Dominant age group: young (52% of identified visitors) \u2014 suggests tailoring product mix and pricing to this demographic",
+        "type": "pattern",
+        "score": 0.596,
+        "specificity": 0.8,
+        "evidence": 0.3,
+        "actionability": 0.35,
+        "novelty": 0.935,
+        "passes": true
+      },
+      {
+        "text": "58% in work uniforms (29/50) \u2014 indicates service/construction worker traffic, consider value-oriented offerings",
+        "type": "pattern",
+        "score": 0.678,
+        "specificity": 0.8,
+        "evidence": 0.3,
+        "actionability": 0.7,
+        "novelty": 0.913,
+        "passes": true
+      },
+      {
+        "text": "11% carrying bags/backpacks (15/139 events) \u2014 high bag rate suggests shopping activity or commuter traffic",
+        "type": "pattern",
+        "score": 0.653,
+        "specificity": 0.8,
+        "evidence": 0.6,
+        "actionability": 0.35,
+        "novelty": 0.862,
+        "passes": true
+      },
+      {
+        "text": "14% using phones (19 observations) \u2014 high mobile engagement, consider mobile ordering/app promotions",
+        "type": "pattern",
+        "score": 0.666,
+        "specificity": 0.8,
+        "evidence": 0.6,
+        "actionability": 0.35,
+        "novelty": 0.913,
+        "passes": true
+      },
+      {
+        "text": "2 suspicious activity event(s) detected \u2014 recommend reviewing footage and increasing patrol frequency during affected hours",
+        "type": "pattern",
+        "score": 0.619,
+        "specificity": 0.4,
+        "evidence": 0.9,
+        "actionability": 0.35,
+        "novelty": 0.828,
+        "passes": true
+      },
+      {
+        "text": "Badge compliance rate 4% (4/91 people) \u2014 below target, recommend enforcing badge-visible policy",
+        "type": "pattern",
+        "score": 0.681,
+        "specificity": 0.8,
+        "evidence": 0.3,
+        "actionability": 0.7,
+        "novelty": 0.923,
+        "passes": true
+      },
+      {
+        "text": "8 delivery vehicle event(s) observed \u2014 consider designating delivery windows to reduce congestion during peak hours",
+        "type": "pattern",
+        "score": 0.625,
+        "specificity": 0.4,
+        "evidence": 0.9,
+        "actionability": 0.35,
+        "novelty": 0.852,
+        "passes": true
+      },
+      {
+        "text": "No activity detected 08:00-12:00 (4 hours) during business hours \u2014 investigate if camera issue or genuine low traffic",
+        "type": "pattern",
+        "score": 0.719,
+        "specificity": 0.8,
+        "evidence": 0.9,
+        "actionability": 0.35,
+        "novelty": 0.828,
+        "passes": true
+      },
+      {
+        "text": "27 events detected during off-hours (22:00-06:00) \u2014 review for security concerns or after-hours operations",
+        "type": "pattern",
+        "score": 0.727,
+        "specificity": 0.8,
+        "evidence": 0.9,
+        "actionability": 0.35,
+        "novelty": 0.857,
+        "passes": true
+      },
+      {
+        "text": "Observed drink ASP $5.31 (tall=5, grande=4, venti=5) vs SBUX reported ~$5.50 \u2014 bearish signal for average ticket",
+        "type": "pattern",
+        "score": 0.745,
+        "specificity": 0.8,
+        "evidence": 0.9,
+        "actionability": 0.35,
+        "novelty": 0.931,
+        "passes": true
+      },
+      {
+        "text": "9 laptop users observed among 14 coffee drinkers \u2014 indicates work-from-cafe segment with longer dwell time and higher spend potential",
+        "type": "pattern",
+        "score": 0.571,
+        "specificity": 0.4,
+        "evidence": 0.6,
+        "actionability": 0.35,
+        "novelty": 0.935,
+        "passes": true
+      }
+    ]
+  },
+  {
+    "label": "baseline_v0",
+    "total_events": 139,
+    "total_insights_generated": 4,
+    "insights_passing": 3,
+    "k3_score": 3,
+    "k3_target": 5,
+    "k3_met": false,
+    "insights": [
+      {
+        "text": "12% of observations involve people carrying bags or briefcases",
+        "type": "pattern",
+        "score": 0.562,
+        "specificity": 0.8,
+        "evidence": 0.6,
+        "actionability": 0.0,
+        "novelty": 0.846,
+        "passes": true
+      },
+      {
+        "text": "69% of people are in motion (walking) vs 31% stationary",
+        "type": "pattern",
+        "score": 0.496,
+        "specificity": 0.8,
+        "evidence": 0.3,
+        "actionability": 0.0,
+        "novelty": 0.882,
+        "passes": false
+      },
+      {
+        "text": "Peak activity at 12:00 with 11 observed behaviors",
+        "type": "pattern",
+        "score": 0.6,
+        "specificity": 0.8,
+        "evidence": 0.6,
+        "actionability": 0.0,
+        "novelty": 1.0,
+        "passes": true
+      },
+      {
+        "text": "13% of events involve parked vehicles",
+        "type": "pattern",
+        "score": 0.562,
+        "specificity": 0.8,
+        "evidence": 0.6,
+        "actionability": 0.0,
+        "novelty": 0.846,
+        "passes": true
+      }
+    ]
+  },
+  {
+    "label": "insight_extractor_v1",
+    "total_events": 139,
+    "total_insights_generated": 16,
+    "insights_passing": 16,
+    "k3_score": 16,
+    "k3_target": 5,
+    "k3_met": true,
+    "insights": [
+      {
+        "text": "Peak traffic at 16:00 (15 events) is 1.8x the hourly average \u2014 consider increasing staffing during this window",
+        "type": "pattern",
+        "score": 0.805,
+        "specificity": 0.8,
+        "evidence": 0.9,
+        "actionability": 0.7,
+        "novelty": 0.821,
+        "passes": true
+      },
+      {
+        "text": "Dominant age group: young (52% of identified visitors) \u2014 suggests tailoring product mix and pricing to this demographic",
+        "type": "pattern",
+        "score": 0.588,
+        "specificity": 0.8,
+        "evidence": 0.3,
+        "actionability": 0.35,
+        "novelty": 0.9,
+        "passes": true
+      },
+      {
+        "text": "58% in work uniforms (29/50) \u2014 indicates service/construction worker traffic, consider value-oriented offerings",
+        "type": "pattern",
+        "score": 0.674,
+        "specificity": 0.8,
+        "evidence": 0.3,
+        "actionability": 0.7,
+        "novelty": 0.897,
+        "passes": true
+      },
+      {
+        "text": "20% of visitors arrive in groups (18 group events) \u2014 indicates social destination; optimize for group seating and multi-item orders",
+        "type": "pattern",
+        "score": 0.742,
+        "specificity": 0.8,
+        "evidence": 0.6,
+        "actionability": 0.7,
+        "novelty": 0.867,
+        "passes": true
+      },
+      {
+        "text": "11% carrying bags/backpacks (15/139 events) \u2014 high bag rate suggests shopping activity or commuter traffic",
+        "type": "pattern",
+        "score": 0.65,
+        "specificity": 0.8,
+        "evidence": 0.6,
+        "actionability": 0.35,
+        "novelty": 0.852,
+        "passes": true
+      },
+      {
+        "text": "14% using phones (19 observations) \u2014 high mobile engagement, consider mobile ordering/app promotions",
+        "type": "pattern",
+        "score": 0.666,
+        "specificity": 0.8,
+        "evidence": 0.6,
+        "actionability": 0.35,
+        "novelty": 0.913,
+        "passes": true
+      },
+      {
+        "text": "2 suspicious activity event(s) detected \u2014 recommend reviewing footage and increasing patrol frequency during affected hours",
+        "type": "pattern",
+        "score": 0.619,
+        "specificity": 0.4,
+        "evidence": 0.9,
+        "actionability": 0.35,
+        "novelty": 0.828,
+        "passes": true
+      },
+      {
+        "text": "Badge compliance rate 4% (4/91 people) \u2014 below 80% target, recommend enforcing badge-visible policy",
+        "type": "pattern",
+        "score": 0.672,
+        "specificity": 0.8,
+        "evidence": 0.3,
+        "actionability": 0.7,
+        "novelty": 0.889,
+        "passes": true
+      },
+      {
+        "text": "27% vehicle traffic (38/139 events) \u2014 consider optimizing parking layout and traffic flow for this volume",
+        "type": "pattern",
+        "score": 0.643,
+        "specificity": 0.8,
+        "evidence": 0.6,
+        "actionability": 0.35,
+        "novelty": 0.821,
+        "passes": true
+      },
+      {
+        "text": "8 delivery vehicle event(s) observed \u2014 consider designating delivery windows to reduce congestion during peak hours",
+        "type": "pattern",
+        "score": 0.625,
+        "specificity": 0.4,
+        "evidence": 0.9,
+        "actionability": 0.35,
+        "novelty": 0.852,
+        "passes": true
+      },
+      {
+        "text": "No activity detected 08:00-12:00 (4 hours) during business hours \u2014 investigate if camera issue or genuine low traffic",
+        "type": "pattern",
+        "score": 0.719,
+        "specificity": 0.8,
+        "evidence": 0.9,
+        "actionability": 0.35,
+        "novelty": 0.828,
+        "passes": true
+      },
+      {
+        "text": "27 events detected during off-hours (22:00-06:00) \u2014 review for security concerns or after-hours operations",
+        "type": "pattern",
+        "score": 0.727,
+        "specificity": 0.8,
+        "evidence": 0.9,
+        "actionability": 0.35,
+        "novelty": 0.857,
+        "passes": true
+      },
+      {
+        "text": "Observed drink ASP $5.31 (tall=5, grande=4, venti=5) vs SBUX reported ~$5.50 \u2014 bearish signal for average ticket",
+        "type": "pattern",
+        "score": 0.745,
+        "specificity": 0.8,
+        "evidence": 0.9,
+        "actionability": 0.35,
+        "novelty": 0.931,
+        "passes": true
+      },
+      {
+        "text": "9 laptop users observed among 14 coffee drinkers \u2014 indicates work-from-cafe segment with longer dwell time and higher spend potential",
+        "type": "pattern",
+        "score": 0.567,
+        "specificity": 0.4,
+        "evidence": 0.6,
+        "actionability": 0.35,
+        "novelty": 0.917,
+        "passes": true
+      },
+      {
+        "text": "4% actively ordering (5/139 events) \u2014 high conversion rate indicates strong purchase intent at this location",
+        "type": "pattern",
+        "score": 0.65,
+        "specificity": 0.8,
+        "evidence": 0.6,
+        "actionability": 0.35,
+        "novelty": 0.852,
+        "passes": true
+      },
+      {
+        "text": "10 browsing events \u2192 5 orders (50% conversion) \u2014 optimize display placement to increase browse-to-purchase conversion",
+        "type": "pattern",
+        "score": 0.752,
+        "specificity": 0.8,
+        "evidence": 0.6,
+        "actionability": 0.7,
+        "novelty": 0.906,
+        "passes": true
+      }
+    ]
+  }
+]

@@ -24,10 +24,29 @@ async def events_summary(
     start: str | None = Query(None, description="ISO timestamp lower bound"),
     end: str | None = Query(None, description="ISO timestamp upper bound"),
 ):
-    """Aggregate event statistics."""
+    """Aggregate event statistics with AI-generated summary."""
     store = _get_store(request)
     result = await store.summary(camera_id=camera_id, start=start, end=end)
-    return EventSummary(**result)
+
+    # Generate AI summary from top insights
+    ai_summary = ""
+    try:
+        from trio_core.insights import InsightExtractor
+        events_data = await store.list_events(
+            camera_id=camera_id, start=start, end=end, limit=500,
+        )
+        events = events_data.get("events", [])
+        if events:
+            extractor = InsightExtractor()
+            insights = extractor.extract(events)
+            if insights:
+                # Pick top 3 most impactful insights for the summary
+                top = insights[:3]
+                ai_summary = " | ".join(ins.text.split("—")[0].strip() for ins in top)
+    except Exception:
+        pass
+
+    return EventSummary(**result, ai_summary=ai_summary)
 
 
 @router.get("/api/events", response_model=EventList)

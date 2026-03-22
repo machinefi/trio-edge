@@ -1,0 +1,20 @@
+{
+  "dataset": "Mall Dataset",
+  "frames_processed": 2000,
+  "metrics": {
+    "mae": 4.92,
+    "mape": 15.7,
+    "rmse": 6.32,
+    "total_accuracy": 0.9284,
+    "correlation": 0.5947,
+    "total_gt": 62315,
+    "total_predicted": 57855,
+    "avg_gt_per_frame": 31.2,
+    "avg_predicted_per_frame": 28.9
+  },
+  "correction_factor": 2.5,
+  "smoothing_window": 7,
+  "model": "YOLOv10n (Apache 2.0)",
+  "tracker": "ByteTrack (supervision, MIT)",
+  "cloud_calibration": "Gemini 2.0 Flash (5 frames, $0.05)"
+}

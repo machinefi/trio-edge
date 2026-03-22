@@ -1,0 +1,15 @@
+{
+  "dataset": "Mall Dataset",
+  "model": "YOLOv10s (Apache 2.0)",
+  "calibration_model": "Gemini 2.0 Flash",
+  "calibration_cost": 0.05,
+  "correction_factor": 2.5,
+  "calibration_confidence": 0.728,
+  "frames": 2000,
+  "raw_mae": 23.46,
+  "calibrated_mae": 12.12,
+  "raw_mape": 74.6,
+  "calibrated_mape": 37.3,
+  "processing_ms_per_frame": 16.6,
+  "improvement": "48%"
+}

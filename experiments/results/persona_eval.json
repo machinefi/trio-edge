@@ -1,0 +1,312 @@
+[
+  {
+    "persona": "Marcus Chen",
+    "title": "Chief Security Officer",
+    "company": "Equinix SG3 Data Center",
+    "camera": "SG3 Main Entrance \u2014 Gate A",
+    "scene_type": "security",
+    "events": 51,
+    "alerts": 13,
+    "k3_insights": 14,
+    "k3_met": true,
+    "insight_types": {
+      "pattern": 9,
+      "anomaly": 5
+    },
+    "insights": [
+      {
+        "type": "pattern",
+        "text": "Peak traffic at 18:00 (5 events) is 2.4x the hourly average \u2014 consider increasing staffing during this window"
+      },
+      {
+        "type": "pattern",
+        "text": "74% male visitors (17/23) \u2014 indicates male-skewed customer base, consider targeted marketing"
+      },
+      {
+        "type": "pattern",
+        "text": "43% in work uniforms (13/30) \u2014 indicates service/construction worker traffic, consider value-oriented offerings"
+      },
+      {
+        "type": "pattern",
+        "text": "35% of visitors arrive in groups (7 group events) \u2014 indicates social destination; optimize for group seating and multi-item orders"
+      },
+      {
+        "type": "pattern",
+        "text": "100% stationary (5 standing/sitting vs 0 walking) \u2014 location is a destination. Optimize for dwell time and upselling"
+      },
+      {
+        "type": "pattern",
+        "text": "8% carrying bags/backpacks (4/51 events) \u2014 high bag rate suggests shopping activity or commuter traffic"
+      },
+      {
+        "type": "pattern",
+        "text": "4% using phones (2 observations) \u2014 high mobile engagement, consider mobile ordering/app promotions"
+      },
+      {
+        "type": "anomaly",
+        "text": "8 suspicious activity event(s) detected \u2014 recommend reviewing footage and increasing patrol frequency during affected hours"
+      },
+      {
+        "type": "anomaly",
+        "text": "11 unauthorized access event(s) (tailgating, propped doors, expired badges, unescorted visitors) \u2014 immediate security review recommended"
+      },
+      {
+        "type": "anomaly",
+        "text": "5 alarm/emergency event(s) detected (triggered alarms, unattended stations, blind spots) \u2014 investigate and address security gaps"
+      },
+      {
+        "type": "pattern",
+        "text": "11 patrol/escort event(s) recorded \u2014 indicates active security operations; verify patrol schedule adherence and coverage gaps"
+      },
+      {
+        "type": "anomaly",
+        "text": "3 after-hours access event(s) \u2014 review against authorized after-hours personnel list for compliance"
+      },
+      {
+        "type": "pattern",
+        "text": "5 delivery vehicle event(s) observed \u2014 consider designating delivery windows to reduce congestion during peak hours"
+      },
+      {
+        "type": "anomaly",
+        "text": "8 events detected during off-hours (22:00-06:00) \u2014 review for security concerns or after-hours operations"
+      }
+    ],
+    "metrics": {
+      "total_in": 1015.0,
+      "peak_hour": "2026-03-22T18",
+      "peak_count": 104.0
+    },
+    "daily_report": {
+      "events": 51,
+      "alerts": 13,
+      "hours_covered": 24
+    }
+  },
+  {
+    "persona": "Sarah Walsh",
+    "title": "Senior Research Analyst",
+    "company": "Muddy Waters Capital",
+    "camera": "SBUX #4892 \u2014 Union Square SF",
+    "scene_type": "retail",
+    "events": 94,
+    "alerts": 0,
+    "k3_insights": 12,
+    "k3_met": true,
+    "insight_types": {
+      "pattern": 8,
+      "recommendation": 1,
+      "comparison": 1,
+      "correlation": 2
+    },
+    "insights": [
+      {
+        "type": "pattern",
+        "text": "Peak traffic at 08:00 (11 events) is 2.0x the hourly average \u2014 consider increasing staffing during this window"
+      },
+      {
+        "type": "recommendation",
+        "text": "Low activity at 21:00 (1 events, 18% of average) \u2014 opportunity to reduce staffing or schedule maintenance"
+      },
+      {
+        "type": "pattern",
+        "text": "39% in work uniforms (9/23) \u2014 indicates service/construction worker traffic, consider value-oriented offerings"
+      },
+      {
+        "type": "pattern",
+        "text": "36% of visitors arrive in groups (24 group events) \u2014 indicates social destination; optimize for group seating and multi-item orders"
+      },
+      {
+        "type": "pattern",
+        "text": "100% stationary (18 standing/sitting vs 0 walking) \u2014 location is a destination. Optimize for dwell time and upselling"
+      },
+      {
+        "type": "pattern",
+        "text": "5% carrying bags/backpacks (5/94 events) \u2014 high bag rate suggests shopping activity or commuter traffic"
+      },
+      {
+        "type": "pattern",
+        "text": "10% using phones (9 observations) \u2014 high mobile engagement, consider mobile ordering/app promotions"
+      },
+      {
+        "type": "pattern",
+        "text": "5 delivery vehicle event(s) observed \u2014 consider designating delivery windows to reduce congestion during peak hours"
+      },
+      {
+        "type": "comparison",
+        "text": "Observed drink ASP $5.39 (tall=24, grande=47, venti=28) vs SBUX reported ~$5.50 \u2014 bearish signal for average ticket"
+      },
+      {
+        "type": "correlation",
+        "text": "5 laptop users observed among 39 coffee drinkers \u2014 indicates work-from-cafe segment with longer dwell time and higher spend potential"
+      },
+      {
+        "type": "pattern",
+        "text": "89% actively ordering (84/94 events) \u2014 high conversion rate indicates strong purchase intent at this location"
+      },
+      {
+        "type": "correlation",
+        "text": "5 browsing events \u2192 84 orders (1680% conversion) \u2014 optimize display placement to increase browse-to-purchase conversion"
+      }
+    ],
+    "metrics": {
+      "total_in": 1842.0,
+      "peak_hour": "2026-03-22T12",
+      "peak_count": 204.0
+    },
+    "daily_report": {
+      "events": 94,
+      "alerts": 0,
+      "hours_covered": 17
+    }
+  },
+  {
+    "persona": "James Park",
+    "title": "VP Operations",
+    "company": "Blue Bottle Coffee (200 locations)",
+    "camera": "Blue Bottle \u2014 Hayes Valley SF",
+    "scene_type": "retail",
+    "events": 71,
+    "alerts": 8,
+    "k3_insights": 11,
+    "k3_met": true,
+    "insight_types": {
+      "pattern": 6,
+      "recommendation": 2,
+      "comparison": 1,
+      "correlation": 2
+    },
+    "insights": [
+      {
+        "type": "pattern",
+        "text": "Peak traffic at 08:00 (10 events) is 2.1x the hourly average \u2014 consider increasing staffing during this window"
+      },
+      {
+        "type": "recommendation",
+        "text": "Low activity at 20:00 (1 events, 21% of average) \u2014 opportunity to reduce staffing or schedule maintenance"
+      },
+      {
+        "type": "pattern",
+        "text": "100% business attire (4/4 identified) indicates professional/high-income visitor profile \u2014 opportunity for premium offerings"
+      },
+      {
+        "type": "pattern",
+        "text": "100% of visitors arrive in groups (8 group events) \u2014 indicates social destination; optimize for group seating and multi-item orders"
+      },
+      {
+        "type": "pattern",
+        "text": "75% stationary (12 standing/sitting vs 4 walking) \u2014 location is a destination. Optimize for dwell time and upselling"
+      },
+      {
+        "type": "recommendation",
+        "text": "Badge compliance rate 50% (4/8 people) \u2014 below 80% target, recommend enforcing badge-visible policy"
+      },
+      {
+        "type": "pattern",
+        "text": "4 delivery vehicle event(s) observed \u2014 consider designating delivery windows to reduce congestion during peak hours"
+      },
+      {
+        "type": "comparison",
+        "text": "Observed drink ASP $5.45 (tall=0, grande=4, venti=0) vs SBUX reported ~$5.50 \u2014 bearish signal for average ticket"
+      },
+      {
+        "type": "correlation",
+        "text": "4 laptop users observed among 8 coffee drinkers \u2014 indicates work-from-cafe segment with longer dwell time and higher spend potential"
+      },
+      {
+        "type": "pattern",
+        "text": "39% actively ordering (28/71 events) \u2014 high conversion rate indicates strong purchase intent at this location"
+      },
+      {
+        "type": "correlation",
+        "text": "4 browsing events \u2192 28 orders (700% conversion) \u2014 optimize display placement to increase browse-to-purchase conversion"
+      }
+    ],
+    "metrics": {
+      "total_in": 1358.0,
+      "peak_hour": "2026-03-22T08",
+      "peak_count": 198.0
+    },
+    "daily_report": {
+      "events": 71,
+      "alerts": 8,
+      "hours_covered": 15
+    }
+  },
+  {
+    "persona": "Diana Reeves",
+    "title": "Senior Asset Manager",
+    "company": "Brookfield Properties \u2014 Westfield Mall",
+    "camera": "Westfield SF Centre \u2014 Main Atrium L1",
+    "scene_type": "retail",
+    "events": 185,
+    "alerts": 0,
+    "k3_insights": 12,
+    "k3_met": true,
+    "insight_types": {
+      "pattern": 9,
+      "recommendation": 1,
+      "anomaly": 1,
+      "correlation": 1
+    },
+    "insights": [
+      {
+        "type": "pattern",
+        "text": "Peak traffic at 13:00 (26 events) is 1.7x the hourly average \u2014 consider increasing staffing during this window"
+      },
+      {
+        "type": "recommendation",
+        "text": "Low activity at 21:00 (2 events, 13% of average) \u2014 opportunity to reduce staffing or schedule maintenance"
+      },
+      {
+        "type": "pattern",
+        "text": "Afternoon traffic (127 events) is 4.9x morning (26 events) \u2014 suggests retail/leisure-dominant location"
+      },
+      {
+        "type": "pattern",
+        "text": "Dominant age group: elderly (53% of identified visitors) \u2014 suggests tailoring product mix and pricing to this demographic"
+      },
+      {
+        "type": "pattern",
+        "text": "73% in work uniforms (27/37) \u2014 indicates service/construction worker traffic, consider value-oriented offerings"
+      },
+      {
+        "type": "pattern",
+        "text": "103% of visitors arrive in groups (39 group events) \u2014 indicates social destination; optimize for group seating and multi-item orders"
+      },
+      {
+        "type": "pattern",
+        "text": "100% of people are in transit (10 walking vs 0 stationary) \u2014 location is a pass-through, not a destination. Consider grab-and-go format"
+      },
+      {
+        "type": "pattern",
+        "text": "9 patrol/escort event(s) recorded \u2014 indicates active security operations; verify patrol schedule adherence and coverage gaps"
+      },
+      {
+        "type": "pattern",
+        "text": "9 delivery vehicle event(s) observed \u2014 consider designating delivery windows to reduce congestion during peak hours"
+      },
+      {
+        "type": "anomaly",
+        "text": "No activity detected 08:00-10:00 (2 hours) during business hours \u2014 investigate if camera issue or genuine low traffic"
+      },
+      {
+        "type": "pattern",
+        "text": "10% actively ordering (18/185 events) \u2014 high conversion rate indicates strong purchase intent at this location"
+      },
+      {
+        "type": "correlation",
+        "text": "10 browsing events \u2192 18 orders (180% conversion) \u2014 optimize display placement to increase browse-to-purchase conversion"
+      }
+    ],
+    "metrics": {
+      "total_in": 3644.0,
+      "peak_hour": "2026-03-22T13",
+      "peak_count": 493.0
+    },
+    "daily_report": {
+      "events": 185,
+      "alerts": 0,
+      "hours_covered": 12
+    }
+  }
+]
