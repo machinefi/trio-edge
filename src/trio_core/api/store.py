@@ -96,6 +96,20 @@ class EventStore:
         )
         await self._db.commit()
 
+        # Cached reports table
+        await self._db.execute("""
+            CREATE TABLE IF NOT EXISTS cached_reports (
+                id TEXT PRIMARY KEY,
+                report_type TEXT NOT NULL,
+                camera_id TEXT DEFAULT '',
+                date TEXT NOT NULL,
+                report_text TEXT NOT NULL,
+                metrics_json TEXT DEFAULT '{}',
+                generated_at TEXT NOT NULL
+            )
+        """)
+        await self._db.commit()
+
         # Migrations: add columns to existing databases
         for col, default in [("intent", "''"), ("intent_config", "'{}'")]:
             try:
@@ -164,9 +178,9 @@ class EventStore:
         if alert_only:
             where_clauses.append("alert_triggered = 1")
         if q:
-            # Word-boundary-ish matching: add space padding
-            where_clauses.append("(' ' || LOWER(description) || ' ') LIKE ?")
-            params.append(f"% {q.lower()} %")
+            # Case-insensitive substring search
+            where_clauses.append("LOWER(description) LIKE ?")
+            params.append(f"%{q.lower()}%")
 
         where = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
@@ -299,6 +313,39 @@ class EventStore:
             return None
         with open(path, "rb") as f:
             return f.read()
+
+    # ── Cached Reports ────────────────────────────────────────────────────
+
+    async def get_cached_report(self, report_type: str, camera_id: str, date: str) -> dict | None:
+        """Get a cached report if it exists."""
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT report_text, metrics_json, generated_at FROM cached_reports WHERE report_type = ? AND camera_id = ? AND date = ?",
+            (report_type, camera_id or "", date),
+        )
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        return {
+            "report": row[0],
+            "metrics_summary": json.loads(row[1] or "{}"),
+            "generated_at": row[2],
+        }
+
+    async def save_cached_report(self, report_type: str, camera_id: str, date: str, report_text: str, metrics: dict) -> None:
+        """Save a generated report to cache."""
+        assert self._db is not None
+        report_id = f"rpt_{uuid.uuid4().hex[:12]}"
+        now = datetime.utcnow().isoformat() + "Z"
+        await self._db.execute(
+            "DELETE FROM cached_reports WHERE report_type = ? AND camera_id = ? AND date = ?",
+            (report_type, camera_id or "", date),
+        )
+        await self._db.execute(
+            "INSERT INTO cached_reports (id, report_type, camera_id, date, report_text, metrics_json, generated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (report_id, report_type, camera_id or "", date, report_text, json.dumps(metrics), now),
+        )
+        await self._db.commit()
 
     # ── Cameras ──────────────────────────────────────────────────────────────
 
