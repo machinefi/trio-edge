@@ -124,8 +124,24 @@ async def chat(req: ChatRequest, request: Request):
     # Build context
     event_context = _build_event_context(events, req.camera_id)
 
+    # Enrich with InsightExtractor analysis (ASP, demographics, patterns)
+    insights_context = ""
+    try:
+        from trio_core.insights import InsightExtractor
+        extractor = InsightExtractor()
+        insights = extractor.extract(events)
+        if insights:
+            insight_lines = [f"- [{ins.insight_type}] {ins.text}" for ins in insights]
+            insights_context = (
+                "\n\n--- AI-Extracted Analytics ---\n"
+                + "\n".join(insight_lines)
+                + "\n---"
+            )
+    except Exception:
+        pass
+
     # Build prompt
-    prompt = f"{event_context}\n\nUser: {req.message}"
+    prompt = f"{event_context}{insights_context}\n\nUser: {req.message}"
 
     # Call Gemini
     try:
