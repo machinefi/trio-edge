@@ -1,0 +1,28 @@
+{
+  "dataset": "Mall Dataset",
+  "frames_processed": 2000,
+  "metrics": {
+    "mae": 25.28,
+    "mape": 80.7,
+    "rmse": 26.13,
+    "total_accuracy": 0.1888,
+    "correlation": 0.2962,
+    "total_gt": 62315,
+    "total_predicted": 11764,
+    "avg_gt_per_frame": 31.2,
+    "avg_predicted_per_frame": 5.9,
+    "avg_latency_ms": 11.5,
+    "under_count_frames": 2000,
+    "over_count_frames": 0,
+    "exact_frames": 0,
+    "unique_tracks_total": 1617,
+    "total_in": 57,
+    "total_out": 101
+  },
+  "model": "YOLOv10n (Apache 2.0)",
+  "tracker": "ByteTrack (supervision, MIT)",
+  "confidence_threshold": 0.35,
+  "auto_calibration": true,
+  "calibration_frames": 30,
+  "timestamp": "2026-03-22T07:08:49"
+}
