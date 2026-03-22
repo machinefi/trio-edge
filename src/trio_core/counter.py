@@ -123,7 +123,18 @@ class YOLOv10Detector:
 
 
 class PeopleCounter:
-    """People counter with tracking and line-crossing detection."""
+    """People counter with tracking, auto-calibration, and correction factor.
+
+    The correction factor compensates for YOLO's consistent under-detection
+    at certain camera angles. It's computed by comparing YOLO count with
+    a VLM count (or user-provided ground truth) during calibration.
+
+    Production flow:
+        1. Camera connects → YOLO starts counting (raw)
+        2. VLM counts a few frames → correction_factor = vlm_count / yolo_count
+        3. All reported counts = yolo_count × correction_factor
+        4. Every 30 min: VLM re-calibrates to prevent drift
+    """
 
     def __init__(
         self,
@@ -133,12 +144,15 @@ class PeopleCounter:
         confidence: float = CONFIDENCE_THRESHOLD,
         auto_calibrate: bool = True,
         calibration_frames: int = 30,
+        correction_factor: float = 1.0,
     ):
         self.detector = YOLOv10Detector(model_path, confidence)
         self._line_start = line_start
         self._line_end = line_end
         self._auto_calibrate = auto_calibrate and (line_start is None)
         self._calibration_frames = calibration_frames
+        self.correction_factor = correction_factor
+        self._correction_samples: list[tuple[int, int]] = []  # (yolo_count, reference_count)
         self._tracker = None
         self._line_zone = None
         self._initialized = False
@@ -313,6 +327,13 @@ class PeopleCounter:
                         crop=crop,
                     ))
 
+        # Apply correction factor to person counts
+        raw_person_count = by_class.get("person", 0)
+        corrected_person_count = self.corrected_count(raw_person_count)
+        corrected_class = dict(by_class)
+        if "person" in corrected_class:
+            corrected_class["person"] = corrected_person_count
+
         return CountResult(
             people_in=self._line_zone.in_count,
             people_out=self._line_zone.out_count,
@@ -320,10 +341,43 @@ class PeopleCounter:
             total_out=self._line_zone.out_count,
             current_count=len(tracked),
             detections=len(detections),
-            by_class=by_class,
+            by_class=corrected_class,
             new_track_ids=new_ids,
             new_crops=new_crops,
         )
+
+    def calibrate_with_reference(self, yolo_count: int, reference_count: int) -> None:
+        """Add a calibration sample (yolo_count vs reference_count from VLM or user).
+
+        Call this periodically to maintain the correction factor.
+        The correction factor is the median ratio of reference/yolo across samples.
+        """
+        if yolo_count > 0 and reference_count > 0:
+            self._correction_samples.append((yolo_count, reference_count))
+            # Keep last 20 samples
+            if len(self._correction_samples) > 20:
+                self._correction_samples = self._correction_samples[-20:]
+            # Recompute correction factor as median ratio
+            ratios = [ref / yolo for yolo, ref in self._correction_samples if yolo > 0]
+            if ratios:
+                ratios.sort()
+                mid = len(ratios) // 2
+                self.correction_factor = ratios[mid]  # median
+                logger.info("Correction factor updated: %.2fx (%d samples)",
+                            self.correction_factor, len(self._correction_samples))
+
+    def corrected_count(self, raw_count: int) -> int:
+        """Apply correction factor to a raw YOLO count."""
+        return round(raw_count * self.correction_factor)
+
+    @property
+    def calibration_info(self) -> dict:
+        """Return current calibration state."""
+        return {
+            "correction_factor": round(self.correction_factor, 3),
+            "samples": len(self._correction_samples),
+            "calibrated": self.correction_factor != 1.0,
+        }
 
     def annotate(self, frame: np.ndarray) -> np.ndarray:
         """Draw detections, tracks, and counting line on frame."""
