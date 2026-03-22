@@ -17,20 +17,21 @@ ALERT_KEYWORDS = {
     "critical": [
         "weapon", "gun", "knife", "firearm", "explosive",
         "break-in", "forced entry", "intruder", "breach",
-        "fire", "smoke", "explosion",
+        "fire detected", "active fire", "smoke detected", "explosion",
     ],
     "high": [
         "unauthorized", "tailgating", "piggybacking", "piggyback",
         "fight", "assault", "threat",
         "person running", "people running", "screaming",
         "suspicious", "vandalism",
-        "evacuation", "alarm",
+        "evacuation",
     ],
     "medium": [
         "loitering", "no badge", "without badge", "unidentified",
         "after hours", "overnight", "unusual", "anomaly", "tamper",
         "door held open", "propped", "propped open",
         "unknown vehicle", "unauthorized vehicle",
+        "fire alarm", "fire drill", "alarm drill",
     ],
     "low": [
         "delivery", "unfamiliar", "new face",
