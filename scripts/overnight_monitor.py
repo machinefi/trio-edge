@@ -32,8 +32,8 @@ logger = logging.getLogger("overnight")
 # Camera sources loaded dynamically from DB
 CAMERAS = []  # Populated at startup from database
 
-METRIC_INTERVAL = 30  # Store metrics every 30 seconds
-FRAME_INTERVAL = 2.0  # Process frame every 2 seconds
+METRIC_INTERVAL = 300  # Store metrics every 5 minutes
+FRAME_INTERVAL = 10.0  # Process frame every 10 seconds (video loops, no need for high freq)
 LOOP_VIDEOS = True  # Restart video files when they end
 
 
