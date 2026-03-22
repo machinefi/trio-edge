@@ -61,9 +61,13 @@ async def monitor_camera(cam: dict, store: EventStore, counter: PeopleCounter, s
             ret, frame = cap.read()
             if not ret:
                 if cam["type"] == "file" and LOOP_VIDEOS:
-                    logger.info(f"[{cam_name}] Video ended. Looping...")
+                    logger.info(f"[{cam_name}] Video ended. Looping. Total unique tracks: {len(counter._seen_ids)}")
                     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                     prev_gray = None
+                    # Reset tracker on loop — new "day" of observations
+                    counter._seen_ids.clear()
+                    counter._tracker = None
+                    counter._initialized = False
                     continue
                 else:
                     logger.warning(f"[{cam_name}] Stream ended.")
@@ -84,10 +88,8 @@ async def monitor_camera(cam: dict, store: EventStore, counter: PeopleCounter, s
                     continue
             prev_gray = gray
 
-            # Reset tracker per-camera to get fresh detections
-            counter._seen_ids.clear()
-            counter._tracker = None
-            counter._initialized = False
+            # Keep tracker alive across frames for real person-counting
+            # Only reset on video loop (handled above when cap resets to frame 0)
             result = counter.process(frame)
 
             # Store metrics only on motion + interval
@@ -95,7 +97,9 @@ async def monitor_camera(cam: dict, store: EventStore, counter: PeopleCounter, s
                 ts = datetime.now(timezone.utc).isoformat()
                 metrics = [
                     {"camera_id": cam_id, "metric_type": "count_person", "value": int(result.by_class.get("person", 0)), "timestamp": ts},
-                    {"camera_id": cam_id, "metric_type": "people_in", "value": int(result.by_class.get("person", 0)), "timestamp": ts},
+                    {"camera_id": cam_id, "metric_type": "people_in", "value": int(result.total_in), "timestamp": ts},
+                    {"camera_id": cam_id, "metric_type": "people_out", "value": int(result.total_out), "timestamp": ts},
+                    {"camera_id": cam_id, "metric_type": "unique_tracks", "value": int(len(counter._seen_ids)), "timestamp": ts},
                 ]
                 for cls_name, count in result.by_class.items():
                     if cls_name != "person":

@@ -131,37 +131,118 @@ class PeopleCounter:
         line_start: tuple[int, int] | None = None,
         line_end: tuple[int, int] | None = None,
         confidence: float = CONFIDENCE_THRESHOLD,
+        auto_calibrate: bool = True,
+        calibration_frames: int = 30,
     ):
         self.detector = YOLOv10Detector(model_path, confidence)
         self._line_start = line_start
         self._line_end = line_end
+        self._auto_calibrate = auto_calibrate and (line_start is None)
+        self._calibration_frames = calibration_frames
         self._tracker = None
         self._line_zone = None
         self._initialized = False
+        self._calibrating = False
+        self._calibration_positions: list[tuple[float, float, float, float]] = []  # (cx, cy, track_id, frame_idx)
+        self._cal_frame_count = 0
         self._seen_ids: set[int] = set()
 
     def _lazy_init(self, frame_shape: tuple[int, ...]) -> None:
-        """Initialize tracker and line zone on first frame."""
+        """Initialize tracker. If auto_calibrate, defer line placement."""
         import supervision as sv
 
         h, w = frame_shape[:2]
+        self._frame_h = h
+        self._frame_w = w
 
-        # Default line: horizontal across the middle of the frame
-        if self._line_start is None or self._line_end is None:
-            self._line_start = (0, h // 2)
-            self._line_end = (w, h // 2)
-
-        start = sv.Point(*self._line_start)
-        end = sv.Point(*self._line_end)
-        self._line_zone = sv.LineZone(start=start, end=end)
         self._tracker = sv.ByteTrack(
             track_activation_threshold=0.3,
             minimum_matching_threshold=0.8,
             frame_rate=10,
         )
-        self._initialized = True
-        logger.info("Counter initialized: line from %s to %s, frame %dx%d",
-                     self._line_start, self._line_end, w, h)
+
+        if self._auto_calibrate:
+            # Start in calibration mode — no line yet
+            self._calibrating = True
+            self._cal_frame_count = 0
+            self._calibration_positions = []
+            # Temporary line at center (will be replaced after calibration)
+            start = sv.Point(0, h // 2)
+            end = sv.Point(w, h // 2)
+            self._line_zone = sv.LineZone(start=start, end=end)
+            self._initialized = True
+            logger.info("Auto-calibrating: observing movement for %d frames...", self._calibration_frames)
+        else:
+            if self._line_start is None or self._line_end is None:
+                self._line_start = (0, h // 2)
+                self._line_end = (w, h // 2)
+            start = sv.Point(*self._line_start)
+            end = sv.Point(*self._line_end)
+            self._line_zone = sv.LineZone(start=start, end=end)
+            self._initialized = True
+            logger.info("Counter initialized: line from %s to %s, frame %dx%d",
+                         self._line_start, self._line_end, w, h)
+
+    def _finish_calibration(self) -> None:
+        """Analyze collected positions and place the counting line optimally."""
+        import supervision as sv
+
+        self._calibrating = False
+        h, w = self._frame_h, self._frame_w
+
+        if len(self._calibration_positions) < 4:
+            # Not enough data — use center horizontal line
+            self._line_start = (0, h // 2)
+            self._line_end = (w, h // 2)
+            logger.info("Auto-calibration: insufficient movement data. Using center horizontal line.")
+        else:
+            # Group positions by track_id and compute movement vectors
+            from collections import defaultdict
+            tracks: dict[int, list[tuple[float, float]]] = defaultdict(list)
+            for cx, cy, tid, _ in self._calibration_positions:
+                tracks[int(tid)].append((cx, cy))
+
+            # Compute average movement direction
+            dx_total, dy_total = 0.0, 0.0
+            vectors = 0
+            for tid, positions in tracks.items():
+                if len(positions) >= 2:
+                    # Movement from first to last seen position
+                    dx = positions[-1][0] - positions[0][0]
+                    dy = positions[-1][1] - positions[0][1]
+                    dx_total += dx
+                    dy_total += dy
+                    vectors += 1
+
+            if vectors == 0 or (abs(dx_total) < 5 and abs(dy_total) < 5):
+                # No clear direction — use center horizontal
+                self._line_start = (0, h // 2)
+                self._line_end = (w, h // 2)
+                logger.info("Auto-calibration: no dominant direction. Using center horizontal line.")
+            else:
+                # Place line perpendicular to dominant movement, through center
+                # If movement is mostly horizontal (left-right): place vertical line
+                # If movement is mostly vertical (up-down): place horizontal line
+                if abs(dx_total) > abs(dy_total):
+                    # Dominant horizontal movement → vertical counting line at center
+                    self._line_start = (w // 2, 0)
+                    self._line_end = (w // 2, h)
+                    direction = "left-right"
+                else:
+                    # Dominant vertical movement → horizontal counting line at center
+                    self._line_start = (0, h // 2)
+                    self._line_end = (w, h // 2)
+                    direction = "up-down"
+
+                logger.info("Auto-calibration complete: dominant flow is %s (dx=%.0f, dy=%.0f, %d tracks). "
+                            "Line: %s to %s",
+                            direction, dx_total, dy_total, vectors,
+                            self._line_start, self._line_end)
+
+        # Replace the line zone
+        start = sv.Point(*self._line_start)
+        end = sv.Point(*self._line_end)
+        self._line_zone = sv.LineZone(start=start, end=end)
 
     def process(self, frame: np.ndarray) -> CountResult:
         """Process a frame: detect, track, count line crossings."""
@@ -180,6 +261,17 @@ class PeopleCounter:
 
         # Track
         tracked = self._tracker.update_with_detections(detections)
+
+        # Auto-calibration: collect position data during calibration phase
+        if self._calibrating:
+            self._cal_frame_count += 1
+            if tracked.tracker_id is not None:
+                for i, tid in enumerate(tracked.tracker_id):
+                    cx = float((tracked.xyxy[i][0] + tracked.xyxy[i][2]) / 2)
+                    cy = float((tracked.xyxy[i][1] + tracked.xyxy[i][3]) / 2)
+                    self._calibration_positions.append((cx, cy, float(tid), float(self._cal_frame_count)))
+            if self._cal_frame_count >= self._calibration_frames:
+                self._finish_calibration()
 
         # Count line crossings (people only)
         people_mask = tracked.class_id == 0 if tracked.class_id is not None else np.array([])

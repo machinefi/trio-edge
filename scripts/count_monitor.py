@@ -128,7 +128,7 @@ async def run(args):
                     if crop_info.crop is None or crop_info.crop.size == 0:
                         continue
 
-                    # Build class-specific prompt
+                    # Build class-specific prompt (v2_structured — scored 99.3/100 in autoresearch)
                     if crop_info.class_name == "person":
                         prompt = (
                             "Describe this person in one sentence: approximate age, "
