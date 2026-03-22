@@ -83,8 +83,14 @@ class InsightExtractor:
         "alarm": re.compile(r"\b(alarm|emergency|triggered|blind spot|unattended)\b", re.I),
     }
 
-    def extract(self, events: list[dict]) -> list[Insight]:
-        """Extract all insights from event descriptions."""
+    def extract(self, events: list[dict], scene_type: str | None = None) -> list[Insight]:
+        """Extract all insights from event descriptions.
+
+        Args:
+            events: list of event dicts with 'description' and 'timestamp'
+            scene_type: optional scene hint ('retail', 'security', etc.)
+                        prevents cross-contamination (e.g. badge insights on retail)
+        """
         if not events:
             return []
 
@@ -93,14 +99,20 @@ class InsightExtractor:
         # Parse all events into structured data
         parsed = self._parse_events(events)
 
+        # Auto-detect scene if not provided
+        if scene_type is None:
+            scene_type = self._detect_scene(parsed)
+
         # Extract insights from different dimensions
         insights.extend(self._traffic_insights(parsed, events))
         insights.extend(self._demographic_insights(parsed, events))
         insights.extend(self._behavioral_insights(parsed, events))
-        insights.extend(self._security_insights(parsed, events))
+        if scene_type in ("security", None):
+            insights.extend(self._security_insights(parsed, events))
         insights.extend(self._vehicle_insights(parsed, events))
         insights.extend(self._temporal_insights(parsed, events))
-        insights.extend(self._retail_insights(parsed, events))
+        if scene_type in ("retail", "restaurant", None):
+            insights.extend(self._retail_insights(parsed, events))
 
         # Deduplicate by checking text similarity
         insights = self._deduplicate(insights)
@@ -184,6 +196,19 @@ class InsightExtractor:
             return datetime.fromisoformat(ts.replace("Z", "+00:00")).hour
         except (ValueError, AttributeError):
             return None
+
+    def _detect_scene(self, p: dict) -> str:
+        """Auto-detect scene type from parsed data to avoid cross-contamination."""
+        sec = p["security"]
+        drinks = p["drinks"]
+        security_signals = sec.get("badge", 0) + sec.get("patrol", 0) + sec.get("unauthorized", 0) + sec.get("alarm", 0)
+        retail_signals = drinks.get("coffee", 0) + drinks.get("tall", 0) + drinks.get("grande", 0) + drinks.get("venti", 0) + p["activities"].get("ordering", 0)
+
+        if retail_signals > security_signals * 2:
+            return "retail"
+        if security_signals > retail_signals * 2:
+            return "security"
+        return "general"
 
     # ── Insight generators ────────────────────────────────────────────────
 
@@ -534,8 +559,8 @@ class InsightExtractor:
                 evidence=[f"ordering={ordering}", f"total={total}"],
             ))
 
-        if browsing > 2 and ordering > 0:
-            browse_to_order = ordering / browsing * 100 if browsing > 0 else 0
+        if browsing > 2 and ordering > 0 and browsing >= ordering:
+            browse_to_order = min(100, ordering / browsing * 100)
             insights.append(Insight(
                 insight_type="correlation",
                 text=f"{browsing} browsing events → {ordering} orders ({browse_to_order:.0f}% conversion) — optimize display placement to increase browse-to-purchase conversion",

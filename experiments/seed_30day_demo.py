@@ -102,7 +102,7 @@ async def main():
         day = base_date + timedelta(days=day_offset)
         dow = day.weekday()
         growth = 1.0 + (day_offset + 30) * 0.003 / 7
-        n_events = int(15 * dow_mult[dow] * growth * (0.8 + random.random() * 0.4))
+        n_events = int(120 * dow_mult[dow] * growth * (0.8 + random.random() * 0.4))
 
         for i in range(n_events):
             hour = random.choice([8, 9, 10, 11, 12, 13, 14, 15, 16, 17])
