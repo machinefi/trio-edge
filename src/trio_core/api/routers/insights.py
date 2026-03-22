@@ -553,6 +553,19 @@ async def _gather_report_data(
         "grande": len(re.findall(r"\bgrande\b", all_descs)),
         "venti": len(re.findall(r"\bventi\b", all_descs)),
     }
+    # Auto-detect scene type from event descriptions
+    scene_keywords = {
+        "retail": ["ordering", "customer", "counter", "register", "bag", "shopping", "store", "buy", "purchase", "latte", "coffee", "drink", "starbucks", "menu"],
+        "security": ["badge", "entrance", "door", "patrol", "authorized", "unauthorized", "security", "access", "perimeter", "gate", "visitor", "contractor", "shift change"],
+        "parking": ["vehicle", "car", "truck", "parking", "parked", "license plate", "garage", "lot", "spot"],
+        "warehouse": ["loading", "dock", "cargo", "forklift", "pallet", "shipment", "delivery", "warehouse"],
+    }
+    scene_scores = {}
+    for scene_type, keywords in scene_keywords.items():
+        score = sum(all_descs.count(kw) for kw in keywords)
+        scene_scores[scene_type] = score
+    detected_scene = max(scene_scores, key=scene_scores.get) if max(scene_scores.values()) > 0 else "general"
+
     food_mentions = len(re.findall(r"\b(pastry|sandwich|muffin|cake|cookie|food|croissant|bagel)\b", all_descs))
     laptop_mentions = len(re.findall(r"\blaptop\b", all_descs))
     phone_mentions = len(re.findall(r"\bphone\b", all_descs))
@@ -590,6 +603,8 @@ async def _gather_report_data(
         "estimated_asp": round(weighted_asp, 2),
         "food_attach_rate": round(food_attach_rate, 1),
         "estimated_asp_with_food": round(estimated_asp_with_food, 2),
+        "detected_scene": detected_scene,
+        "scene_scores": scene_scores,
     }
 
 
@@ -807,6 +822,8 @@ async def auto_report(
             "estimated_asp": data.get("estimated_asp", 0),
             "food_attach_rate": data.get("food_attach_rate", 0),
             "estimated_asp_with_food": data.get("estimated_asp_with_food", 0),
+            "detected_scene": data.get("detected_scene", "general"),
+            "scene_scores": data.get("scene_scores", {}),
         },
     }
 
@@ -819,3 +836,86 @@ async def auto_security_report(
 ):
     """Convenience alias — auto-report with report_type=security."""
     return await auto_report(request, camera_id=camera_id, hours=hours, report_type="security")
+
+
+@router.get("/scene-modules")
+async def scene_modules(
+    request: Request,
+    camera_id: str | None = Query(None),
+    hours: float = Query(24),
+):
+    """Auto-detect scene type and return appropriate analytics modules.
+    
+    Instead of showing fixed Demographics/Vehicles/Behavioral sections,
+    this endpoint analyzes what the camera actually sees and returns
+    only the relevant modules.
+    """
+    store = _get_store(request)
+    start = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+    result = await store.list_events(camera_id=camera_id, start=start, limit=200)
+    events = result.get("events", [])
+
+    if not events:
+        return {"scene": "unknown", "modules": [], "message": "No events to analyze"}
+
+    all_descs = " ".join(e.get("description", "").lower() for e in events)
+
+    # Detect scene
+    scene_keywords = {
+        "retail": ["ordering", "customer", "counter", "register", "bag", "shopping", "store", "buy", "latte", "coffee", "drink", "starbucks", "menu", "pastry", "tall", "grande", "venti"],
+        "security": ["badge", "entrance", "door", "patrol", "authorized", "unauthorized", "security", "access", "perimeter", "gate", "visitor", "contractor", "shift change", "propped"],
+        "parking": ["vehicle", "car", "truck", "parking", "parked", "license plate", "garage", "lot", "spot", "tesla"],
+        "warehouse": ["loading", "dock", "cargo", "forklift", "pallet", "shipment", "delivery", "warehouse", "inventory"],
+        "office": ["meeting", "conference", "lobby", "reception", "elevator", "floor", "desk", "office"],
+    }
+    scene_scores = {}
+    for scene_type, keywords in scene_keywords.items():
+        score = sum(all_descs.count(kw) for kw in keywords)
+        scene_scores[scene_type] = score
+    detected = max(scene_scores, key=scene_scores.get) if max(scene_scores.values()) > 0 else "general"
+
+    # Define modules per scene type
+    MODULE_MAP = {
+        "retail": [
+            {"id": "customer_demographics", "title": "Customer Demographics", "description": "Age, gender, and profile of visitors"},
+            {"id": "order_analysis", "title": "Order Analysis", "description": "Drink sizes, food attach rate, estimated ASP"},
+            {"id": "traffic_pattern", "title": "Foot Traffic Pattern", "description": "Hourly visitor count and peak hours"},
+            {"id": "customer_behavior", "title": "Customer Behavior", "description": "Dwell time, queue length, activities"},
+        ],
+        "security": [
+            {"id": "access_log", "title": "Access Log Summary", "description": "Personnel entries, badge compliance, visitor tracking"},
+            {"id": "incident_report", "title": "Incident Report", "description": "Unauthorized access, propped doors, suspicious activity"},
+            {"id": "patrol_status", "title": "Patrol & Compliance", "description": "Security rounds, gate checks, perimeter status"},
+            {"id": "vehicle_activity", "title": "Vehicle Activity", "description": "Arrivals, departures, restricted zone violations"},
+        ],
+        "parking": [
+            {"id": "occupancy", "title": "Lot Occupancy", "description": "Current and peak vehicle count"},
+            {"id": "vehicle_types", "title": "Vehicle Classification", "description": "Cars, trucks, motorcycles by type and color"},
+            {"id": "duration", "title": "Parking Duration", "description": "Average stay time and turnover rate"},
+            {"id": "violations", "title": "Violations", "description": "Unauthorized parking, overstay, restricted zones"},
+        ],
+        "warehouse": [
+            {"id": "dock_activity", "title": "Loading Dock Activity", "description": "Truck arrivals, cargo handling, wait times"},
+            {"id": "personnel", "title": "Personnel Tracking", "description": "Worker count, safety gear compliance"},
+            {"id": "inventory_movement", "title": "Inventory Movement", "description": "Shipments in/out, pallet counts"},
+            {"id": "safety", "title": "Safety Compliance", "description": "PPE detection, forklift operations, zone violations"},
+        ],
+        "office": [
+            {"id": "occupancy", "title": "Space Occupancy", "description": "Meeting room usage, desk utilization"},
+            {"id": "visitor_log", "title": "Visitor Log", "description": "Check-ins, escorts, duration of visits"},
+            {"id": "traffic_flow", "title": "Traffic Flow", "description": "Elevator usage, floor distribution, peak hours"},
+        ],
+    }
+
+    modules = MODULE_MAP.get(detected, [
+        {"id": "general_activity", "title": "Activity Summary", "description": "Overview of detected events and patterns"},
+        {"id": "demographics", "title": "People Analysis", "description": "Demographics and behavioral patterns"},
+    ])
+
+    return {
+        "scene": detected,
+        "confidence": scene_scores.get(detected, 0),
+        "scores": scene_scores,
+        "modules": modules,
+        "events_analyzed": len(events),
+    }
