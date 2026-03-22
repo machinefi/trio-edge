@@ -29,6 +29,12 @@ DEMO_USERS = {
         "display_name": "Equinix Security",
         "role": "security_officer",
     },
+    "mall": {
+        "password": "abcd",
+        "tenant": "benchmark",
+        "display_name": "Accuracy Benchmark",
+        "role": "benchmark_analyst",
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -54,6 +60,16 @@ TENANT_CONFIG: dict[str, dict] = {
             "Were there any unauthorized access attempts overnight?",
             "Who entered the server room in the last hour?",
             "Summarize today's security incidents.",
+        ],
+    },
+    "benchmark": {
+        "dashboard_title": "Accuracy Benchmark",
+        "report_type": "investment",
+        "camera_filter": ["mall", "benchmark", "test"],
+        "suggested_questions": [
+            "What is the counting accuracy vs ground truth?",
+            "How many people were detected vs actual?",
+            "Show me the error distribution over time.",
         ],
     },
 }
