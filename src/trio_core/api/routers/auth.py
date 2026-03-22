@@ -39,6 +39,7 @@ TENANT_CONFIG: dict[str, dict] = {
     "fund": {
         "dashboard_title": "Investment Intelligence",
         "report_type": "investment",
+        "camera_filter": ["starbucks", "cafe", "store", "shop", "retail"],
         "suggested_questions": [
             "What's the customer demographic profile and peak hours?",
             "Should I go long or short based on what you see?",
@@ -48,6 +49,7 @@ TENANT_CONFIG: dict[str, dict] = {
     "security": {
         "dashboard_title": "Security Operations Center",
         "report_type": "security",
+        "camera_filter": ["data center", "entrance", "server", "warehouse", "parking", "dock", "gate"],
         "suggested_questions": [
             "Were there any unauthorized access attempts overnight?",
             "Who entered the server room in the last hour?",
