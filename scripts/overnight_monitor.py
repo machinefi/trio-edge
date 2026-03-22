@@ -54,6 +54,8 @@ async def monitor_camera(cam: dict, store: EventStore, counter: PeopleCounter, s
 
         last_metric_time = 0
         frame_count = 0
+        prev_gray = None
+        MOTION_THRESHOLD = 0.003
 
         while not stop_event.is_set():
             ret, frame = cap.read()
@@ -61,6 +63,7 @@ async def monitor_camera(cam: dict, store: EventStore, counter: PeopleCounter, s
                 if cam["type"] == "file" and LOOP_VIDEOS:
                     logger.info(f"[{cam_name}] Video ended. Looping...")
                     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                    prev_gray = None
                     continue
                 else:
                     logger.warning(f"[{cam_name}] Stream ended.")
@@ -69,13 +72,25 @@ async def monitor_camera(cam: dict, store: EventStore, counter: PeopleCounter, s
             frame_count += 1
             now = time.monotonic()
 
+            # Motion detection — skip static frames
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            gray = cv2.GaussianBlur(gray, (11, 11), 0)
+            if prev_gray is not None:
+                diff = cv2.absdiff(prev_gray, gray)
+                motion = np.mean(diff) / 255.0
+                if motion < MOTION_THRESHOLD:
+                    prev_gray = gray
+                    await asyncio.sleep(FRAME_INTERVAL)
+                    continue
+            prev_gray = gray
+
             # Reset tracker per-camera to get fresh detections
             counter._seen_ids.clear()
             counter._tracker = None
             counter._initialized = False
             result = counter.process(frame)
 
-            # Store metrics
+            # Store metrics only on motion + interval
             if now - last_metric_time > METRIC_INTERVAL:
                 ts = datetime.now(timezone.utc).isoformat()
                 metrics = [
