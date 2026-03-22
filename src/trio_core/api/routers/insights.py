@@ -873,15 +873,20 @@ async def auto_report(
         "report": report_text,
         "metrics_summary": {
             **metrics_summary,
-            "drink_sizes": data.get("drink_sizes", {}),
-            "food_mentions": data.get("food_mentions", 0),
-            "laptop_usage": data.get("laptop_mentions", 0),
-            "phone_usage": data.get("phone_mentions", 0),
-            "estimated_asp": data.get("estimated_asp", 0),
-            "food_attach_rate": data.get("food_attach_rate", 0),
-            "estimated_asp_with_food": data.get("estimated_asp_with_food", 0),
             "detected_scene": data.get("detected_scene", "general"),
-            "scene_scores": data.get("scene_scores", {}),
+            **(
+                {
+                    "drink_sizes": data.get("drink_sizes", {}),
+                    "food_mentions": data.get("food_mentions", 0),
+                    "laptop_usage": data.get("laptop_mentions", 0),
+                    "phone_usage": data.get("phone_mentions", 0),
+                    "estimated_asp": data.get("estimated_asp", 0),
+                    "food_attach_rate": data.get("food_attach_rate", 0),
+                    "estimated_asp_with_food": data.get("estimated_asp_with_food", 0),
+                }
+                if report_type != "security"
+                else {}
+            ),
         },
         "actionable_insights": [
             {
