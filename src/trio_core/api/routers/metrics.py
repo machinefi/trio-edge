@@ -69,8 +69,11 @@ async def metrics_summary(
     start: str | None = Query(None, description="ISO timestamp lower bound"),
     end: str | None = Query(None, description="ISO timestamp upper bound"),
 ):
-    """Summary statistics for a camera's metrics."""
+    """Summary statistics for a camera's metrics. Defaults to last 24 hours."""
     store = _get_store(request)
+    if not start:
+        from datetime import datetime, timedelta, timezone
+        start = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
     result = await store.metrics_summary(camera_id=camera_id, start=start, end=end)
     result["period"] = {"start": start, "end": end}
     return result
