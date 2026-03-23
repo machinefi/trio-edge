@@ -138,15 +138,15 @@ async def list_cameras(request: Request):
     store = _get_store(request)
     rows = await store.list_cameras()
 
-    # Get today's event counts per camera
-    from datetime import date
-    today_start = f"{date.today().isoformat()}T00:00:00"
+    # Get recent event counts per camera (last 24h, so demo data always shows)
+    from datetime import datetime, timedelta, timezone
+    recent_start = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
     db = store._db
     event_counts: dict[str, int] = {}
     if db:
         cursor = await db.execute(
             "SELECT camera_id, COUNT(*) FROM events WHERE timestamp >= ? GROUP BY camera_id",
-            (today_start,),
+            (recent_start,),
         )
         event_counts = {r[0]: r[1] for r in await cursor.fetchall()}
 
