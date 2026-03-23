@@ -20,11 +20,14 @@ def _get_store(request: Request):
 @router.get("/hourly")
 async def hourly_breakdown(
     request: Request,
-    camera_id: str = Query(..., description="Camera ID"),
+    camera_id: str = Query(None, description="Camera ID (optional, defaults to first camera)"),
     date_str: str = Query(None, alias="date", description="YYYY-MM-DD, default today"),
 ):
     """Hourly breakdown for dashboard charts."""
     store = _get_store(request)
+    if not camera_id:
+        cameras = await store.list_cameras()
+        camera_id = cameras[0]["id"] if cameras else "unknown"
     if date_str is None:
         date_str = date.today().isoformat()
 
