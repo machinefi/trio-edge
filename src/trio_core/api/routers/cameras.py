@@ -140,7 +140,7 @@ async def list_cameras(request: Request):
 
     # Get recent event counts per camera (last 24h, so demo data always shows)
     from datetime import datetime, timedelta, timezone
-    recent_start = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    recent_start = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
     db = store._db
     event_counts: dict[str, int] = {}
     if db:
