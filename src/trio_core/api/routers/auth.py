@@ -35,6 +35,12 @@ DEMO_USERS = {
         "display_name": "Accuracy Benchmark",
         "role": "benchmark_analyst",
     },
+    "home": {
+        "password": "demo1234",
+        "tenant": "home",
+        "display_name": "Home Security",
+        "role": "home_owner",
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -70,6 +76,16 @@ TENANT_CONFIG: dict[str, dict] = {
             "What is the counting accuracy vs ground truth?",
             "How many people were detected vs actual?",
             "Show me the error distribution over time.",
+        ],
+    },
+    "home": {
+        "dashboard_title": "Home Security",
+        "report_type": "security",
+        "camera_filter": ["home", "front door", "backyard", "living", "garage", "driveway"],
+        "suggested_questions": [
+            "Who came to my door today?",
+            "Was there any activity while I was away?",
+            "Summarize today's activity.",
         ],
     },
 }
