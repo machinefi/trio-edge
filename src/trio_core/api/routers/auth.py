@@ -45,7 +45,7 @@ TENANT_CONFIG: dict[str, dict] = {
     "fund": {
         "dashboard_title": "Investment Intelligence",
         "report_type": "investment",
-        "camera_filter": ["starbucks", "cafe", "store", "shop", "retail"],
+        "camera_filter": ["starbucks", "sbux", "cafe", "store", "shop", "retail", "coffee", "bottle", "westfield", "mall", "blue bottle"],
         "suggested_questions": [
             "What's the customer demographic profile and peak hours?",
             "Should I go long or short based on what you see?",
