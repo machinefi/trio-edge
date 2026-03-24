@@ -54,10 +54,11 @@ def _classify_event(description: str) -> tuple[bool, str, str]:
 
 
 @router.get("/scan")
-async def scan_events(request: Request, hours: float = 24):
+async def scan_events(request: Request, hours: float = 24, camera_id: str | None = None):
     """Scan recent events for alert-worthy patterns.
 
     Returns flagged events with severity and reason.
+    Optionally filter by camera_id.
     """
     store = getattr(request.app.state, "event_store", None)
     if store is None:
@@ -67,7 +68,7 @@ async def scan_events(request: Request, hours: float = 24):
     now = datetime.now(timezone.utc)
     start = (now - timedelta(hours=hours)).isoformat()
 
-    result = await store.list_events(start=start, limit=500)
+    result = await store.list_events(camera_id=camera_id, start=start, limit=500)
     events = result.get("events", [])
 
     flagged = []
