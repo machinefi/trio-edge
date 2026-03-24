@@ -132,11 +132,35 @@ async def _capture_snapshot(source_url: str) -> bytes:
 # ── Endpoints ────────────────────────────────────────────────────────────────
 
 
+def _get_tenant_filter(request: Request) -> list[str] | None:
+    """Extract tenant camera_filter from auth token if present."""
+    from trio_core.api.routers.auth import DEMO_USERS, TENANT_CONFIG
+    auth = request.headers.get("authorization", "")
+    if not auth.startswith("Bearer "):
+        return None
+    try:
+        import base64
+        decoded = base64.b64decode(auth[7:]).decode()
+        username = decoded.split(":")[0]
+        user = DEMO_USERS.get(username)
+        if user:
+            tenant = user["tenant"]
+            return TENANT_CONFIG.get(tenant, {}).get("camera_filter")
+    except Exception:
+        pass
+    return None
+
+
 @router.get("/api/cameras", response_model=list[CameraOut])
 async def list_cameras(request: Request):
-    """List all cameras with snapshot availability and event counts."""
+    """List all cameras with snapshot availability and event counts. Filtered by tenant."""
     store = _get_store(request)
     rows = await store.list_cameras()
+
+    # Server-side tenant filtering
+    camera_filter = _get_tenant_filter(request)
+    if camera_filter:
+        rows = [r for r in rows if any(kw in r["name"].lower() for kw in camera_filter)]
 
     # Get recent event counts per camera (last 24h, so demo data always shows)
     from datetime import datetime, timedelta, timezone
