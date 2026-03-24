@@ -114,10 +114,11 @@ async def main():
                 "Individual standing near reception",
                 "Employee with badge entering",
             ]
+            cam = cameras[random.randint(0, len(cameras)-1)]
             await store.insert({
                 "timestamp": ts.isoformat(),
-                "camera_id": cameras[random.randint(0, len(cameras)-1)]["id"],
-                "camera_name": cameras[random.randint(0, len(cameras)-1)]["name"],
+                "camera_id": cam["id"],
+                "camera_name": cam["name"],
                 "description": random.choice(descs),
                 "alert_triggered": random.random() < 0.05,
             })
