@@ -119,8 +119,8 @@ class UserInfo(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def _decode_token(authorization: str | None) -> dict:
-    """Decode a Bearer token and return the user record.
+def _decode_token(authorization: str | None) -> tuple[str, dict]:
+    """Decode a Bearer token and return (username, user_record).
 
     Token format: base64(username:tenant) — simple demo auth.
     """
@@ -135,7 +135,50 @@ def _decode_token(authorization: str | None) -> dict:
     user = DEMO_USERS.get(username)
     if user is None:
         raise HTTPException(401, "Invalid token — user not found")
-    return user
+    return username, user
+
+
+def get_tenant_from_request(request) -> str | None:
+    """Extract tenant name from request Authorization header. Returns None if no auth."""
+    auth = request.headers.get("authorization", "")
+    if not auth.startswith("Bearer "):
+        return None
+    try:
+        decoded = base64.b64decode(auth[7:]).decode()
+        username = decoded.split(":")[0]
+        user = DEMO_USERS.get(username)
+        if user:
+            return user["tenant"]
+    except Exception:
+        pass
+    return None
+
+
+def get_camera_filter(request) -> list[str] | None:
+    """Get the camera name filter keywords for the current tenant."""
+    tenant = get_tenant_from_request(request)
+    if tenant:
+        return TENANT_CONFIG.get(tenant, {}).get("camera_filter")
+    return None
+
+
+async def get_tenant_camera_ids(request, store) -> list[str] | None:
+    """Get the list of camera IDs this tenant is allowed to access.
+
+    Returns None if no auth (allow all — for internal API calls).
+    Returns list of allowed camera_ids for authenticated users.
+    """
+    camera_filter = get_camera_filter(request)
+    if camera_filter is None:
+        return None  # no auth = no filtering (internal)
+
+    all_cameras = await store.list_cameras()
+    allowed = []
+    for cam in all_cameras:
+        name = cam.get("name", "").lower()
+        if any(kw in name for kw in camera_filter):
+            allowed.append(cam["id"])
+    return allowed
 
 
 # ---------------------------------------------------------------------------
@@ -162,9 +205,7 @@ async def login(body: LoginRequest):
 @router.get("/api/auth/me", response_model=UserInfo)
 async def get_me(authorization: str | None = Header(None)):
     """Return current user info from token."""
-    user = _decode_token(authorization)
-    # Find the username from the user record
-    username = next(k for k, v in DEMO_USERS.items() if v["tenant"] == user["tenant"])
+    username, user = _decode_token(authorization)
     return UserInfo(
         username=username,
         tenant=user["tenant"],
@@ -182,6 +223,6 @@ async def logout():
 @router.get("/api/auth/config")
 async def get_tenant_config(authorization: str | None = Header(None)):
     """Return tenant-specific configuration for the current user."""
-    user = _decode_token(authorization)
+    _username, user = _decode_token(authorization)
     config = TENANT_CONFIG.get(user["tenant"], TENANT_CONFIG["fund"])
     return config

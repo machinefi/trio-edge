@@ -133,7 +133,7 @@ async def chat(req: ChatRequest, request: Request):
             events_searched=0,
         )
 
-    # Query events from store
+    # Query events from store (tenant-isolated)
     start, end = _parse_time_range(req.hours)
     result = await store.list_events(
         camera_id=req.camera_id,
@@ -142,7 +142,14 @@ async def chat(req: ChatRequest, request: Request):
         limit=req.max_events,
     )
     events = result["events"]
-    total = result["total"]
+
+    # Tenant isolation: filter events to allowed cameras
+    from trio_core.api.routers.auth import get_tenant_camera_ids
+    allowed_ids = await get_tenant_camera_ids(request, store)
+    if allowed_ids is not None:
+        events = [e for e in events if e.get("camera_id") in allowed_ids]
+
+    total = len(events)
 
     # Build context
     event_context = _build_event_context(events, req.camera_id)
