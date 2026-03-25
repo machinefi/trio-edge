@@ -1,4 +1,4 @@
-"""Metrics API router for Trio Console."""
+"""Metrics API router for Trio Console — with tenant isolation."""
 
 from __future__ import annotations
 
@@ -18,6 +18,14 @@ def _get_store(request: Request):
     return store
 
 
+async def _check_camera_access(request: Request, store, camera_id: str):
+    """Verify the tenant has access to the requested camera_id."""
+    from trio_core.api.routers.auth import get_tenant_camera_ids
+    allowed_ids = await get_tenant_camera_ids(request, store)
+    if allowed_ids is not None and camera_id not in allowed_ids:
+        raise HTTPException(403, f"Access denied to camera {camera_id}")
+
+
 @router.get("/")
 async def query_metrics(
     request: Request,
@@ -29,12 +37,10 @@ async def query_metrics(
 ):
     """Query metrics time series with time-bucketed aggregation."""
     store = _get_store(request)
+    await _check_camera_access(request, store, camera_id)
+
     if granularity not in ("minute", "hour", "day"):
         raise HTTPException(400, "granularity must be 'minute', 'hour', or 'day'")
-    logger.debug(
-        "query_metrics camera_id=%s metric_type=%s start=%s end=%s granularity=%s",
-        camera_id, metric_type, start, end, granularity,
-    )
     data = await store.query_metrics(
         camera_id=camera_id,
         metric_type=metric_type,
@@ -42,7 +48,6 @@ async def query_metrics(
         end=end,
         granularity=granularity,
     )
-    logger.debug("query_metrics returned %d data points for camera_id=%s", len(data), camera_id)
     return {
         "data": data,
         "camera_id": camera_id,
@@ -58,6 +63,7 @@ async def latest_metrics(
 ):
     """Latest metric values for a camera."""
     store = _get_store(request)
+    await _check_camera_access(request, store, camera_id)
     metrics = await store.latest_metrics(camera_id)
     return {"camera_id": camera_id, "metrics": metrics}
 
@@ -71,6 +77,8 @@ async def metrics_summary(
 ):
     """Summary statistics for a camera's metrics. Defaults to last 24 hours."""
     store = _get_store(request)
+    await _check_camera_access(request, store, camera_id)
+
     if not start:
         from datetime import datetime, timedelta, timezone
         start = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
@@ -88,5 +96,7 @@ async def record_metric(request: Request):
         raise HTTPException(400, "camera_id and metric_type are required")
     if "value" not in body:
         raise HTTPException(400, "value is required")
+    # Tenant isolation on writes
+    await _check_camera_access(request, store, body["camera_id"])
     metric_id = await store.insert_metric(body)
     return {"id": metric_id, "status": "recorded"}
