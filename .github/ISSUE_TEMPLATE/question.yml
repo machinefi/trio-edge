@@ -1,0 +1,59 @@
+name: Question / Help
+description: Ask a question or get help using trio-core
+title: "[Question] "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Need help? We're happy to assist. Please provide enough detail so we can help you quickly.
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: What are you trying to do?
+      description: Describe your goal or use case.
+      placeholder: I want to set up trio-core to count people in a retail store using an RTSP camera...
+    validations:
+      required: true
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: What have you tried?
+      description: What steps have you already taken? Include code snippets or commands.
+      render: python
+    validations:
+      required: true
+
+  - type: textarea
+    id: errors
+    attributes:
+      label: Error messages or unexpected output
+      description: If you're getting errors, paste them here.
+      render: shell
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux (x86_64)
+        - Linux (ARM)
+        - Windows
+    validations:
+      required: true
+
+  - type: input
+    id: python-version
+    attributes:
+      label: Python Version
+      placeholder: "3.12.4"
+
+  - type: input
+    id: trio-version
+    attributes:
+      label: trio-core Version
+      placeholder: "0.8.3"
