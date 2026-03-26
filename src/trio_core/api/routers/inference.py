@@ -22,6 +22,20 @@ logger = logging.getLogger("trio.inference")
 
 router = APIRouter(prefix="/api/inference", tags=["inference"])
 
+# ── Helpers ──
+
+import re as _re
+_THINK_RE = _re.compile(r'<think>.*?</think>', _re.DOTALL)
+
+def _strip_thinking(text: str) -> str:
+    """Remove <think>...</think> blocks from VLM output (Qwen3.5 thinking mode)."""
+    text = _THINK_RE.sub('', text).strip()
+    # Also handle unclosed <think> tag
+    if '<think>' in text:
+        text = text.split('</think>')[-1].strip() if '</think>' in text else text.split('<think>')[0].strip()
+    return text
+
+
 # ── Lazy-loaded shared models ──
 
 _vlm_engine = None
@@ -43,8 +57,16 @@ def _get_vlm():
 def _get_yolo():
     global _yolo_counter
     if _yolo_counter is None:
+        import os
+        from pathlib import Path
         from trio_core.counter import PeopleCounter
-        _yolo_counter = PeopleCounter()
+        # Find model: check TRIO_YOLO_MODEL env, then relative to trio-core package
+        model_path = os.environ.get("TRIO_YOLO_MODEL")
+        if not model_path:
+            # Resolve relative to the trio-core repo root (file is at src/trio_core/api/routers/)
+            pkg_root = Path(__file__).resolve().parent.parent.parent.parent.parent
+            model_path = str(pkg_root / "models" / "yolov10n" / "onnx" / "model.onnx")
+        _yolo_counter = PeopleCounter(model_path=model_path)
         logger.info("YOLO loaded (shared): tiled=%s, confidence=%s",
                      _yolo_counter._tiled, _yolo_counter.detector.confidence)
     return _yolo_counter
@@ -130,7 +152,7 @@ async def describe(req: DescribeRequest):
     elapsed = int((time.time() - t0) * 1000)
 
     return DescribeResponse(
-        description=result.text or "",
+        description=_strip_thinking(result.text or ""),
         elapsed_ms=elapsed,
     )
 
@@ -191,7 +213,7 @@ async def crop_describe(req: CropDescribeRequest):
 
         crop_chw = _frame_to_chw(crop_bgr)
         result = await loop.run_in_executor(None, engine.analyze_frame, crop_chw, prompt)
-        text = (result.text or "").strip()
+        text = _strip_thinking((result.text or "").strip())
         if "<" in text:
             text = text.split(">")[-1].strip()
         cd = f"{obj_class}: {text}" if text else f"{obj_class}: unidentified"
@@ -211,25 +233,52 @@ async def crop_describe(req: CropDescribeRequest):
 
     frame_chw = _frame_to_chw(frame)
     result = await loop.run_in_executor(None, engine.analyze_frame, frame_chw, scene_prompt)
-    text = result.text or ""
+    text = _strip_thinking(result.text or "")
 
-    # Parse response
+    # Parse response — handle multiple VLM output formats:
+    # Format 1: DESCRIPTION: ... JSON: {...}
+    # Format 2: ```json {...} ``` (markdown code block)
+    # Format 3: raw JSON {...}
+    # Format 4: plain text only
     desc = ""
     entities = None
+
+    # Strip markdown code fences
+    clean = text.strip()
+    if clean.startswith("```"):
+        clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
+    if clean.endswith("```"):
+        clean = clean[:clean.rfind("```")]
+    clean = clean.strip()
+
+    # Try to extract JSON (from any format)
+    s, e = clean.find("{"), clean.rfind("}")
+    if s >= 0 and e > s:
+        try:
+            entities = json.loads(clean[s:e + 1])
+        except json.JSONDecodeError:
+            pass
+
+    # Extract description
     if "DESCRIPTION:" in text:
         parts = text.split("DESCRIPTION:", 1)[1]
         desc = parts.split("JSON:", 1)[0].strip() if "JSON:" in parts else parts.strip()
+    elif entities:
+        # VLM might put DESCRIPTION inside the JSON object
+        if "DESCRIPTION" in entities:
+            desc = entities.pop("DESCRIPTION")
+        else:
+            # Build description from entities
+            parts = []
+            for p in (entities.get("persons") or []):
+                parts.append(p.get("attire", "person"))
+            for v in (entities.get("vehicles") or []):
+                parts.append(f"{v.get('color','')} {v.get('make','')} {v.get('type','')}".strip())
+            desc = f"{entities.get('people_count', 0)} people, {len(entities.get('vehicles',[]))} vehicles"
+            if parts:
+                desc += ": " + ", ".join(parts[:5])
     else:
-        desc = text.split("JSON:", 1)[0].strip() if "JSON:" in text else text.strip()
-
-    if "JSON:" in text:
-        jtext = text.split("JSON:", 1)[1].strip()
-        s, e = jtext.find("{"), jtext.rfind("}")
-        if s >= 0 and e > s:
-            try:
-                entities = json.loads(jtext[s:e + 1])
-            except json.JSONDecodeError:
-                pass
+        desc = clean[:200] if clean else ""
 
     elapsed = int((time.time() - t0) * 1000)
 
