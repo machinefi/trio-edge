@@ -1,0 +1,34 @@
+{
+  "baseline": {
+    "mae": 4.92,
+    "mape": 15.7,
+    "total_accuracy": 0.9284,
+    "correlation": 0.5947,
+    "agg30_mape": 11.8,
+    "agg100_mape": 9.5
+  },
+  "kalman": {
+    "mae": 5.16,
+    "mape": 16.6,
+    "total_accuracy": 0.9275,
+    "correlation": 0.6179,
+    "agg30_mape": 12.2,
+    "agg100_mape": 10.0
+  },
+  "tiled+sma": {
+    "mae": 4.03,
+    "mape": 13.2,
+    "total_accuracy": 0.9657,
+    "correlation": 0.7671,
+    "agg30_mape": 8.2,
+    "agg100_mape": 5.5
+  },
+  "tiled+kalman": {
+    "mae": 4.23,
+    "mape": 14.0,
+    "total_accuracy": 0.9659,
+    "correlation": 0.7918,
+    "agg30_mape": 9.3,
+    "agg100_mape": 6.7
+  }
+}

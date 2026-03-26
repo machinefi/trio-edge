@@ -7,10 +7,10 @@
     "scene_type": "security",
     "events": 51,
     "alerts": 13,
-    "k3_insights": 14,
+    "k3_insights": 10,
     "k3_met": true,
     "insight_types": {
-      "pattern": 9,
+      "pattern": 5,
       "anomaly": 5
     },
     "insights": [
@@ -20,27 +20,11 @@
       },
       {
         "type": "pattern",
-        "text": "74% male visitors (17/23) \u2014 indicates male-skewed customer base, consider targeted marketing"
+        "text": "100% stationary (5 standing/sitting vs 0 walking) \u2014 verify loitering is authorized activity"
       },
       {
         "type": "pattern",
-        "text": "43% in work uniforms (13/30) \u2014 indicates service/construction worker traffic, consider value-oriented offerings"
-      },
-      {
-        "type": "pattern",
-        "text": "35% of visitors arrive in groups (7 group events) \u2014 indicates social destination; optimize for group seating and multi-item orders"
-      },
-      {
-        "type": "pattern",
-        "text": "100% stationary (5 standing/sitting vs 0 walking) \u2014 location is a destination. Optimize for dwell time and upselling"
-      },
-      {
-        "type": "pattern",
-        "text": "8% carrying bags/backpacks (4/51 events) \u2014 high bag rate suggests shopping activity or commuter traffic"
-      },
-      {
-        "type": "pattern",
-        "text": "4% using phones (2 observations) \u2014 high mobile engagement, consider mobile ordering/app promotions"
+        "text": "8% carrying bags/backpacks (4/51 events) \u2014 verify items against asset removal policy"
       },
       {
         "type": "anomaly",
@@ -90,13 +74,13 @@
     "scene_type": "retail",
     "events": 94,
     "alerts": 0,
-    "k3_insights": 12,
+    "k3_insights": 11,
     "k3_met": true,
     "insight_types": {
       "pattern": 8,
       "recommendation": 1,
       "comparison": 1,
-      "correlation": 2
+      "correlation": 1
     },
     "insights": [
       {
@@ -117,11 +101,11 @@
       },
       {
         "type": "pattern",
-        "text": "100% stationary (18 standing/sitting vs 0 walking) \u2014 location is a destination. Optimize for dwell time and upselling"
+        "text": "100% stationary (18 standing/sitting vs 0 walking) \u2014 optimize for dwell time and upselling"
       },
       {
         "type": "pattern",
-        "text": "5% carrying bags/backpacks (5/94 events) \u2014 high bag rate suggests shopping activity or commuter traffic"
+        "text": "5% carrying bags/backpacks (5/94 events) \u2014 suggests shopping activity or commuter traffic"
       },
       {
         "type": "pattern",
@@ -142,10 +126,6 @@
       {
         "type": "pattern",
         "text": "89% actively ordering (84/94 events) \u2014 high conversion rate indicates strong purchase intent at this location"
-      },
-      {
-        "type": "correlation",
-        "text": "5 browsing events \u2192 84 orders (1680% conversion) \u2014 optimize display placement to increase browse-to-purchase conversion"
       }
     ],
     "metrics": {
@@ -167,13 +147,13 @@
     "scene_type": "retail",
     "events": 71,
     "alerts": 8,
-    "k3_insights": 11,
+    "k3_insights": 9,
     "k3_met": true,
     "insight_types": {
       "pattern": 6,
-      "recommendation": 2,
+      "recommendation": 1,
       "comparison": 1,
-      "correlation": 2
+      "correlation": 1
     },
     "insights": [
       {
@@ -194,11 +174,7 @@
       },
       {
         "type": "pattern",
-        "text": "75% stationary (12 standing/sitting vs 4 walking) \u2014 location is a destination. Optimize for dwell time and upselling"
-      },
-      {
-        "type": "recommendation",
-        "text": "Badge compliance rate 50% (4/8 people) \u2014 below 80% target, recommend enforcing badge-visible policy"
+        "text": "75% stationary (12 standing/sitting vs 4 walking) \u2014 optimize for dwell time and upselling"
       },
       {
         "type": "pattern",
@@ -215,10 +191,6 @@
       {
         "type": "pattern",
         "text": "39% actively ordering (28/71 events) \u2014 high conversion rate indicates strong purchase intent at this location"
-      },
-      {
-        "type": "correlation",
-        "text": "4 browsing events \u2192 28 orders (700% conversion) \u2014 optimize display placement to increase browse-to-purchase conversion"
       }
     ],
     "metrics": {
@@ -240,13 +212,12 @@
     "scene_type": "retail",
     "events": 185,
     "alerts": 0,
-    "k3_insights": 12,
+    "k3_insights": 11,
     "k3_met": true,
     "insight_types": {
       "pattern": 9,
       "recommendation": 1,
-      "anomaly": 1,
-      "correlation": 1
+      "anomaly": 1
     },
     "insights": [
       {
@@ -275,7 +246,7 @@
       },
       {
         "type": "pattern",
-        "text": "100% of people are in transit (10 walking vs 0 stationary) \u2014 location is a pass-through, not a destination. Consider grab-and-go format"
+        "text": "100% of people are in transit (10 walking vs 0 stationary) \u2014 consider grab-and-go format"
       },
       {
         "type": "pattern",
@@ -292,10 +263,6 @@
       {
         "type": "pattern",
         "text": "10% actively ordering (18/185 events) \u2014 high conversion rate indicates strong purchase intent at this location"
-      },
-      {
-        "type": "correlation",
-        "text": "10 browsing events \u2192 18 orders (180% conversion) \u2014 optimize display placement to increase browse-to-purchase conversion"
       }
     ],
     "metrics": {

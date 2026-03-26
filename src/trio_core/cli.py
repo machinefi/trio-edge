@@ -183,31 +183,17 @@ def doctor():
 
 @app.command()
 def serve(
-    model: str = typer.Option(None, "--model", "-m", help="HuggingFace model ID or local path"),
-    adapter: str = typer.Option(None, "--adapter", "-a", help="LoRA adapter directory path"),
-    backend: str = typer.Option(None, "--backend", "-b", help="Force backend: mlx, transformers"),
     host: str = typer.Option("0.0.0.0", "--host", help="Bind host"),
-    port: int = typer.Option(8000, "--port", "-p", help="Bind port"),
+    port: int = typer.Option(8100, "--port", "-p", help="Bind port"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Debug logging"),
     json_logs: bool = typer.Option(False, "--json-logs", help="Structured JSON logging (or set TRIO_LOG_JSON=1)"),
 ):
-    """Start the API server."""
+    """Start the inference server (YOLO + VLM)."""
     _setup_logging(verbose, json_logs=json_logs)
-    import uvicorn
-    from trio_core.config import EngineConfig
-    from trio_core.api.server import create_app
+    from trio_core.api.inference_server import create_app, main as run_server
 
-    config = EngineConfig()
-    if model:
-        config.model = model
-    if adapter:
-        config.adapter_path = adapter
-    config.host = host
-    config.port = port
-
-    app_instance = create_app(config, backend=backend)
     uv_level = "debug" if verbose else "info"
-    uvicorn.run(app_instance, host=host, port=port, log_level=uv_level)
+    run_server(host=host, port=port, log_level=uv_level)
 
 
 @app.command()
