@@ -61,8 +61,14 @@ def start_proxy(remote_host: str, remote_port: int, local_port: int = 15554) -> 
     if _proxy_proc is not None:
         return local_port
 
-    proxy_code = f'''
-import socket, threading
+    # Pass host/port/local_port as command-line arguments to avoid code injection
+    # via user-controlled RTSP URLs (the host comes from user input).
+    proxy_code = '''
+import socket, sys, threading
+remote_host = sys.argv[1]
+remote_port = int(sys.argv[2])
+local_port = int(sys.argv[3])
+
 def relay(src, dst):
     try:
         while True:
@@ -77,24 +83,24 @@ def relay(src, dst):
 
 srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-srv.bind(("127.0.0.1", {local_port}))
+srv.bind(("127.0.0.1", local_port))
 srv.listen(5)
-import sys; sys.stdout.write("READY\\n"); sys.stdout.flush()
+sys.stdout.write("READY\\n"); sys.stdout.flush()
 while True:
     c, _ = srv.accept()
     r = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     r.settimeout(10)
     try:
-        r.connect(("{remote_host}", {remote_port}))
+        r.connect((remote_host, remote_port))
     except Exception as e:
-        import sys; sys.stderr.write(f"proxy: {{e}}\\n")
+        sys.stderr.write(f"proxy: {e}\\n")
         c.close(); continue
     r.settimeout(None)
     threading.Thread(target=relay, args=(c, r), daemon=True).start()
     threading.Thread(target=relay, args=(r, c), daemon=True).start()
 '''
     _proxy_proc = subprocess.Popen(
-        ["/usr/bin/python3", "-c", proxy_code],
+        ["/usr/bin/python3", "-c", proxy_code, remote_host, str(remote_port), str(local_port)],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
     )
     line = _proxy_proc.stdout.readline()

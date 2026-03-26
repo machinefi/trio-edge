@@ -210,7 +210,7 @@ def create_app(config: EngineConfig | None = None, backend: str | None = None) -
             )
         return JSONResponse(
             status_code=500,
-            content={"error": "internal_error", "message": str(exc), "request_id": request_id},
+            content={"error": "internal_error", "message": "An internal error occurred.", "request_id": request_id},
         )
 
     app.add_middleware(_RequestIDMiddleware)
@@ -601,19 +601,22 @@ def _register_routes(app: FastAPI) -> None:
             "backend": _engine._backend.backend_name if _engine._backend else "none",
         }
 
-    # Console API routes
-    from .routers import events, cameras, chat, alerts, reports, metrics, analytics, report_export, insights, auto_alerts, auth
-    app.include_router(auth.router)
-    app.include_router(events.router)
-    app.include_router(cameras.router)
-    app.include_router(chat.router)
-    app.include_router(alerts.router)
-    app.include_router(reports.router)
-    app.include_router(metrics.router)
-    app.include_router(analytics.router)
-    app.include_router(report_export.router)
-    app.include_router(auto_alerts.router)
-    app.include_router(insights.router)
+    # Optional console API routes (available when console extras are installed)
+    try:
+        from .routers import events, cameras, chat, alerts, reports, metrics, analytics, report_export, insights, auto_alerts, auth
+        app.include_router(auth.router)
+        app.include_router(events.router)
+        app.include_router(cameras.router)
+        app.include_router(chat.router)
+        app.include_router(alerts.router)
+        app.include_router(reports.router)
+        app.include_router(metrics.router)
+        app.include_router(analytics.router)
+        app.include_router(report_export.router)
+        app.include_router(auto_alerts.router)
+        app.include_router(insights.router)
+    except ImportError:
+        logger.debug("Console routers not available (install with trio-core[console])")
 
 
 async def _reload_engine() -> None:

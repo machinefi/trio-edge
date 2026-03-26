@@ -16,43 +16,76 @@
 </p>
 
 <p align="center">
-  <a href="#30-second-demo">Demo</a> |
+  <a href="#quick-start">Quick Start</a> |
   <a href="#install">Install</a> |
   <a href="#api-reference">API</a> |
   <a href="#cli">CLI</a> |
   <a href="#python-sdk">SDK</a> |
   <a href="#benchmarks">Benchmarks</a> |
-  <a href="#architecture">Architecture</a>
+  <a href="#architecture">Architecture</a> |
+  <a href="#troubleshooting">Troubleshooting</a>
 </p>
 
 ---
 
 ## What is TrioCore?
 
-A local inference engine that combines YOLO object detection with Vision Language Models (VLMs) on Apple Silicon. Like vLLM, but for vision: detect objects, count people, and describe scenes — all on your Mac, no cloud APIs.
+Point it at any image, video, or camera and it will detect objects, count people, and describe scenes — all running locally on your Mac, no cloud APIs needed.
 
 **Core capabilities:**
-- **Detect** — YOLOv10 object detection with tiled inference for accuracy
-- **Describe** — VLM scene description (Qwen2.5-VL, Qwen3.5, InternVL3)
-- **Crop-Describe** — YOLO detects, crops, then VLM describes each entity
-- **REST API** — FastAPI server on port 8100, optional API key auth
-- **CLI** — `trio serve`, `trio analyze`, `trio webcam`
+- **Detect** — Find and count objects (people, cars, etc.) in images
+- **Describe** — Get natural language descriptions of what's happening in a scene
+- **Crop-Describe** — Detect objects, then describe each one individually
+- **REST API** — Built-in web server on port 8100 with interactive docs
+- **CLI** — Simple commands: `trio serve`, `trio analyze`, `trio webcam`
+
+<details>
+<summary><strong>New to computer vision? Key terms explained</strong></summary>
+
+| Term | What it means |
+|---|---|
+| **YOLO** | "You Only Look Once" — a fast object detection model that finds and labels objects in images |
+| **VLM** | Vision Language Model — an AI model that can look at an image and describe it in natural language |
+| **MLX** | Apple's machine learning framework, optimized for M1/M2/M3/M4 chips |
+| **ONNX** | A standard format for ML models that runs on any hardware |
+| **ToMe** | Token Merging — a technique that makes VLM inference faster by reducing redundant data |
+| **KV cache** | A memory optimization that speeds up processing of sequential video frames |
+
+</details>
 
 ---
 
-## 30-Second Demo
+## Quick Start
 
 ```bash
+# 1. Install (Apple Silicon Mac recommended)
 pip install 'trio-core[mlx]'
 
+# 2. Check your setup
+trio doctor
+
+# 3. Start the server
 trio serve
 ```
 
+> **First run note:** The first time you run `trio serve` or `trio analyze`, the model
+> will be downloaded automatically (~2 GB for the default 3B model). This takes 5-20
+> minutes depending on your connection. Subsequent runs start instantly.
+
+Once the server is running, open **http://localhost:8100/docs** in your browser to
+explore the API interactively, or try it from the terminal:
+
 ```bash
-# In another terminal — detect objects in an image
+# In another terminal — grab any image and detect objects in it
+# macOS:
 curl -X POST http://localhost:8100/api/inference/detect \
   -H "Content-Type: application/json" \
-  -d '{"image_b64": "'$(base64 -i photo.jpg)'"}'
+  -d '{"image_b64": "'$(base64 -i your-photo.jpg)'"}'
+
+# Linux:
+curl -X POST http://localhost:8100/api/inference/detect \
+  -H "Content-Type: application/json" \
+  -d '{"image_b64": "'$(base64 -w0 your-photo.jpg)'"}'
 ```
 
 ```json
@@ -65,29 +98,43 @@ curl -X POST http://localhost:8100/api/inference/detect \
 }
 ```
 
+Or analyze an image directly from the CLI (no server needed):
+
+```bash
+trio analyze your-photo.jpg -q "How many people are in this image?"
+```
+
+See more in [`examples/`](examples/) — [`quickstart.py`](examples/quickstart.py) (5 lines)
+and [`api_client.py`](examples/api_client.py) (full API usage).
+
 ---
 
 ## Install
 
+Requires **Python 3.10+**.
+
 ```bash
-# Apple Silicon (M1-M4) — recommended
+# Apple Silicon Mac (M1/M2/M3/M4) — recommended, uses Apple's MLX framework
 pip install 'trio-core[mlx]'
 
-# With webcam support
+# Apple Silicon + webcam monitoring
 pip install 'trio-core[mlx,webcam]'
 
-# NVIDIA / CPU
+# NVIDIA GPU or CPU-only (uses PyTorch/Transformers instead of MLX)
 pip install 'trio-core[transformers]'
 
-# For RTSP cameras
+# For IP/RTSP camera support (macOS)
 brew install ffmpeg
 ```
 
-Requires Python 3.10+. Apple Silicon recommended for VLM inference.
+**Which install do I pick?** If you have a Mac with Apple Silicon (2020 or later), use `[mlx]`. If you have an NVIDIA GPU or are on Linux, use `[transformers]`. Not sure? Run `trio device` after install to see what hardware was detected.
 
 ---
 
 ## API Reference
+
+> **Tip:** Once the server is running, visit **http://localhost:8100/docs** for interactive
+> API documentation where you can try every endpoint from your browser.
 
 Start the server:
 
@@ -178,14 +225,14 @@ Health check with uptime.
 ## CLI
 
 ```bash
-trio serve                              # Start inference API server
-trio analyze photo.jpg -q "What's here?" # Analyze an image or video
+trio doctor                             # Check setup — run this first!
+trio device                             # Show your hardware + recommended model
+trio serve                              # Start inference API server (port 8100)
+trio analyze photo.jpg -q "What's here?" # Analyze an image (no server needed)
 trio analyze video.mp4 -q "Describe"    # Video analysis
 trio webcam -w "a person is waving"     # Live webcam monitor with alerts
 trio cam --host 192.168.1.100 -p pass   # IP camera monitor
-trio doctor                             # Check dependencies
-trio device                             # Show hardware + recommended model
-trio bench video.mp4 -n 5               # Benchmark inference speed
+trio bench video.mp4 -n 5              # Benchmark inference speed
 ```
 
 ### `trio analyze`
@@ -401,6 +448,21 @@ pip install 'trio-core[claw]'
 trio claw --pair -g ws://gateway:18789 --token <secret>
 trio claw -g ws://gateway:18789 -c "rtsp://admin:pass@camera/stream"
 ```
+
+---
+
+## Troubleshooting
+
+| Problem | Solution |
+|---|---|
+| `trio serve` hangs on first run | It's downloading the model (~2 GB). Wait for it to finish. Check progress with `ls -la ~/.cache/huggingface/` |
+| `ModuleNotFoundError: mlx` | You installed without the `[mlx]` extra. Run `pip install 'trio-core[mlx]'` |
+| Server starts but curl returns errors | Make sure you're using port **8100** (not 8000). Check with `curl http://localhost:8100/health` |
+| `trio analyze` says "no model found" | Run `trio doctor` to check your setup and see which models are available |
+| Out of memory on large images | Try a smaller model: `trio serve` defaults to a 3B model (~2 GB RAM). The 7B model needs ~5 GB |
+| Webcam not detected | On macOS, grant Terminal camera access in System Settings > Privacy > Camera |
+
+Run `trio doctor` to diagnose most issues — it checks Python version, dependencies, hardware, and available models.
 
 ---
 

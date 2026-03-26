@@ -509,30 +509,38 @@ class PeopleCounter:
         }
 
     def annotate(self, frame: np.ndarray) -> np.ndarray:
-        """Draw detections, tracks, and counting line on frame."""
+        """Draw detections, tracks, and counting line on frame.
+
+        IMPORTANT: Call process() first, then annotate() on the same frame.
+        This method runs detection-only (no tracker update) to avoid corrupting
+        ByteTrack state with a second update_with_detections() call per frame.
+        """
         import supervision as sv
 
         if not self._initialized:
             return frame
 
-        # Re-detect for annotation (or cache from last process call)
-        xyxy, confidence, class_ids = self.detector.detect(frame)
+        # Run detection only (respecting tiled config) — do NOT update tracker.
+        # Updating the shared tracker here would feed a second set of detections
+        # for the same logical frame, corrupting ByteTrack's ID assignments and
+        # causing phantom tracks / lost IDs.
+        if self._tiled:
+            xyxy, confidence, class_ids = self.detector.detect_tiled(frame)
+        else:
+            xyxy, confidence, class_ids = self.detector.detect(frame)
         detections = sv.Detections(
             xyxy=xyxy,
             confidence=confidence,
             class_id=class_ids,
         )
-        tracked = self._tracker.update_with_detections(detections)
 
-        # Annotate
+        # Annotate using raw detections (no tracker IDs — those come from process())
         annotated = frame.copy()
         box_annotator = sv.BoxAnnotator(thickness=2)
         label_annotator = sv.LabelAnnotator(text_scale=0.5, text_thickness=1)
         line_annotator = sv.LineZoneAnnotator(thickness=2)
 
-        labels = [f"#{t}" for t in tracked.tracker_id] if tracked.tracker_id is not None else []
-        annotated = box_annotator.annotate(annotated, tracked)
-        annotated = label_annotator.annotate(annotated, tracked, labels=labels)
+        annotated = box_annotator.annotate(annotated, detections)
         annotated = line_annotator.annotate(annotated, self._line_zone)
 
         # Draw counts

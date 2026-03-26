@@ -22,8 +22,6 @@ logger = logging.getLogger("trio.inference")
 
 router = APIRouter(prefix="/api/inference", tags=["inference"])
 
-# ── Helpers ──
-
 import re as _re
 _THINK_RE = _re.compile(r'<think>.*?</think>', _re.DOTALL)
 
@@ -75,9 +73,10 @@ def _get_yolo():
 # ── Request/Response models ──
 
 class DescribeRequest(BaseModel):
-    image_b64: str = Field(..., description="Base64-encoded JPEG image")
+    image_b64: str = Field(..., max_length=14_000_000, description="Base64-encoded JPEG image (max ~10MB)")
     prompt: str = Field(
         default="Describe everything you see: people (age, gender, clothing), vehicles (color, make, type), animals.",
+        max_length=4096,
         description="VLM prompt",
     )
 
@@ -88,11 +87,12 @@ class DescribeResponse(BaseModel):
 
 
 class CropDescribeRequest(BaseModel):
-    image_b64: str = Field(..., description="Base64-encoded JPEG of full frame")
-    crops: list[dict] = Field(default_factory=list, description="List of crop bboxes from YOLO detect")
-    max_crops: int = Field(default=3)
+    image_b64: str = Field(..., max_length=14_000_000, description="Base64-encoded JPEG of full frame (max ~10MB)")
+    crops: list[dict] = Field(default_factory=list, max_length=50, description="List of crop bboxes from YOLO detect")
+    max_crops: int = Field(default=3, le=20)
     scene_prompt: str = Field(
         default="",
+        max_length=4096,
         description="Custom scene prompt (optional, uses default if empty)",
     )
 
@@ -105,8 +105,8 @@ class CropDescribeResponse(BaseModel):
 
 
 class DetectRequest(BaseModel):
-    image_b64: str = Field(..., description="Base64-encoded JPEG image")
-    pad_ratio: float = Field(default=0.15)
+    image_b64: str = Field(..., max_length=14_000_000, description="Base64-encoded JPEG image (max ~10MB)")
+    pad_ratio: float = Field(default=0.15, ge=0.0, le=1.0)
 
 
 class DetectResponse(BaseModel):
@@ -161,8 +161,8 @@ async def describe(req: DescribeRequest):
 async def crop_describe(req: CropDescribeRequest):
     """Crop-then-describe: describe individual crops + full scene.
 
-    This is the primary endpoint for pipelines. Equivalent to
-    cortex/describer.py's describe() method but served centrally.
+    YOLO detects objects and crops them, then VLM describes each
+    entity individually before generating a full scene description.
     """
     import asyncio
     import json

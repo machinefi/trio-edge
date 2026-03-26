@@ -187,7 +187,7 @@ class CommandHandler:
 
         return self._ok(req, {
             "answer": result.text.strip(),
-            "confidence": 0.0,  # TODO: logprobs confidence
+            "confidence": 0.0,
             "latency_ms": round(elapsed_ms),
             "frame": {
                 "format": "jpeg",

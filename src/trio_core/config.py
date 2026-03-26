@@ -23,7 +23,7 @@ class EngineConfig(BaseSettings):
 
     # Server
     host: str = Field(default="0.0.0.0", description="API bind host")
-    port: int = Field(default=8000, description="API bind port")
+    port: int = Field(default=8100, description="API bind port")
 
     # Video pipeline
     video_fps: float = Field(default=2.0, description="Target FPS for frame extraction")
