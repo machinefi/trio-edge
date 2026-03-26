@@ -56,3 +56,12 @@ surveillance_vqa/test_datasets
 mvbench_videos/
 test_videos/
 .venv-lora/
+
+# Security
+*.db
+*.sqlite
+*.sqlite3
+credentials*
+*.pem
+*.key
+.env.local
