@@ -1,0 +1,103 @@
+name: Bug Report
+description: Report a bug in trio-core
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug! Please fill out the sections below so we can reproduce and fix it.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear description of the bug.
+      placeholder: What happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: Minimal steps to reproduce the behavior.
+      placeholder: |
+        1. Install trio-core with `pip install trio-core`
+        2. Run `trio serve`
+        3. Send request to /api/inference/detect
+        4. See error...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What you expected to happen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened. Include error messages and tracebacks.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux (x86_64)
+        - Linux (ARM)
+        - Windows
+    validations:
+      required: true
+
+  - type: input
+    id: python-version
+    attributes:
+      label: Python Version
+      placeholder: "3.12.4"
+    validations:
+      required: true
+
+  - type: input
+    id: trio-version
+    attributes:
+      label: trio-core Version
+      placeholder: "0.8.3"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: model
+    attributes:
+      label: Model Used
+      options:
+        - YOLOv10n ONNX (detection/counting)
+        - Qwen2.5-VL-3B-Instruct-4bit (MLX)
+        - Qwen3-VL (MLX)
+        - Gemini Flash (cloud calibration)
+        - Other (specify in description)
+        - N/A
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Screenshots
+      description: Paste relevant log output or attach screenshots.
+      render: shell
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Any other context about the problem.
