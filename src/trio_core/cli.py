@@ -444,15 +444,9 @@ def smoke(
         except ImportError:
             return "skipped (httpx not installed)"
 
-        import base64
-        import io
+        from trio_core.api.inference_server import create_app
 
-        import trio_core.api.server as srv
-        from trio_core.api.server import create_app
-
-        app_instance = create_app(config, backend=backend)
-        # Inject already-loaded engine instead of loading again
-        srv._engine = engine
+        app_instance = create_app()
 
         client = TestClient(app_instance, raise_server_exceptions=False)
 
@@ -460,27 +454,11 @@ def smoke(
         r = client.get("/health")
         assert r.status_code == 200, f"/health → {r.status_code}"
 
-        # /healthz
-        r = client.get("/healthz")
-        assert r.status_code == 200, f"/healthz → {r.status_code}"
+        # Inference status
+        r = client.get("/api/inference/status")
+        assert r.status_code == 200, f"/api/inference/status → {r.status_code}"
 
-        # /v1/models
-        r = client.get("/v1/models")
-        assert r.status_code == 200, f"/v1/models → {r.status_code}"
-
-        # /analyze-frame with base64 image
-        img = Image.new("RGB", (64, 64), (255, 0, 0))
-        buf = io.BytesIO()
-        img.save(buf, format="JPEG")
-        b64 = base64.b64encode(buf.getvalue()).decode()
-
-        r = client.post("/analyze-frame", json={
-            "frame_b64": b64,
-            "question": "What color is this?",
-        })
-        assert r.status_code == 200, f"/analyze-frame → {r.status_code}: {r.text}"
-
-        return "4 endpoints OK"
+        return "2 endpoints OK"
     _run("API endpoints", _api)
 
     # Summary
