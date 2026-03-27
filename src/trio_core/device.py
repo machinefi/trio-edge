@@ -26,11 +26,11 @@ logger = logging.getLogger(__name__)
 class DeviceInfo:
     """Detected hardware and recommended backend."""
 
-    backend: str          # "mlx", "transformers", "cpu"
-    device_name: str      # "Apple M3 Max", "NVIDIA RTX 4090", "CPU"
-    accelerator: str      # "metal", "cuda", "cpu"
-    memory_gb: float      # Available device memory in GB (0 if unknown)
-    compute_units: int    # GPU cores / CUDA cores (0 if unknown)
+    backend: str  # "mlx", "transformers", "cpu"
+    device_name: str  # "Apple M3 Max", "NVIDIA RTX 4090", "CPU"
+    accelerator: str  # "metal", "cuda", "cpu"
+    memory_gb: float  # Available device memory in GB (0 if unknown)
+    compute_units: int  # GPU cores / CUDA cores (0 if unknown)
 
     @property
     def has_gpu(self) -> bool:
@@ -72,7 +72,9 @@ def _detect_apple_silicon() -> DeviceInfo | None:
     try:
         result = subprocess.run(
             ["sysctl", "-n", "machdep.cpu.brand_string"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if result.returncode == 0:
             chip_name = result.stdout.strip()
@@ -84,10 +86,12 @@ def _detect_apple_silicon() -> DeviceInfo | None:
     try:
         result = subprocess.run(
             ["sysctl", "-n", "hw.memsize"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if result.returncode == 0:
-            memory_gb = int(result.stdout.strip()) / (1024 ** 3)
+            memory_gb = int(result.stdout.strip()) / (1024**3)
     except (FileNotFoundError, subprocess.TimeoutExpired, ValueError):
         pass
 
@@ -96,10 +100,13 @@ def _detect_apple_silicon() -> DeviceInfo | None:
     try:
         result = subprocess.run(
             ["system_profiler", "SPDisplaysDataType", "-json"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if result.returncode == 0:
             import json
+
             data = json.loads(result.stdout)
             displays = data.get("SPDisplaysDataType", [])
             for d in displays:
@@ -115,6 +122,7 @@ def _detect_apple_silicon() -> DeviceInfo | None:
     backend = "transformers"
     try:
         import mlx.core  # noqa: F401
+
         backend = "mlx"
     except ImportError:
         logger.info("Apple Silicon detected but mlx not installed, falling back to transformers")
@@ -134,7 +142,9 @@ def _detect_nvidia() -> DeviceInfo | None:
     try:
         result = subprocess.run(
             ["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if result.returncode == 0:
             line = result.stdout.strip().split("\n")[0]
@@ -155,9 +165,10 @@ def _detect_nvidia() -> DeviceInfo | None:
     # Try torch.cuda
     try:
         import torch
+
         if torch.cuda.is_available():
             name = torch.cuda.get_device_name(0)
-            mem = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
+            mem = torch.cuda.get_device_properties(0).total_memory / (1024**3)
             return DeviceInfo(
                 backend="transformers",
                 device_name=name,

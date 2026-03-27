@@ -21,13 +21,14 @@ from .protocol import InvokeRequest, InvokeResult, generate_id, make_req
 logger = logging.getLogger("trio.claw")
 
 # RTSP failure thresholds
-CAPTURE_WARN_THRESHOLD = 5    # consecutive failures before WARNING + camera.offline event
-CAPTURE_STOP_THRESHOLD = 20   # consecutive failures before stopping the watch
+CAPTURE_WARN_THRESHOLD = 5  # consecutive failures before WARNING + camera.offline event
+CAPTURE_STOP_THRESHOLD = 20  # consecutive failures before stopping the watch
 
 
 @dataclass
 class WatchTask:
     """Tracks a running vision.watch loop."""
+
     watch_id: str
     condition: str
     interval: float
@@ -44,6 +45,7 @@ class WatchTask:
 @dataclass
 class NodeMetrics:
     """Lightweight metrics for health/Prometheus endpoint."""
+
     watch_checks: int = 0
     watch_alerts: int = 0
     capture_failures: int = 0
@@ -113,12 +115,15 @@ class CommandHandler:
         _, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, int(quality * 100)])
         b64 = base64.b64encode(jpeg.tobytes()).decode()
 
-        return self._ok(req, {
-            "format": "jpeg",
-            "base64": b64,
-            "width": frame.shape[1],
-            "height": frame.shape[0],
-        })
+        return self._ok(
+            req,
+            {
+                "format": "jpeg",
+                "base64": b64,
+                "width": frame.shape[1],
+                "height": frame.shape[0],
+            },
+        )
 
     # =========================================================================
     # camera.list — enumerate available cameras
@@ -185,17 +190,20 @@ class CommandHandler:
         _, jpeg = cv2.imencode(".jpg", frame_bgr, [cv2.IMWRITE_JPEG_QUALITY, 85])
         frame_b64 = base64.b64encode(jpeg.tobytes()).decode()
 
-        return self._ok(req, {
-            "answer": result.text.strip(),
-            "confidence": 0.0,
-            "latency_ms": round(elapsed_ms),
-            "frame": {
-                "format": "jpeg",
-                "base64": frame_b64,
-                "width": frame_bgr.shape[1],
-                "height": frame_bgr.shape[0],
+        return self._ok(
+            req,
+            {
+                "answer": result.text.strip(),
+                "confidence": 0.0,
+                "latency_ms": round(elapsed_ms),
+                "frame": {
+                    "format": "jpeg",
+                    "base64": frame_b64,
+                    "width": frame_bgr.shape[1],
+                    "height": frame_bgr.shape[0],
+                },
             },
-        })
+        )
 
     # =========================================================================
     # vision.status — report engine and watch state
@@ -241,8 +249,7 @@ class CommandHandler:
             return self._error(req, "NO_WS", "No WebSocket connection for streaming results")
 
         if len(self._watches) >= self._max_watches:
-            return self._error(req, "LIMIT_REACHED",
-                               f"Max {self._max_watches} concurrent watches")
+            return self._error(req, "LIMIT_REACHED", f"Max {self._max_watches} concurrent watches")
 
         interval = float(req.params.get("interval", 10))
         interval = max(interval, 2.0)  # floor at 2s to avoid hammering
@@ -264,34 +271,40 @@ class CommandHandler:
         )
         self._watches[watch_id] = watch
 
-        watch.task = asyncio.create_task(
-            self._watch_loop(watch, source, req.id)
-        )
+        watch.task = asyncio.create_task(self._watch_loop(watch, source, req.id))
 
         mode_str = "temporal" if temporal else "stateless"
-        logger.info("vision.watch started: id=%s question=%r interval=%.0fs mode=%s",
-                     watch_id, question, interval, mode_str)
+        logger.info(
+            "vision.watch started: id=%s question=%r interval=%.0fs mode=%s",
+            watch_id,
+            question,
+            interval,
+            mode_str,
+        )
 
-        return self._ok(req, {
-            "watchId": watch_id,
-            "status": "started",
-            "condition": question,
-            "interval": interval,
-            "temporal": temporal,
-        })
+        return self._ok(
+            req,
+            {
+                "watchId": watch_id,
+                "status": "started",
+                "condition": question,
+                "interval": interval,
+                "temporal": temporal,
+            },
+        )
 
     def _enable_streaming_memory(self) -> None:
         """Enable StreamMem on the engine backend for temporal mode."""
         if self.engine is None:
             return
-        backend = getattr(self.engine, '_backend', None)
+        backend = getattr(self.engine, "_backend", None)
         if backend is None:
             return
-        if not hasattr(backend, 'set_streaming_memory'):
+        if not hasattr(backend, "set_streaming_memory"):
             logger.warning("Backend does not support streaming memory — temporal mode degraded")
             return
         # Check if already enabled
-        sm_config = getattr(backend, '_streaming_memory_config', None)
+        sm_config = getattr(backend, "_streaming_memory_config", None)
         if sm_config is not None:
             return  # already configured
         backend.set_streaming_memory(
@@ -316,7 +329,7 @@ class CommandHandler:
         self._watches.clear()
         # Reset accumulated KV if any temporal watches were active
         if had_temporal and self.engine is not None:
-            if hasattr(self.engine, 'reset_context'):
+            if hasattr(self.engine, "reset_context"):
                 self.engine.reset_context()
         logger.info("All watches stopped (disconnect cleanup)")
 
@@ -350,11 +363,16 @@ class CommandHandler:
         # Reset accumulated KV context only if no other temporal watches remain
         if watch.temporal and self.engine is not None:
             other_temporal = any(w.temporal for w in self._watches.values())
-            if not other_temporal and hasattr(self.engine, 'reset_context'):
+            if not other_temporal and hasattr(self.engine, "reset_context"):
                 self.engine.reset_context()
 
-        logger.info("vision.watch stopped: id=%s checks=%d alerts=%d transitions=%d",
-                     watch.watch_id, watch.checks, watch.alerts, watch.transitions)
+        logger.info(
+            "vision.watch stopped: id=%s checks=%d alerts=%d transitions=%d",
+            watch.watch_id,
+            watch.checks,
+            watch.alerts,
+            watch.transitions,
+        )
         result = {
             "watchId": watch.watch_id,
             "status": "stopped",
@@ -390,24 +408,34 @@ class CommandHandler:
                     if watch.consecutive_failures >= CAPTURE_STOP_THRESHOLD:
                         logger.error(
                             "Watch %s: %d consecutive capture failures — stopping watch",
-                            watch.watch_id, watch.consecutive_failures,
+                            watch.watch_id,
+                            watch.consecutive_failures,
                         )
                         await self._send_camera_offline_event(
-                            source, watch.watch_id, watch.consecutive_failures,
+                            source,
+                            watch.watch_id,
+                            watch.consecutive_failures,
                         )
                         break
 
                     if watch.consecutive_failures == CAPTURE_WARN_THRESHOLD:
                         logger.warning(
                             "Watch %s: %d consecutive capture failures — camera may be offline",
-                            watch.watch_id, watch.consecutive_failures,
+                            watch.watch_id,
+                            watch.consecutive_failures,
                         )
                         await self._send_camera_offline_event(
-                            source, watch.watch_id, watch.consecutive_failures,
+                            source,
+                            watch.watch_id,
+                            watch.consecutive_failures,
                         )
 
-                    logger.warning("Watch %s: capture failed (%d consecutive), retrying in %.0fs",
-                                   watch.watch_id, watch.consecutive_failures, watch.interval)
+                    logger.warning(
+                        "Watch %s: capture failed (%d consecutive), retrying in %.0fs",
+                        watch.watch_id,
+                        watch.consecutive_failures,
+                        watch.interval,
+                    )
                     await self._interruptible_sleep(watch.stop_event, watch.interval)
                     continue
 
@@ -443,7 +471,8 @@ class CommandHandler:
                 # Temporal mode: detect state transitions, not raw triggers
                 if watch.temporal:
                     triggered, transition = _detect_temporal_transition(
-                        answer, watch.last_state,
+                        answer,
+                        watch.last_state,
                     )
                     if transition:
                         watch.last_state = transition["new_state"]
@@ -481,13 +510,17 @@ class CommandHandler:
 
                 # Send result back through WebSocket
                 if not await self._send_watch_result(invoke_id, payload):
-                    logger.info("Watch %s: stopping due to WebSocket disconnect",
-                                watch.watch_id)
+                    logger.info("Watch %s: stopping due to WebSocket disconnect", watch.watch_id)
                     break
 
-                logger.info("Watch %s: check #%d triggered=%s transitions=%d (%.0fms)",
-                            watch.watch_id, watch.checks, triggered,
-                            watch.transitions, elapsed_ms)
+                logger.info(
+                    "Watch %s: check #%d triggered=%s transitions=%d (%.0fms)",
+                    watch.watch_id,
+                    watch.checks,
+                    triggered,
+                    watch.transitions,
+                    elapsed_ms,
+                )
 
                 await self._interruptible_sleep(watch.stop_event, watch.interval)
 
@@ -499,21 +532,27 @@ class CommandHandler:
             self._watches.pop(watch.watch_id, None)
 
     async def _send_camera_offline_event(
-        self, source: str, watch_id: str, failures: int,
+        self,
+        source: str,
+        watch_id: str,
+        failures: int,
     ) -> None:
         """Send a camera.offline event to the Gateway."""
         if self._ws is None:
             return
         masked = _mask_url(source) if "://" in source else source
-        frame = make_req("node.event", {
-            "nodeId": self.node_id,
-            "event": "camera.offline",
-            "payload": {
-                "camera": masked,
-                "watchId": watch_id,
-                "consecutiveFailures": failures,
+        frame = make_req(
+            "node.event",
+            {
+                "nodeId": self.node_id,
+                "event": "camera.offline",
+                "payload": {
+                    "camera": masked,
+                    "watchId": watch_id,
+                    "consecutiveFailures": failures,
+                },
             },
-        })
+        )
         try:
             await self._ws.send(json.dumps(frame))
             logger.info("Sent camera.offline event for %s (failures=%d)", masked, failures)
@@ -527,13 +566,16 @@ class CommandHandler:
         """
         if self._ws is None:
             return False
-        frame = make_req("node.invoke.result", {
-            "id": invoke_id,
-            "nodeId": self.node_id,
-            "ok": True,
-            "payloadJSON": json.dumps(payload),
-            "streaming": True,
-        })
+        frame = make_req(
+            "node.invoke.result",
+            {
+                "id": invoke_id,
+                "nodeId": self.node_id,
+                "ok": True,
+                "payloadJSON": json.dumps(payload),
+                "streaming": True,
+            },
+        )
         try:
             await self._ws.send(json.dumps(frame))
             return True
@@ -604,19 +646,26 @@ class CommandHandler:
 
     def _ok(self, req: InvokeRequest, payload: dict) -> InvokeResult:
         return InvokeResult(
-            id=req.id, node_id=self.node_id, ok=True, payload=payload,
+            id=req.id,
+            node_id=self.node_id,
+            ok=True,
+            payload=payload,
         )
 
     def _error(self, req: InvokeRequest, code: str, message: str) -> InvokeResult:
         return InvokeResult(
-            id=req.id, node_id=self.node_id, ok=False,
-            error_code=code, error_message=message,
+            id=req.id,
+            node_id=self.node_id,
+            ok=False,
+            error_code=code,
+            error_message=message,
         )
 
 
 # =========================================================================
 # Temporal mode helpers
 # =========================================================================
+
 
 def _build_temporal_prompt(condition: str, last_state: str | None) -> str:
     """Wrap user condition in a change-detection prompt for temporal mode.
@@ -628,15 +677,15 @@ def _build_temporal_prompt(condition: str, last_state: str | None) -> str:
     if last_state is None:
         # First check — establish baseline state
         return (
-            f"Observe this scene carefully. Regarding the condition: \"{condition}\"\n"
+            f'Observe this scene carefully. Regarding the condition: "{condition}"\n'
             f"Describe the current state in a few words, then answer YES or NO.\n"
             f"Format: STATE: <current state> | ANSWER: YES or NO"
         )
     # Subsequent checks — detect change from last known state
     return (
         f"You have been observing this scene over time. "
-        f"The previous state was: \"{last_state}\"\n"
-        f"Regarding: \"{condition}\"\n"
+        f'The previous state was: "{last_state}"\n'
+        f'Regarding: "{condition}"\n'
         f"Has the state CHANGED from the previous observation? "
         f"Describe the current state, then answer CHANGED or SAME.\n"
         f"Format: STATE: <current state> | CHANGED or SAME"
@@ -644,7 +693,8 @@ def _build_temporal_prompt(condition: str, last_state: str | None) -> str:
 
 
 def _detect_temporal_transition(
-    answer: str, last_state: str | None,
+    answer: str,
+    last_state: str | None,
 ) -> tuple[bool, dict | None]:
     """Parse temporal VLM response for state transitions.
 
@@ -679,16 +729,20 @@ def _detect_temporal_transition(
             answer_part = lower
         triggered = _detect_triggered(answer_part)
         if new_state:
-            return (triggered or False, {
-                "old_state": None,
-                "new_state": new_state,
-            })
+            return (
+                triggered or False,
+                {
+                    "old_state": None,
+                    "new_state": new_state,
+                },
+            )
         return (triggered or False, None)
 
     # Look for CHANGED/SAME keywords — check the tail portion after "|"
     tail = lower.split("|")[-1].strip() if "|" in lower else lower
-    negated_changed = any(neg in tail for neg in ("not changed", "hasn't changed",
-                                                   "has not changed", "no change"))
+    negated_changed = any(
+        neg in tail for neg in ("not changed", "hasn't changed", "has not changed", "no change")
+    )
     if negated_changed or tail.startswith("same"):
         is_changed = False
     elif "changed" in tail:
@@ -701,10 +755,13 @@ def _detect_temporal_transition(
             is_changed = True
 
     if is_changed and new_state:
-        return (True, {
-            "old_state": last_state,
-            "new_state": new_state,
-        })
+        return (
+            True,
+            {
+                "old_state": last_state,
+                "new_state": new_state,
+            },
+        )
 
     # Update state even if not changed (state description may refine)
     if new_state and new_state != last_state:
@@ -724,11 +781,31 @@ def _detect_triggered(answer: str) -> bool | None:
     if lower.startswith(("no", "nope")):
         return False
     first_sentence = lower.split(".")[0]
-    neg_patterns = ("there is no", "there are no", "there isn't", "there aren't",
-                    "i don't see", "i do not see", "no ", "not ", "cannot see",
-                    "can't see", "nothing", "nobody", "no one")
-    pos_patterns = ("there is a", "there are", "i see a", "i can see",
-                    "someone", "a person", "a package", "a delivery")
+    neg_patterns = (
+        "there is no",
+        "there are no",
+        "there isn't",
+        "there aren't",
+        "i don't see",
+        "i do not see",
+        "no ",
+        "not ",
+        "cannot see",
+        "can't see",
+        "nothing",
+        "nobody",
+        "no one",
+    )
+    pos_patterns = (
+        "there is a",
+        "there are",
+        "i see a",
+        "i can see",
+        "someone",
+        "a person",
+        "a package",
+        "a delivery",
+    )
     for pat in neg_patterns:
         if pat in first_sentence:
             return False
@@ -745,8 +822,8 @@ def _mask_url(url: str) -> str:
     proto_end = url.find("://")
     if proto_end < 0:
         return url
-    rest = url[proto_end + 3:]
+    rest = url[proto_end + 3 :]
     at_idx = rest.find("@")
     if at_idx < 0:
         return url
-    return url[:proto_end + 3] + "***:***@" + rest[at_idx + 1:]
+    return url[: proto_end + 3] + "***:***@" + rest[at_idx + 1 :]

@@ -29,7 +29,9 @@ class HealthServer:
     async def start(self) -> None:
         """Start the HTTP server."""
         self._server = await asyncio.start_server(
-            self._handle_connection, "0.0.0.0", self._port,
+            self._handle_connection,
+            "0.0.0.0",
+            self._port,
         )
         logger.info("Health server listening on port %d", self._port)
 
@@ -41,7 +43,9 @@ class HealthServer:
             self._server = None
 
     async def _handle_connection(
-        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter,
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
     ) -> None:
         """Handle a single HTTP connection."""
         try:

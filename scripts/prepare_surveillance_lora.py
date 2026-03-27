@@ -12,15 +12,12 @@ Usage:
 
 import argparse
 import json
-import os
 import random
 import re
 from pathlib import Path
 
 import cv2
 from PIL import Image
-from datasets import Dataset, DatasetDict, Features, Value, Sequence
-
 
 # --- Video file discovery ---
 
@@ -34,10 +31,19 @@ ANOMALY_PARTS = [
 
 # Crime categories → which Part they're in
 CATEGORY_PART = {
-    "Abuse": 1, "Arrest": 1, "Arson": 1, "Assault": 1,
-    "Burglary": 2, "Explosion": 2, "Fighting": 2,
-    "RoadAccidents": 3, "Robbery": 3, "Shooting": 3,
-    "Shoplifting": 4, "Stealing": 4, "Vandalism": 4,
+    "Abuse": 1,
+    "Arrest": 1,
+    "Arson": 1,
+    "Assault": 1,
+    "Burglary": 2,
+    "Explosion": 2,
+    "Fighting": 2,
+    "RoadAccidents": 3,
+    "Robbery": 3,
+    "Shooting": 3,
+    "Shoplifting": 4,
+    "Stealing": 4,
+    "Vandalism": 4,
 }
 
 
@@ -171,7 +177,7 @@ def build_samples(
     # Balance: undersample normal to match abnormal
     if len(normal_files) > len(abnormal_files):
         random.shuffle(normal_files)
-        normal_files = normal_files[:len(abnormal_files)]
+        normal_files = normal_files[: len(abnormal_files)]
         print(f"Balanced to {len(abnormal_files)} each")
 
     # If max_samples, take half from each
@@ -179,7 +185,9 @@ def build_samples(
         half = max_samples // 2
         abnormal_files = abnormal_files[:half]
         normal_files = normal_files[:half]
-        print(f"Limited to {len(abnormal_files)} abnormal + {len(normal_files)} normal = {len(abnormal_files) + len(normal_files)}")
+        print(
+            f"Limited to {len(abnormal_files)} abnormal + {len(normal_files)} normal = {len(abnormal_files) + len(normal_files)}"
+        )
 
     samples = []
     skipped = 0
@@ -236,14 +244,16 @@ def build_samples(
                     a = ", ".join(str(x) for x in a)
                 a = str(a)
                 has_any = True
-                samples.append({
-                    "images": frames,
-                    "question": q,
-                    "answer": a,
-                    "source": ann_file.stem,
-                    "label": "abnormal",
-                    "qa_type": qa_type,
-                })
+                samples.append(
+                    {
+                        "images": frames,
+                        "question": q,
+                        "answer": a,
+                        "source": ann_file.stem,
+                        "label": "abnormal",
+                        "qa_type": qa_type,
+                    }
+                )
 
         if not has_any:
             skipped += 1
@@ -277,14 +287,16 @@ def build_samples(
 
         question = random.choice(detection_questions)
 
-        samples.append({
-            "images": frames,
-            "question": question,
-            "answer": "No. The surveillance footage shows normal activity with no signs of violence, criminal behavior, or security threats.",
-            "source": ann_file.stem,
-            "label": "normal",
-            "qa_type": "detection_qa_pairs",
-        })
+        samples.append(
+            {
+                "images": frames,
+                "question": question,
+                "answer": "No. The surveillance footage shows normal activity with no signs of violence, criminal behavior, or security threats.",
+                "source": ann_file.stem,
+                "label": "normal",
+                "qa_type": "detection_qa_pairs",
+            }
+        )
 
     print(f"Built {len(samples)} samples ({skipped} skipped — video not found or unreadable)")
 
@@ -300,12 +312,14 @@ def to_hf_dataset(samples: list[dict], output_dir: Path):
     hf_samples = []
 
     for s in samples:
-        hf_samples.append({
-            "images": s["images"],  # PIL images, saved to disk later
-            "question": s["question"],
-            "answer": s["answer"],
-            "qa_type": s.get("qa_type", "detection_qa_pairs"),
-        })
+        hf_samples.append(
+            {
+                "images": s["images"],  # PIL images, saved to disk later
+                "question": s["question"],
+                "answer": s["answer"],
+                "qa_type": s.get("qa_type", "detection_qa_pairs"),
+            }
+        )
 
     # Split: 90% train, 10% validation
     n_val = max(1, len(hf_samples) // 10)
@@ -340,11 +354,13 @@ def to_hf_dataset(samples: list[dict], output_dir: Path):
             question += "\nBe concise."
 
             # Store as question/answer/image — simple flat columns
-            records.append({
-                "question": question,
-                "answer": sample["answer"],
-                "image": image_paths[0],
-            })
+            records.append(
+                {
+                    "question": question,
+                    "answer": sample["answer"],
+                    "image": image_paths[0],
+                }
+            )
 
         # Save as JSONL
         jsonl_path = output_dir / f"{split_name}.jsonl"
@@ -373,10 +389,16 @@ def to_hf_dataset(samples: list[dict], output_dir: Path):
 def main():
     parser = argparse.ArgumentParser(description="Prepare SurveillanceVQA data for LoRA")
     parser.add_argument("--video-dir", default="surveillance_vqa/videos", help="Video directory")
-    parser.add_argument("--annotation-dir", default="surveillance_vqa/test_datasets", help="Annotation directory")
-    parser.add_argument("--output-dir", default="surveillance_vqa/lora_dataset", help="Output directory")
+    parser.add_argument(
+        "--annotation-dir", default="surveillance_vqa/test_datasets", help="Annotation directory"
+    )
+    parser.add_argument(
+        "--output-dir", default="surveillance_vqa/lora_dataset", help="Output directory"
+    )
     parser.add_argument("--frames-per-clip", type=int, default=1, help="Frames to extract per clip")
-    parser.add_argument("--max-samples", type=int, default=None, help="Max samples (for smoke test)")
+    parser.add_argument(
+        "--max-samples", type=int, default=None, help="Max samples (for smoke test)"
+    )
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
@@ -392,7 +414,8 @@ def main():
     print()
 
     samples = build_samples(
-        annotation_dir, video_dir,
+        annotation_dir,
+        video_dir,
         frames_per_clip=args.frames_per_clip,
         max_samples=args.max_samples,
         seed=args.seed,

@@ -35,10 +35,11 @@ logger = logging.getLogger(__name__)
 @dataclass
 class CompressionResult:
     """Result of visual token compression."""
-    compressed: object      # mx.array (N_compressed, hidden_dim)
-    original_count: int     # number of tokens before compression
-    compressed_count: int   # number of tokens after compression
-    ratio: float            # actual compression ratio (compressed/original)
+
+    compressed: object  # mx.array (N_compressed, hidden_dim)
+    original_count: int  # number of tokens before compression
+    compressed_count: int  # number of tokens after compression
+    ratio: float  # actual compression ratio (compressed/original)
 
 
 class TokenCompressor:

@@ -20,8 +20,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 def main():
     from trio_core.bench import (
-        MODEL_REGISTRY, OPTIM_PRESETS, build_engine, _run_mlxvlm_baseline,
-        get_benchmark, ResultStore, detect_anomalies,
+        MODEL_REGISTRY,
+        OPTIM_PRESETS,
+        ResultStore,
+        _run_mlxvlm_baseline,
+        build_engine,
+        detect_anomalies,
+        get_benchmark,
     )
     from trio_core.eval_benchmarks import BenchmarkRunner
 
@@ -54,9 +59,9 @@ def main():
 
     for model_key in VLM_MODELS:
         if model_key in existing and "error" not in existing[model_key]:
-            print(f"\n{'='*60}")
+            print(f"\n{'=' * 60}")
             print(f"  SKIP {model_key} (already completed)")
-            print(f"{'='*60}")
+            print(f"{'=' * 60}")
             continue
 
         model = MODEL_REGISTRY.get(model_key)
@@ -64,13 +69,13 @@ def main():
             print(f"Model {model_key} not in registry, skipping")
             continue
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"  RUNNING: {model_key}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         try:
             # Build engine
-            print(f"  Loading model...")
+            print("  Loading model...")
             t_load = time.perf_counter()
             engine, is_mlxvlm = build_engine(model, config, max_tokens=16)
             print(f"  Loaded in {time.perf_counter() - t_load:.1f}s")
@@ -85,7 +90,7 @@ def main():
             )
 
             # Run benchmark
-            print(f"  Running benchmark...")
+            print("  Running benchmark...")
             if is_mlxvlm:
                 result = _run_mlxvlm_baseline(engine, benchmark, max_tokens=16)
             else:
@@ -117,6 +122,7 @@ def main():
         except Exception as e:
             print(f"  ERROR: {e}")
             import traceback
+
             traceback.print_exc()
             all_results[model_key] = {"error": str(e)}
 
@@ -129,6 +135,7 @@ def main():
             gc.collect()
             try:
                 import mlx.core as mx
+
                 mx.metal.clear_cache()
             except Exception:
                 pass
@@ -139,11 +146,13 @@ def main():
         print(f"  Results saved to {results_file}")
 
     # Print summary table
-    print(f"\n\n{'='*80}")
-    print(f"  SURVEILLANCE VQA DETECTION BASELINE RESULTS")
-    print(f"{'='*80}")
-    print(f"{'Model':<20} {'Acc':>6} {'F1':>6} {'Recall':>8} {'Spec':>6} {'YRate':>6} {'Lat(ms)':>8} {'N':>5}")
-    print(f"{'-'*80}")
+    print(f"\n\n{'=' * 80}")
+    print("  SURVEILLANCE VQA DETECTION BASELINE RESULTS")
+    print(f"{'=' * 80}")
+    print(
+        f"{'Model':<20} {'Acc':>6} {'F1':>6} {'Recall':>8} {'Spec':>6} {'YRate':>6} {'Lat(ms)':>8} {'N':>5}"
+    )
+    print(f"{'-' * 80}")
     for model_key in VLM_MODELS:
         if model_key not in all_results:
             continue
@@ -151,7 +160,9 @@ def main():
         if "error" in r:
             print(f"{model_key:<20} ERROR: {r['error'][:50]}")
         else:
-            print(f"{model_key:<20} {r['accuracy']:>5.1%} {r['f1']:>6.3f} {r['recall']:>7.1%} {r['specificity']:>5.1%} {r['yes_rate']:>5.1%} {r['avg_latency_ms']:>7.1f} {r['n_samples']:>5}")
+            print(
+                f"{model_key:<20} {r['accuracy']:>5.1%} {r['f1']:>6.3f} {r['recall']:>7.1%} {r['specificity']:>5.1%} {r['yes_rate']:>5.1%} {r['avg_latency_ms']:>7.1f} {r['n_samples']:>5}"
+            )
 
 
 if __name__ == "__main__":

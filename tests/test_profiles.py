@@ -1,6 +1,6 @@
 """Tests for trio_core.profiles — model-specific architecture parameters."""
 
-from trio_core.profiles import ModelProfile, get_profile, PROFILES
+from trio_core.profiles import PROFILES, get_profile
 
 
 class TestModelProfile:

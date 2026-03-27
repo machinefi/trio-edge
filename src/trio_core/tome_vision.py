@@ -14,7 +14,7 @@ import logging
 
 import mlx.core as mx
 
-from trio_core.tome import bipartite_soft_matching, merge_tokens, compute_k_metric
+from trio_core.tome import bipartite_soft_matching, compute_k_metric, merge_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -63,13 +63,13 @@ class BaseToMeVisionWrapper:
     def _should_merge(self, layer_num: int, n_blocks: int) -> bool:
         """Whether to merge after this layer. Override for model-specific skip logic."""
         return (
-            self.r > 0
-            and layer_num >= self.skip_first
-            and layer_num < (n_blocks - self.skip_last)
+            self.r > 0 and layer_num >= self.skip_first and layer_num < (n_blocks - self.skip_last)
         )
 
     def _get_metric(
-        self, hidden_states: mx.array, block,
+        self,
+        hidden_states: mx.array,
+        block,
         rotary_pos_emb: mx.array | None = None,
     ) -> mx.array:
         """Get similarity metric for bipartite matching."""
@@ -189,13 +189,16 @@ class ToMeQwen25VisionWrapper(BaseToMeVisionWrapper):
                 if not initial_window_sizes:
                     seqlens = cu_window_seqlens.tolist()
                     for w in range(len(seqlens) - 1):
-                        initial_window_sizes[w] = int(seqlens[w+1] - seqlens[w])
+                        initial_window_sizes[w] = int(seqlens[w + 1] - seqlens[w])
 
                 hidden_states, rotary_pos_emb, cu_window_seqlens, token_size = (
                     self._merge_in_windows(
-                        hidden_states, rotary_pos_emb,
-                        cu_window_seqlens, token_size,
-                        blk, initial_window_sizes,
+                        hidden_states,
+                        rotary_pos_emb,
+                        cu_window_seqlens,
+                        token_size,
+                        blk,
+                        initial_window_sizes,
                         r=layer_r,
                     )
                 )
@@ -209,10 +212,14 @@ class ToMeQwen25VisionWrapper(BaseToMeVisionWrapper):
                         after,
                     )
 
-                self._merge_log.append({
-                    "layer": layer_num, "before": before,
-                    "after": after, "merged": before - after,
-                })
+                self._merge_log.append(
+                    {
+                        "layer": layer_num,
+                        "before": before,
+                        "after": after,
+                        "merged": before - after,
+                    }
+                )
 
         # PatchMerger — pad to multiple of spatial_merge_unit
         current_len = hidden_states.shape[0]
@@ -231,15 +238,20 @@ class ToMeQwen25VisionWrapper(BaseToMeVisionWrapper):
 
         total_merged = sum(e["merged"] for e in self._merge_log)
         if total_merged > 0:
-            logger.info("ToMe: merged %d tokens across %d layers", total_merged, len(self._merge_log))
+            logger.info(
+                "ToMe: merged %d tokens across %d layers", total_merged, len(self._merge_log)
+            )
 
         return hidden_states
 
     def _merge_in_windows(
         self,
-        hidden_states, rotary_pos_emb,
-        cu_window_seqlens, token_size,
-        block, initial_window_sizes,
+        hidden_states,
+        rotary_pos_emb,
+        cu_window_seqlens,
+        token_size,
+        block,
+        initial_window_sizes,
         r: int | None = None,
     ):
         effective_r = r if r is not None else self.r
@@ -343,9 +355,7 @@ class ToMeQwen3VisionWrapper(BaseToMeVisionWrapper):
 
             # Deepstack: extract features at specified layers
             if layer_num in vm.deepstack_visual_indexes:
-                ds_merger = vm.deepstack_merger_list[
-                    vm.deepstack_visual_indexes.index(layer_num)
-                ]
+                ds_merger = vm.deepstack_merger_list[vm.deepstack_visual_indexes.index(layer_num)]
                 deepstack_feature_lists.append(ds_merger(hidden_states))
 
             # ToMe merge
@@ -354,8 +364,12 @@ class ToMeQwen3VisionWrapper(BaseToMeVisionWrapper):
                 before = hidden_states.shape[0]
 
                 hidden_states, rotary_pos_emb, token_size = self._merge_segment(
-                    hidden_states, rotary_pos_emb, token_size,
-                    blk, self._initial_seq_len, r=layer_r,
+                    hidden_states,
+                    rotary_pos_emb,
+                    token_size,
+                    blk,
+                    self._initial_seq_len,
+                    r=layer_r,
                 )
                 after = hidden_states.shape[0]
 
@@ -367,13 +381,17 @@ class ToMeQwen3VisionWrapper(BaseToMeVisionWrapper):
                         after,
                     )
 
-                self._merge_log.append({
-                    "layer": layer_num, "before": before,
-                    "after": after, "merged": before - after,
-                })
+                self._merge_log.append(
+                    {
+                        "layer": layer_num,
+                        "before": before,
+                        "after": after,
+                        "merged": before - after,
+                    }
+                )
 
         # PatchMerger
-        smu = vm.spatial_merge_size ** 2
+        smu = vm.spatial_merge_size**2
         current_len = hidden_states.shape[0]
         remainder = current_len % smu
         if remainder != 0:
@@ -384,7 +402,9 @@ class ToMeQwen3VisionWrapper(BaseToMeVisionWrapper):
 
         total_merged = sum(e["merged"] for e in self._merge_log)
         if total_merged > 0:
-            logger.info("ToMe: merged %d tokens across %d layers", total_merged, len(self._merge_log))
+            logger.info(
+                "ToMe: merged %d tokens across %d layers", total_merged, len(self._merge_log)
+            )
 
         return hidden_states, deepstack_feature_lists
 

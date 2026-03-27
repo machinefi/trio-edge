@@ -36,9 +36,11 @@ logger = logging.getLogger(__name__)
 # 1. Model Registry
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class ModelEntry:
     """Single source of truth for a benchmarkable model."""
+
     key: str
     hf_id: str
     profile: ModelProfile
@@ -63,7 +65,9 @@ class ModelEntry:
 
 def _entry(key: str, hf_id: str, *, tier: int = 1) -> ModelEntry:
     return ModelEntry(
-        key=key, hf_id=hf_id, profile=get_profile(hf_id),
+        key=key,
+        hf_id=hf_id,
+        profile=get_profile(hf_id),
         tier=tier,
     )
 
@@ -112,9 +116,11 @@ def get_models(
 # 2. Optimization Presets
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class OptimConfig:
     """Named optimization configuration with capability requirements."""
+
     name: str
     description: str
     engine_kwargs: dict[str, Any] = field(default_factory=dict)
@@ -135,13 +141,23 @@ OPTIM_PRESETS: dict[str, OptimConfig] = {
     "tome_r4": OptimConfig(
         name="tome_r4",
         description="Token Merging r=4",
-        engine_kwargs={"tome_enabled": True, "tome_r": 4, "tome_metric": "hidden", "tome_min_keep_ratio": 0.3},
+        engine_kwargs={
+            "tome_enabled": True,
+            "tome_r": 4,
+            "tome_metric": "hidden",
+            "tome_min_keep_ratio": 0.3,
+        },
         requires=("supports_tome",),
     ),
     "tome_r8": OptimConfig(
         name="tome_r8",
         description="Token Merging r=8",
-        engine_kwargs={"tome_enabled": True, "tome_r": 8, "tome_metric": "hidden", "tome_min_keep_ratio": 0.3},
+        engine_kwargs={
+            "tome_enabled": True,
+            "tome_r": 8,
+            "tome_metric": "hidden",
+            "tome_min_keep_ratio": 0.3,
+        },
         requires=("supports_tome",),
     ),
     "compressed_30": OptimConfig(
@@ -168,7 +184,10 @@ OPTIM_PRESETS: dict[str, OptimConfig] = {
         name="tome_compressed_50",
         description="ToMe r=4 + Compressed 50%",
         engine_kwargs={
-            "tome_enabled": True, "tome_r": 4, "tome_metric": "hidden", "tome_min_keep_ratio": 0.3,
+            "tome_enabled": True,
+            "tome_r": 4,
+            "tome_metric": "hidden",
+            "tome_min_keep_ratio": 0.3,
             "_compress": 0.5,
         },
         requires=("supports_tome",),
@@ -177,7 +196,10 @@ OPTIM_PRESETS: dict[str, OptimConfig] = {
         name="tome_compressed_40",
         description="ToMe r=4 + Compressed 40%",
         engine_kwargs={
-            "tome_enabled": True, "tome_r": 4, "tome_metric": "hidden", "tome_min_keep_ratio": 0.3,
+            "tome_enabled": True,
+            "tome_r": 4,
+            "tome_metric": "hidden",
+            "tome_min_keep_ratio": 0.3,
             "_compress": 0.4,
         },
         requires=("supports_tome",),
@@ -209,14 +231,19 @@ def is_compatible(model: ModelEntry, config: OptimConfig) -> bool:
 # 3. Benchmark Factory
 # ---------------------------------------------------------------------------
 
+
 def get_benchmark(name: str, max_samples: int | None = None, **kwargs):
     """Create a benchmark instance by name.
 
     Supported: pope, textvqa, gqa, mmbench, mvbench, surveillance_vqa
     """
     from trio_core.eval_benchmarks import (
-        POPEBenchmark, TextVQABenchmark, GQABenchmark,
-        MMBenchBenchmark, MVBenchBenchmark, SurveillanceVQABenchmark,
+        GQABenchmark,
+        MMBenchBenchmark,
+        MVBenchBenchmark,
+        POPEBenchmark,
+        SurveillanceVQABenchmark,
+        TextVQABenchmark,
     )
 
     factories = {
@@ -254,6 +281,7 @@ BENCHMARKS = ["pope", "textvqa", "gqa", "mmbench", "mvbench", "surveillance_vqa"
 # 4. Anomaly Detector
 # ---------------------------------------------------------------------------
 
+
 def detect_anomalies(result, benchmark_name: str) -> list[str]:
     """Flag suspicious benchmark results."""
     anomalies = []
@@ -290,6 +318,7 @@ RESULTS_DIR = Path("research/bench-results")
 @dataclass
 class RunRecord:
     """Denormalized record of a single benchmark run."""
+
     model_key: str
     benchmark: str
     config: str
@@ -381,9 +410,9 @@ class ResultStore:
                 continue
             if config and entry["config"] != config:
                 continue
-            records.append(RunRecord(**{
-                k: entry[k] for k in RunRecord.__dataclass_fields__ if k in entry
-            }))
+            records.append(
+                RunRecord(**{k: entry[k] for k in RunRecord.__dataclass_fields__ if k in entry})
+            )
         return records
 
     def latest(self, model_key: str, benchmark: str, config: str) -> RunRecord | None:
@@ -396,7 +425,10 @@ class ResultStore:
 # 6. Engine Factory
 # ---------------------------------------------------------------------------
 
-def build_engine(model: ModelEntry, config: OptimConfig, *, max_tokens: int = 16, adapter_path: str | None = None):
+
+def build_engine(
+    model: ModelEntry, config: OptimConfig, *, max_tokens: int = 16, adapter_path: str | None = None
+):
     """Build and load an engine for benchmarking.
 
     Returns (engine_or_backend, is_mlxvlm_baseline).
@@ -416,13 +448,20 @@ def build_engine(model: ModelEntry, config: OptimConfig, *, max_tokens: int = 16
     if is_mlxvlm:
         # Raw mlx-vlm baseline — return (model, processor)
         from mlx_vlm import load
+
         vlm_model, processor = load(model.hf_id, trust_remote_code=True)
         # Fix: transformers 4.57+ loads Qwen2VLImageProcessor as "fast" by default,
         # which only supports PyTorch tensors. Replace only image_processor (not the
         # whole processor) to preserve mlx_vlm's detokenizer attribute.
-        if hasattr(processor, 'image_processor') and 'Fast' in type(processor.image_processor).__name__:
+        if (
+            hasattr(processor, "image_processor")
+            and "Fast" in type(processor.image_processor).__name__
+        ):
             from transformers import AutoImageProcessor
-            slow_ip = AutoImageProcessor.from_pretrained(model.hf_id, trust_remote_code=True, use_fast=False)
+
+            slow_ip = AutoImageProcessor.from_pretrained(
+                model.hf_id, trust_remote_code=True, use_fast=False
+            )
             processor.image_processor = slow_ip
         return (vlm_model, processor), True
 
@@ -445,8 +484,9 @@ def build_engine(model: ModelEntry, config: OptimConfig, *, max_tokens: int = 16
     engine = TrioCore(engine_config)
 
     if is_compress:
-        from trio_core.token_compression import TokenCompressor
         from trio_core.compressed_backend import CompressedMLXBackend
+        from trio_core.token_compression import TokenCompressor
+
         ratio = kwargs["_compress"]
         compressor = TokenCompressor(strategy="similarity", ratio=ratio)
         backend = CompressedMLXBackend(model.hf_id, compressor)
@@ -455,6 +495,7 @@ def build_engine(model: ModelEntry, config: OptimConfig, *, max_tokens: int = 16
         # Apply ToMe wrapping if both compress + tome are requested
         if kwargs.get("tome_enabled", False):
             from trio_core.native_vision import create_tome_vision
+
             if backend._adapter and backend._adapter.supports_tome:
                 native_vision = create_tome_vision(
                     backend._model.vision_tower,
@@ -476,9 +517,10 @@ def build_engine(model: ModelEntry, config: OptimConfig, *, max_tokens: int = 16
 def _run_mlxvlm_baseline(model_proc, benchmark, max_tokens: int = 16):
     """Run benchmark using raw mlx-vlm generate (for baseline comparison)."""
     import numpy as np
-    from PIL import Image
     from mlx_vlm import generate
     from mlx_vlm.prompt_utils import apply_chat_template
+    from PIL import Image
+
     from trio_core.eval_benchmarks import BenchmarkResult, PredictionResult
 
     model, processor = model_proc
@@ -504,27 +546,39 @@ def _run_mlxvlm_baseline(model_proc, benchmark, max_tokens: int = 16):
 
         tic = time.perf_counter()
         result = generate(
-            model, processor, prompt, image=[pil_img],
-            max_tokens=max_tokens, temperature=0.0, verbose=False,
+            model,
+            processor,
+            prompt,
+            image=[pil_img],
+            max_tokens=max_tokens,
+            temperature=0.0,
+            verbose=False,
         )
         elapsed = (time.perf_counter() - tic) * 1000
 
         output = result.text.strip() if hasattr(result, "text") else str(result).strip()
         correct = benchmark.judge(sample, output)
-        predictions.append(PredictionResult(
-            id=sample.id, question=sample.question,
-            answer_gt=sample.answer, answer_pred=output,
-            correct=correct, latency_ms=elapsed,
-        ))
+        predictions.append(
+            PredictionResult(
+                id=sample.id,
+                question=sample.question,
+                answer_gt=sample.answer,
+                answer_pred=output,
+                correct=correct,
+                latency_ms=elapsed,
+            )
+        )
 
         if (i + 1) % 50 == 0:
             acc = sum(p.correct for p in predictions) / len(predictions)
-            print(f"  [{i+1}/{len(samples)}] accuracy={acc:.1%}")
+            print(f"  [{i + 1}/{len(samples)}] accuracy={acc:.1%}")
 
     total_time = time.perf_counter() - t0
     return BenchmarkResult(
-        name=benchmark.name, n_samples=len(predictions),
-        predictions=predictions, total_time_s=total_time,
+        name=benchmark.name,
+        n_samples=len(predictions),
+        predictions=predictions,
+        total_time_s=total_time,
         metadata={"backend": "mlx-vlm-baseline"},
     )
 
@@ -532,6 +586,7 @@ def _run_mlxvlm_baseline(model_proc, benchmark, max_tokens: int = 16):
 # ---------------------------------------------------------------------------
 # 7. Sweep Orchestrator
 # ---------------------------------------------------------------------------
+
 
 class BenchSweep:
     """Run models x benchmarks x configs with auto-filtering."""
@@ -585,9 +640,9 @@ class BenchSweep:
                     combos.append((model, bench_name, config))
 
         # Print plan
-        print(f"\n{'='*60}")
-        print(f"  BENCH SWEEP PLAN")
-        print(f"{'='*60}")
+        print(f"\n{'=' * 60}")
+        print("  BENCH SWEEP PLAN")
+        print(f"{'=' * 60}")
         print(f"  Models:     {len(self.models)}")
         print(f"  Benchmarks: {self.benchmark_names}")
         print(f"  Configs:    {self.config_names}")
@@ -595,11 +650,11 @@ class BenchSweep:
         print(f"  Combos:     {len(combos)} to run, {len(skipped)} skipped")
 
         if skipped:
-            print(f"\n  Skipped:")
+            print("\n  Skipped:")
             for model_key, bench, cfg, reasons in skipped:
                 print(f"    {model_key} / {bench} / {cfg}: {', '.join(reasons)}")
 
-        print(f"\n  Will run:")
+        print("\n  Will run:")
         for model, bench_name, config in combos:
             print(f"    {model.key} / {bench_name} / {config.name}")
 
@@ -615,7 +670,10 @@ class BenchSweep:
 
         # Group by (model_key, config_name) to avoid reloading
         from collections import OrderedDict
-        groups: OrderedDict[tuple[str, str], list[tuple[ModelEntry, str, OptimConfig]]] = OrderedDict()
+
+        groups: OrderedDict[tuple[str, str], list[tuple[ModelEntry, str, OptimConfig]]] = (
+            OrderedDict()
+        )
         # Sort by model key first to group model loads
         for model, bench_name, config in sorted(combos, key=lambda x: (x[0].key, x[2].name)):
             group_key = (model.key, config.name)
@@ -629,14 +687,16 @@ class BenchSweep:
             model = group_combos[0][0]
             config = group_combos[0][2]
 
-            print(f"\n{'#'*60}")
+            print(f"\n{'#' * 60}")
             print(f"#  Loading: {model.key} / {config.name}")
             print(f"#  HF ID:  {model.hf_id}")
-            print(f"{'#'*60}")
+            print(f"{'#' * 60}")
 
             try:
                 tic = time.perf_counter()
-                engine_or_backend, is_mlxvlm = build_engine(model, config, max_tokens=self.max_tokens, adapter_path=self.adapter_path)
+                engine_or_backend, is_mlxvlm = build_engine(
+                    model, config, max_tokens=self.max_tokens, adapter_path=self.adapter_path
+                )
                 load_time = time.perf_counter() - tic
                 print(f"  Loaded in {load_time:.1f}s")
 
@@ -645,7 +705,9 @@ class BenchSweep:
                     print(f"\n  [{done}/{total}] {model.key} / {bench_name} / {config.name}")
 
                     try:
-                        benchmark = get_benchmark(bench_name, max_samples=self.max_samples, **self.benchmark_kwargs)
+                        benchmark = get_benchmark(
+                            bench_name, max_samples=self.max_samples, **self.benchmark_kwargs
+                        )
 
                         # Thinking models (Qwen3.5) need more tokens for
                         # multiple-choice benchmarks since <think> tags consume tokens
@@ -654,9 +716,12 @@ class BenchSweep:
                             max_tok = max(max_tok, 64)
 
                         if is_mlxvlm:
-                            result = _run_mlxvlm_baseline(engine_or_backend, benchmark, max_tokens=max_tok)
+                            result = _run_mlxvlm_baseline(
+                                engine_or_backend, benchmark, max_tokens=max_tok
+                            )
                         else:
                             from trio_core.eval_benchmarks import BenchmarkRunner
+
                             runner = BenchmarkRunner(engine_or_backend, max_tokens=max_tok)
                             result = runner.run(benchmark)
 
@@ -672,6 +737,7 @@ class BenchSweep:
                     except Exception as e:
                         print(f"  ERROR: {e}")
                         import traceback
+
                         traceback.print_exc()
 
                 # Cleanup
@@ -679,6 +745,7 @@ class BenchSweep:
                 gc.collect()
                 try:
                     import mlx.core as mx
+
                     mx.clear_cache()
                 except ImportError:
                     pass
@@ -686,6 +753,7 @@ class BenchSweep:
             except Exception as e:
                 print(f"  LOAD ERROR: {e}")
                 import traceback
+
                 traceback.print_exc()
                 done += len(group_combos)
 
@@ -695,6 +763,7 @@ class BenchSweep:
 # ---------------------------------------------------------------------------
 # 8. Report Generator
 # ---------------------------------------------------------------------------
+
 
 class ReportGenerator:
     """Generate comparison tables from benchmark results."""
@@ -734,9 +803,9 @@ class ReportGenerator:
                     if val is None:
                         row += f"{'—':>{col_w}} "
                     elif metric == "accuracy":
-                        row += f"{val*100:>{col_w-1}.1f}% "
+                        row += f"{val * 100:>{col_w - 1}.1f}% "
                     elif metric == "avg_latency_ms":
-                        row += f"{val:>{col_w-2}.0f}ms "
+                        row += f"{val:>{col_w - 2}.0f}ms "
                     else:
                         row += f"{val:>{col_w}.3f} "
             lines.append(row)
@@ -769,7 +838,7 @@ class ReportGenerator:
                 if rec is None:
                     row += f"{'—':>{col_w}} "
                 elif metric == "accuracy":
-                    row += f"{rec.accuracy*100:>{col_w-1}.1f}% "
+                    row += f"{rec.accuracy * 100:>{col_w - 1}.1f}% "
                 else:
                     val = getattr(rec, metric, None)
                     row += f"{val:>{col_w}.3f} " if val else f"{'—':>{col_w}} "
@@ -780,8 +849,12 @@ class ReportGenerator:
 
     def delta_report(self, benchmark: str, baseline: str, compare: str) -> str:
         """Show accuracy delta between two configs."""
-        bl_records = {r.model_key: r for r in self.store.query(benchmark=benchmark, config=baseline)}
-        cmp_records = {r.model_key: r for r in self.store.query(benchmark=benchmark, config=compare)}
+        bl_records = {
+            r.model_key: r for r in self.store.query(benchmark=benchmark, config=baseline)
+        }
+        cmp_records = {
+            r.model_key: r for r in self.store.query(benchmark=benchmark, config=compare)
+        }
 
         models = list(dict.fromkeys(list(bl_records) + list(cmp_records)))
         if not models:
@@ -794,8 +867,8 @@ class ReportGenerator:
         for model in models:
             bl = bl_records.get(model)
             cmp = cmp_records.get(model)
-            bl_str = f"{bl.accuracy*100:.1f}%" if bl else "—"
-            cmp_str = f"{cmp.accuracy*100:.1f}%" if cmp else "—"
+            bl_str = f"{bl.accuracy * 100:.1f}%" if bl else "—"
+            cmp_str = f"{cmp.accuracy * 100:.1f}%" if cmp else "—"
             if bl and cmp:
                 delta = (cmp.accuracy - bl.accuracy) * 100
                 sign = "+" if delta >= 0 else ""

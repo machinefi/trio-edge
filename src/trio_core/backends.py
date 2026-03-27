@@ -56,7 +56,12 @@ class BaseBackend(ABC):
     The engine calls these methods — it never touches mlx or torch directly.
     """
 
-    def __init__(self, model_name: str, device_info: DeviceInfo | None = None, adapter_path: str | None = None):
+    def __init__(
+        self,
+        model_name: str,
+        device_info: DeviceInfo | None = None,
+        adapter_path: str | None = None,
+    ):
         self.model_name = model_name
         self.device_info = device_info or detect_device()
         self.adapter_path = adapter_path
@@ -143,11 +148,7 @@ class _TokenHandler:
     """
 
     def __init__(self, processor, model_config):
-        self.tokenizer = (
-            processor.tokenizer
-            if hasattr(processor, "tokenizer")
-            else processor
-        )
+        self.tokenizer = processor.tokenizer if hasattr(processor, "tokenizer") else processor
         self._has_detokenizer = hasattr(processor, "detokenizer")
         if self._has_detokenizer:
             self._detokenizer = processor.detokenizer
@@ -196,7 +197,7 @@ class _TokenHandler:
             return self._detokenizer.last_segment
         self._token_ids.append(token)
         new_text = self.tokenizer.decode(self._token_ids, skip_special_tokens=True)
-        delta = new_text[len(self._prev_text):]
+        delta = new_text[len(self._prev_text) :]
         self._prev_text = new_text
         return delta
 
@@ -240,14 +241,15 @@ class MLXBackend(BaseBackend):
         # built-in LoRA support via apply_lora_layers().
         if not self.adapter_path:
             try:
-                from trio_core.models.loader import load_native, load_config_native
+                from trio_core.models.loader import load_config_native, load_native
+
                 self._model, self._processor = load_native(self.model_name)
                 self._config = load_config_native(self.model_name)
                 logger.info("[MLX] Loaded via native path")
             except ValueError:
                 self._model = None  # Fall through to mlx-vlm
 
-        if not hasattr(self, '_model') or self._model is None:
+        if not hasattr(self, "_model") or self._model is None:
             try:
                 from mlx_vlm import load
                 from mlx_vlm.utils import load_config
@@ -260,7 +262,8 @@ class MLXBackend(BaseBackend):
             if self.adapter_path:
                 load_kwargs["adapter_path"] = self.adapter_path
             self._model, self._processor = load(
-                self.model_name, **load_kwargs,
+                self.model_name,
+                **load_kwargs,
             )
             self._config = load_config(self.model_name)
             if self.adapter_path:
@@ -268,25 +271,32 @@ class MLXBackend(BaseBackend):
             else:
                 logger.info("[MLX] Loaded via mlx-vlm fallback")
         self._prompt_cache = None  # Lazily created on first generate
-        self._early_stop = None   # Set via set_early_stop() after load
+        self._early_stop = None  # Set via set_early_stop() after load
         self._visual_similarity_threshold = 0.0  # Set via set_visual_similarity() after load
         # Detect if model natively supports video input via processor.
         # Check processor signature for 'videos' param — only Qwen2.5-VL, Qwen3-VL, etc.
         # have this. InternVL3 has video_token_index in config but processor only takes images.
         import inspect
+
         proc_params = inspect.signature(self._processor.__call__).parameters
         self._is_video_model = "videos" in proc_params
         self._loaded = True
-        logger.info("[MLX] Model loaded in %.1fs (video_model=%s)", time.monotonic() - t0, self._is_video_model)
+        logger.info(
+            "[MLX] Model loaded in %.1fs (video_model=%s)",
+            time.monotonic() - t0,
+            self._is_video_model,
+        )
 
     def _get_prompt_cache(self):
         """Get or create the persistent PromptCache."""
         if self._prompt_cache is None:
             from trio_core.generate import PromptCache
+
             self._prompt_cache = PromptCache(self._model)
             # Attach StreamingMemory if configured
-            if getattr(self, '_streaming_memory_config', None):
+            if getattr(self, "_streaming_memory_config", None):
                 from trio_core.streaming_memory import StreamingMemory
+
                 sm = StreamingMemory(**self._streaming_memory_config)
                 self._prompt_cache.set_streaming_memory(sm)
         return self._prompt_cache
@@ -301,6 +311,7 @@ class MLXBackend(BaseBackend):
             self._early_stop = None
             return
         from trio_core.generate import EarlyStopConfig
+
         # Get EOS token IDs from model config
         eos_ids = self._model.config.eos_token_id
         if isinstance(eos_ids, int):
@@ -322,7 +333,13 @@ class MLXBackend(BaseBackend):
                 self._visual_similarity_threshold,
             )
 
-    def set_streaming_memory(self, enabled: bool, budget: int = 6000, prototype_ratio: float = 0.1, n_sink_tokens: int = 4) -> None:
+    def set_streaming_memory(
+        self,
+        enabled: bool,
+        budget: int = 6000,
+        prototype_ratio: float = 0.1,
+        n_sink_tokens: int = 4,
+    ) -> None:
         """Configure StreamMem bounded KV cache. Called by engine after load()."""
         if not enabled:
             self._streaming_memory_config = None
@@ -334,7 +351,9 @@ class MLXBackend(BaseBackend):
         }
         logger.info(
             "[MLX] StreamMem enabled: budget=%d, prototype_ratio=%.2f, sink=%d",
-            budget, prototype_ratio, n_sink_tokens,
+            budget,
+            prototype_ratio,
+            n_sink_tokens,
         )
 
     # ── Token handling (shared by all decode loops) ─────────────────────
@@ -348,6 +367,7 @@ class MLXBackend(BaseBackend):
     def _make_generate_config(self, max_tokens: int, temperature: float, top_p: float):
         """Build GenerateConfig from backend state + per-request sampling params."""
         from trio_core.generate import GenerateConfig
+
         return GenerateConfig(
             max_tokens=max_tokens,
             temperature=temperature,
@@ -357,16 +377,24 @@ class MLXBackend(BaseBackend):
         )
 
     def _run_generate(
-        self, input_ids, pixel_values, mask, *,
-        max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
-        inputs_embeds=None, **extra_kwargs,
+        self,
+        input_ids,
+        pixel_values,
+        mask,
+        *,
+        max_tokens: int = 512,
+        temperature: float = 0.0,
+        top_p: float = 1.0,
+        inputs_embeds=None,
+        **extra_kwargs,
     ) -> GenerationResult:
         """Unified generate: generate_step + detokenize + TPS.
 
         Subclasses override generate() to prepare inputs, then call this.
         """
         import mlx.core as mx
-        from trio_core.generate import generate_step, _wired_limit
+
+        from trio_core.generate import _wired_limit, generate_step
 
         th = self._make_token_handler()
         cfg = self._make_generate_config(max_tokens, temperature, top_p)
@@ -378,7 +406,10 @@ class MLXBackend(BaseBackend):
             tic = time.perf_counter()
             for n, (token, logprobs) in enumerate(
                 generate_step(
-                    input_ids, self._model, pixel_values, mask,
+                    input_ids,
+                    self._model,
+                    pixel_values,
+                    mask,
                     config=cfg,
                     prompt_cache_manager=self._get_prompt_cache(),
                     inputs_embeds=inputs_embeds,
@@ -408,16 +439,24 @@ class MLXBackend(BaseBackend):
         )
 
     def _run_stream_generate(
-        self, input_ids, pixel_values, mask, *,
-        max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
-        inputs_embeds=None, **extra_kwargs,
+        self,
+        input_ids,
+        pixel_values,
+        mask,
+        *,
+        max_tokens: int = 512,
+        temperature: float = 0.0,
+        top_p: float = 1.0,
+        inputs_embeds=None,
+        **extra_kwargs,
     ) -> Generator[StreamChunk, None, None]:
         """Unified streaming: generate_step + yield chunks.
 
         Subclasses override stream_generate() to prepare inputs, then call this.
         """
         import mlx.core as mx
-        from trio_core.generate import generate_step, _wired_limit
+
+        from trio_core.generate import _wired_limit, generate_step
 
         th = self._make_token_handler()
         cfg = self._make_generate_config(max_tokens, temperature, top_p)
@@ -426,7 +465,10 @@ class MLXBackend(BaseBackend):
         with _wired_limit(self._model):
             for n, (token, logprobs) in enumerate(
                 generate_step(
-                    input_ids, self._model, pixel_values, mask,
+                    input_ids,
+                    self._model,
+                    pixel_values,
+                    mask,
                     config=cfg,
                     prompt_cache_manager=self._get_prompt_cache(),
                     inputs_embeds=inputs_embeds,
@@ -456,9 +498,15 @@ class MLXBackend(BaseBackend):
     # ── AR decode loop (for backends with custom prefill) ─────────────
 
     def _run_ar_decode(
-        self, first_token, prompt_cache, *,
-        max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
-        prompt_token_count: int = 0, prompt_tps: float = 0.0,
+        self,
+        first_token,
+        prompt_cache,
+        *,
+        max_tokens: int = 512,
+        temperature: float = 0.0,
+        top_p: float = 1.0,
+        prompt_token_count: int = 0,
+        prompt_tps: float = 0.0,
     ) -> GenerationResult:
         """Autoregressive decode loop for backends that do their own prefill.
 
@@ -469,6 +517,7 @@ class MLXBackend(BaseBackend):
             prompt_tps: Prompt throughput (for metrics).
         """
         import mlx.core as mx
+
         from trio_core.generate import make_sampler
 
         th = self._make_token_handler()
@@ -510,12 +559,18 @@ class MLXBackend(BaseBackend):
         )
 
     def _run_ar_stream_decode(
-        self, first_token, prompt_cache, *,
-        max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
+        self,
+        first_token,
+        prompt_cache,
+        *,
+        max_tokens: int = 512,
+        temperature: float = 0.0,
+        top_p: float = 1.0,
         prompt_token_count: int = 0,
     ) -> Generator[StreamChunk, None, None]:
         """Streaming AR decode for backends with custom prefill."""
         import mlx.core as mx
+
         from trio_core.generate import make_sampler
 
         th = self._make_token_handler()
@@ -563,6 +618,7 @@ class MLXBackend(BaseBackend):
         if pixel_values is None:
             return
         import mlx.core as mx
+
         try:
             info = mx.device_info()
         except AttributeError:
@@ -570,16 +626,20 @@ class MLXBackend(BaseBackend):
         budget = info.get("max_recommended_working_set_size", 0)
         if budget <= 0:
             return
-        active = mx.get_active_memory() if hasattr(mx, "get_active_memory") else mx.metal.get_active_memory()
+        active = (
+            mx.get_active_memory()
+            if hasattr(mx, "get_active_memory")
+            else mx.metal.get_active_memory()
+        )
         available = budget - active
 
         # Rough estimate: prefill needs ~6x pixel_values (forward + intermediates)
         pixel_bytes = pixel_values.nbytes if hasattr(pixel_values, "nbytes") else 0
         estimated = pixel_bytes * 6
         if estimated > available:
-            pixel_mb = pixel_bytes / (1024 ** 2)
-            avail_mb = available / (1024 ** 2)
-            est_mb = estimated / (1024 ** 2)
+            pixel_mb = pixel_bytes / (1024**2)
+            avail_mb = available / (1024**2)
+            est_mb = estimated / (1024**2)
             raise MemoryError(
                 f"Visual input too large for available memory: "
                 f"pixel_values={pixel_mb:.0f}MB, estimated prefill={est_mb:.0f}MB, "
@@ -589,30 +649,48 @@ class MLXBackend(BaseBackend):
     # ── Public generate/stream_generate (thin wrappers) ───────────────
 
     def generate(
-        self, frames: np.ndarray, prompt: str, *,
-        max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
+        self,
+        frames: np.ndarray,
+        prompt: str,
+        *,
+        max_tokens: int = 512,
+        temperature: float = 0.0,
+        top_p: float = 1.0,
     ) -> GenerationResult:
         formatted, kwargs = self._prepare(frames, prompt)
         input_ids = kwargs.pop("input_ids")
         pixel_values = kwargs.pop("pixel_values")
         mask = kwargs.pop("mask")
         return self._run_generate(
-            input_ids, pixel_values, mask,
-            max_tokens=max_tokens, temperature=temperature, top_p=top_p,
+            input_ids,
+            pixel_values,
+            mask,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
             **kwargs,
         )
 
     def stream_generate(
-        self, frames: np.ndarray, prompt: str, *,
-        max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
+        self,
+        frames: np.ndarray,
+        prompt: str,
+        *,
+        max_tokens: int = 512,
+        temperature: float = 0.0,
+        top_p: float = 1.0,
     ) -> Generator[StreamChunk, None, None]:
         formatted, kwargs = self._prepare(frames, prompt)
         input_ids = kwargs.pop("input_ids")
         pixel_values = kwargs.pop("pixel_values")
         mask = kwargs.pop("mask")
         return self._run_stream_generate(
-            input_ids, pixel_values, mask,
-            max_tokens=max_tokens, temperature=temperature, top_p=top_p,
+            input_ids,
+            pixel_values,
+            mask,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
             **kwargs,
         )
 
@@ -640,32 +718,39 @@ class MLXBackend(BaseBackend):
         if len(pil_frames) < 2:
             pil_frames = pil_frames + pil_frames[-1:]
 
-        messages = [{
-            "role": "user",
-            "content": [
-                {"type": "video", "video": pil_frames},
-                {"type": "text", "text": prompt},
-            ],
-        }]
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "video", "video": pil_frames},
+                    {"type": "text", "text": prompt},
+                ],
+            }
+        ]
 
         formatted = self._processor.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True,
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
         )
 
         # Disable thinking mode (Qwen3.5 appends <think>\n by default)
         if formatted.endswith("<think>\n"):
-            formatted = formatted[:-len("<think>\n")]
+            formatted = formatted[: -len("<think>\n")]
 
         inputs = self._call_processor(
-            text=[formatted], videos=[pil_frames],
+            text=[formatted],
+            videos=[pil_frames],
         )
 
         # Convert to MLX arrays for generate_step
         kwargs = {
             "input_ids": mx.array(np.asarray(inputs["input_ids"])),
-            "pixel_values": mx.array(np.asarray(
-                inputs.get("pixel_values_videos", inputs.get("pixel_values", np.array([])))
-            )),
+            "pixel_values": mx.array(
+                np.asarray(
+                    inputs.get("pixel_values_videos", inputs.get("pixel_values", np.array([])))
+                )
+            ),
             "mask": mx.array(np.asarray(inputs["attention_mask"])),
         }
         for key in ("video_grid_thw", "image_grid_thw", "second_per_grid_ts"):
@@ -693,7 +778,9 @@ class MLXBackend(BaseBackend):
 
         try:
             formatted = self._processor.apply_chat_template(
-                messages, tokenize=False, add_generation_prompt=True,
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
             )
         except (TypeError, ValueError, KeyError, AttributeError):
             formatted = None
@@ -701,20 +788,26 @@ class MLXBackend(BaseBackend):
         # Verify prompt text is actually included in the formatted output.
         # Some processors (InternVLChatProcessor) silently drop the prompt.
         if formatted is None or prompt[:20] not in formatted:
-            tokenizer = getattr(self._processor, 'tokenizer', self._processor)
+            tokenizer = getattr(self._processor, "tokenizer", self._processor)
             image_tokens = "<image>\n" * len(images)
             text_messages = [
                 {"role": "user", "content": f"{image_tokens}{prompt}"},
             ]
             try:
                 formatted = tokenizer.apply_chat_template(
-                    text_messages, tokenize=False, add_generation_prompt=True,
+                    text_messages,
+                    tokenize=False,
+                    add_generation_prompt=True,
                 )
             except Exception:
                 try:
                     from mlx_vlm.prompt_utils import apply_chat_template
+
                     formatted = apply_chat_template(
-                        self._processor, self._config, prompt, num_images=len(images),
+                        self._processor,
+                        self._config,
+                        prompt,
+                        num_images=len(images),
                     )
                 except ImportError:
                     # Last resort: plain text without template
@@ -722,10 +815,11 @@ class MLXBackend(BaseBackend):
 
         # Disable thinking mode (Qwen3.5 appends <think>\n by default)
         if formatted.endswith("<think>\n"):
-            formatted = formatted[:-len("<think>\n")]
+            formatted = formatted[: -len("<think>\n")]
 
         inputs = self._call_processor(
-            text=[formatted], images=images,
+            text=[formatted],
+            images=images,
         )
 
         # Convert to MLX arrays for generate_step
@@ -737,7 +831,7 @@ class MLXBackend(BaseBackend):
         # Get pixel_values: from processor output, or preprocess via image_processor
         if "pixel_values" in inputs:
             kwargs["pixel_values"] = mx.array(np.asarray(inputs["pixel_values"]))
-        elif hasattr(self._processor, 'image_processor'):
+        elif hasattr(self._processor, "image_processor"):
             # LLaVA-style: image_processor returns list of (C, H, W) arrays
             pv_list = self._processor.image_processor.preprocess(images)
             kwargs["pixel_values"] = mx.array(np.stack(pv_list))
@@ -785,7 +879,9 @@ class TransformersBackend(BaseBackend):
         t0 = time.monotonic()
         self._processor = AutoProcessor.from_pretrained(self.model_name)
         self._model = AutoModelForVision2Seq.from_pretrained(
-            self.model_name, torch_dtype=dtype, device_map=device,
+            self.model_name,
+            torch_dtype=dtype,
+            device_map=device,
         )
         self._device = device
         self._is_video_model = hasattr(self._model.config, "video_token_id")
@@ -793,8 +889,13 @@ class TransformersBackend(BaseBackend):
         logger.info("[Transformers] Model loaded in %.1fs", time.monotonic() - t0)
 
     def generate(
-        self, frames: np.ndarray, prompt: str, *,
-        max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
+        self,
+        frames: np.ndarray,
+        prompt: str,
+        *,
+        max_tokens: int = 512,
+        temperature: float = 0.0,
+        top_p: float = 1.0,
     ) -> GenerationResult:
         import torch
 
@@ -826,11 +927,17 @@ class TransformersBackend(BaseBackend):
         )
 
     def stream_generate(
-        self, frames: np.ndarray, prompt: str, *,
-        max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
+        self,
+        frames: np.ndarray,
+        prompt: str,
+        *,
+        max_tokens: int = 512,
+        temperature: float = 0.0,
+        top_p: float = 1.0,
     ) -> Generator[StreamChunk, None, None]:
-        from transformers import TextIteratorStreamer
         import threading
+
+        from transformers import TextIteratorStreamer
 
         inputs = self._prepare(frames, prompt)
 
@@ -873,12 +980,16 @@ class TransformersBackend(BaseBackend):
         messages[0]["content"].append({"type": "text", "text": prompt})
 
         text = self._processor.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True,
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
         )
 
         inputs = self._processor(
-            text=[text], images=images,
-            padding=True, return_tensors="pt",
+            text=[text],
+            images=images,
+            padding=True,
+            return_tensors="pt",
         )
 
         return {k: v.to(self._device) if hasattr(v, "to") else v for k, v in inputs.items()}
@@ -886,34 +997,39 @@ class TransformersBackend(BaseBackend):
     def _prepare_video(self, frames: np.ndarray, prompt: str) -> dict:
         """Video-capable model preparation using qwen_vl_utils."""
 
-        messages = [{
-            "role": "user",
-            "content": [
-                {"type": "video", "video": frames},
-                {"type": "text", "text": prompt},
-            ],
-        }]
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "video", "video": frames},
+                    {"type": "text", "text": prompt},
+                ],
+            }
+        ]
 
         text = self._processor.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True,
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
         )
 
         try:
             from qwen_vl_utils import process_vision_info
-            image_inputs, video_inputs, _ = process_vision_info(
-                messages, return_video_kwargs=True
-            )
+
+            image_inputs, video_inputs, _ = process_vision_info(messages, return_video_kwargs=True)
         except ImportError:
             video_inputs = [frames]
             image_inputs = None
 
         inputs = self._processor(
-            text=[text], images=image_inputs, videos=video_inputs,
-            padding=True, return_tensors="pt",
+            text=[text],
+            images=image_inputs,
+            videos=video_inputs,
+            padding=True,
+            return_tensors="pt",
         )
 
         return {k: v.to(self._device) if hasattr(v, "to") else v for k, v in inputs.items()}
-
 
 
 # ── Auto Backend Selection ───────────────────────────────────────────────────
@@ -960,7 +1076,10 @@ def auto_backend(
     cls = _BACKEND_MAP[chosen]
     logger.info(
         "Auto-selected backend: %s (device=%s, accelerator=%s, memory=%.1fGB)",
-        chosen, device_info.device_name, device_info.accelerator, device_info.memory_gb,
+        chosen,
+        device_info.device_name,
+        device_info.accelerator,
+        device_info.memory_gb,
     )
     return cls(model_name, device_info=device_info, adapter_path=adapter_path)
 
@@ -978,7 +1097,9 @@ def resolve_backend(config, *, backend_override: str | None = None) -> BaseBacke
     Returns:
         Configured (but not loaded) backend instance.
     """
-    base = auto_backend(config.model, backend=backend_override, adapter_path=getattr(config, 'adapter_path', None))
+    base = auto_backend(
+        config.model, backend=backend_override, adapter_path=getattr(config, "adapter_path", None)
+    )
 
     if base.backend_name != "mlx":
         return base
@@ -1010,10 +1131,13 @@ def resolve_backend(config, *, backend_override: str | None = None) -> BaseBacke
         from trio_core.token_compression import TokenCompressor
 
         compressor = TokenCompressor(
-            strategy="similarity", ratio=config.compress_ratio,
+            strategy="similarity",
+            ratio=config.compress_ratio,
         )
         return CompressedMLXBackend(
-            config.model, compressor, device_info=base.device_info,
+            config.model,
+            compressor,
+            device_info=base.device_info,
             adapter_path=base.adapter_path,
         )
 

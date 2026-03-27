@@ -38,13 +38,15 @@ def run_benchmark():
     from trio_core.counter import PeopleCounter
 
     gt_counts = load_ground_truth()
-    print(f"Ground truth: {len(gt_counts)} frames, range [{min(gt_counts)}-{max(gt_counts)}], mean {np.mean(gt_counts):.1f}")
+    print(
+        f"Ground truth: {len(gt_counts)} frames, range [{min(gt_counts)}-{max(gt_counts)}], mean {np.mean(gt_counts):.1f}"
+    )
 
     counter = PeopleCounter(model_path=MODEL_PATH, auto_calibrate=True)
 
     results = []
     total_time = 0
-    frame_files = sorted(FRAMES_DIR.glob("seq_*.jpg"))[:len(gt_counts)]
+    frame_files = sorted(FRAMES_DIR.glob("seq_*.jpg"))[: len(gt_counts)]
 
     print(f"Processing {len(frame_files)} frames...")
 
@@ -62,23 +64,27 @@ def run_benchmark():
         gt = gt_counts[i]
         predicted = result.by_class.get("person", 0)
 
-        results.append({
-            "frame": i + 1,
-            "gt": gt,
-            "predicted": int(predicted),
-            "error": int(predicted) - gt,
-            "abs_error": abs(int(predicted) - gt),
-            "latency_ms": round(elapsed, 1),
-            "total_in": int(result.total_in),
-            "total_out": int(result.total_out),
-            "unique_tracks": len(counter._seen_ids),
-        })
+        results.append(
+            {
+                "frame": i + 1,
+                "gt": gt,
+                "predicted": int(predicted),
+                "error": int(predicted) - gt,
+                "abs_error": abs(int(predicted) - gt),
+                "latency_ms": round(elapsed, 1),
+                "total_in": int(result.total_in),
+                "total_out": int(result.total_out),
+                "unique_tracks": len(counter._seen_ids),
+            }
+        )
 
         if (i + 1) % 200 == 0:
             running_mae = np.mean([r["abs_error"] for r in results])
-            print(f"  Frame {i+1}/{len(frame_files)} | MAE so far: {running_mae:.2f} | "
-                  f"Last: gt={gt} pred={predicted} | Tracks: {len(counter._seen_ids)} | "
-                  f"In: {result.total_in} Out: {result.total_out}")
+            print(
+                f"  Frame {i + 1}/{len(frame_files)} | MAE so far: {running_mae:.2f} | "
+                f"Last: gt={gt} pred={predicted} | Tracks: {len(counter._seen_ids)} | "
+                f"In: {result.total_in} Out: {result.total_out}"
+            )
 
     # Compute metrics
     gt_arr = np.array([r["gt"] for r in results])
@@ -87,7 +93,7 @@ def run_benchmark():
 
     mae = float(np.mean(np.abs(errors)))
     mape = float(np.mean(np.abs(errors) / np.maximum(gt_arr, 1)) * 100)
-    rmse = float(np.sqrt(np.mean(errors ** 2)))
+    rmse = float(np.sqrt(np.mean(errors**2)))
     total_gt = int(gt_arr.sum())
     total_pred = int(pred_arr.sum())
     total_accuracy = 1.0 - abs(total_gt - total_pred) / max(total_gt, 1)

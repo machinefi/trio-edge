@@ -8,7 +8,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-
 # ── Video Analyze (custom endpoint) ─────────────────────────────────────────
 
 
@@ -178,7 +177,9 @@ class WatchRequest(BaseModel):
     source: str = Field(..., description="RTSP URL or video source")
     conditions: list[WatchCondition] = Field(..., description="Conditions to monitor")
     fps: float = Field(1.0, description="Maximum check rate (frames per second)")
-    resolution: str = Field("672x448", description="Frame resolution WxH (e.g. '672x448', '1280x720')")
+    resolution: str = Field(
+        "672x448", description="Frame resolution WxH (e.g. '672x448', '1280x720')"
+    )
     stream: bool = Field(True, description="Return SSE stream (must be true)")
     camera_id: str = Field("", description="Camera ID for metric storage (optional)")
     camera_name: str = Field("", description="Camera display name (optional)")

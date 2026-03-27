@@ -12,18 +12,17 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import AsyncIterator
 
+import numpy as np
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-import numpy as np
-
 from trio_core.api.models import (
     AnalyzeFrameRequest,
     AnalyzeFrameResponse,
-    ChatCompletionChunk,
     ChatCompletionChoice,
+    ChatCompletionChunk,
     ChatCompletionRequest,
     ChatCompletionResponse,
     ChatMessage,
@@ -65,6 +64,7 @@ def _track_inference(latency_ms: float) -> None:
     global _total_inference_ms, _total_inferences
     _total_inferences += 1
     _total_inference_ms += latency_ms
+
 
 # ── Watch State ──────────────────────────────────────────────────────────────
 
@@ -112,11 +112,14 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error("Failed to load model %s: %s", config.model, e)
         raise
-    logger.info("Engine ready: backend=%s", _engine._backend.backend_name if _engine._backend else "none")
+    logger.info(
+        "Engine ready: backend=%s", _engine._backend.backend_name if _engine._backend else "none"
+    )
 
     # Console event store (optional — module removed in OSS cleanup)
     try:
         from .store import EventStore
+
         store = EventStore()
         await store.init()
         app.state.event_store = store
@@ -168,7 +171,10 @@ class _RequestIDMiddleware(BaseHTTPMiddleware):
         if content_length and int(content_length) > _MAX_BODY_BYTES:
             return JSONResponse(
                 status_code=413,
-                content={"error": "payload_too_large", "message": f"Request body exceeds {_MAX_BODY_BYTES // (1024*1024)}MB limit"},
+                content={
+                    "error": "payload_too_large",
+                    "message": f"Request body exceeds {_MAX_BODY_BYTES // (1024 * 1024)}MB limit",
+                },
             )
 
         request_id = request.headers.get("X-Request-ID", uuid.uuid4().hex[:12])
@@ -209,11 +215,19 @@ def create_app(config: EngineConfig | None = None, backend: str | None = None) -
         if isinstance(exc, MemoryError):
             return JSONResponse(
                 status_code=507,
-                content={"error": "out_of_memory", "message": "Not enough memory for this request. Try fewer frames or a smaller model.", "request_id": request_id},
+                content={
+                    "error": "out_of_memory",
+                    "message": "Not enough memory for this request. Try fewer frames or a smaller model.",
+                    "request_id": request_id,
+                },
             )
         return JSONResponse(
             status_code=500,
-            content={"error": "internal_error", "message": "An internal error occurred.", "request_id": request_id},
+            content={
+                "error": "internal_error",
+                "message": "An internal error occurred.",
+                "request_id": request_id,
+            },
         )
 
     app.add_middleware(_RequestIDMiddleware)
@@ -292,9 +306,7 @@ def _register_routes(app: FastAPI) -> None:
     @app.get("/v1/models", response_model=ModelListResponse)
     async def list_models():
         engine = get_engine()
-        return ModelListResponse(
-            data=[ModelInfo(id=engine.config.model)]
-        )
+        return ModelListResponse(data=[ModelInfo(id=engine.config.model)])
 
     @app.post("/v1/video/analyze")
     async def analyze_video(request: VideoAnalyzeRequest):
@@ -334,6 +346,7 @@ def _register_routes(app: FastAPI) -> None:
         engine = get_engine()
 
         import io
+
         import numpy as np
         from PIL import Image
 
@@ -379,21 +392,30 @@ def _register_routes(app: FastAPI) -> None:
         media, prompt = _extract_from_messages(request.messages)
 
         if not media:
-            raise HTTPException(400, "No visual content found in messages. Use content parts with type='image_url' or 'video'.")
+            raise HTTPException(
+                400,
+                "No visual content found in messages. Use content parts with type='image_url' or 'video'.",
+            )
 
         max_tokens = request.max_tokens or engine.config.max_tokens
-        temperature = request.temperature if request.temperature is not None else engine.config.temperature
+        temperature = (
+            request.temperature if request.temperature is not None else engine.config.temperature
+        )
 
         # Resolve media source: base64 data URI → temp file, or path/URL as-is
         source, temp_path = _resolve_media(media[0])
 
         if request.stream:
+
             async def _stream_with_cleanup():
                 try:
-                    async for chunk in _stream_chat_completion(engine, source, prompt, request, max_tokens, temperature):
+                    async for chunk in _stream_chat_completion(
+                        engine, source, prompt, request, max_tokens, temperature
+                    ):
                         yield chunk
                 finally:
                     _cleanup_temp(temp_path)
+
             return StreamingResponse(
                 _stream_with_cleanup(),
                 media_type="text/event-stream",
@@ -415,16 +437,17 @@ def _register_routes(app: FastAPI) -> None:
 
         return ChatCompletionResponse(
             model=engine.config.model,
-            choices=[ChatCompletionChoice(
-                message={"role": "assistant", "content": result.text},
-            )],
+            choices=[
+                ChatCompletionChoice(
+                    message={"role": "assistant", "content": result.text},
+                )
+            ],
             usage=Usage(
                 prompt_tokens=result.metrics.prompt_tokens,
                 completion_tokens=result.metrics.completion_tokens,
                 total_tokens=result.metrics.prompt_tokens + result.metrics.completion_tokens,
             ),
         )
-
 
     # ── Watch API (/v1/watch) ──────────────────────────────────────────────
 
@@ -514,6 +537,7 @@ def _register_routes(app: FastAPI) -> None:
         metal_mb = 0.0
         try:
             import mlx.core as mx
+
             metal_mb = mx.metal.get_active_memory() / (1024 * 1024)
         except Exception:
             pass
@@ -606,7 +630,20 @@ def _register_routes(app: FastAPI) -> None:
 
     # Optional console API routes (available when console extras are installed)
     try:
-        from .routers import events, cameras, chat, alerts, reports, metrics, analytics, report_export, insights, auto_alerts, auth
+        from .routers import (
+            alerts,
+            analytics,
+            auth,
+            auto_alerts,
+            cameras,
+            chat,
+            events,
+            insights,
+            metrics,
+            report_export,
+            reports,
+        )
+
         app.include_router(auth.router)
         app.include_router(events.router)
         app.include_router(cameras.router)
@@ -665,11 +702,31 @@ def _detect_triggered(answer: str) -> bool | None:
         return False
     # Check for negative patterns in first sentence
     first_sentence = lower.split(".")[0]
-    neg_patterns = ("there is no", "there are no", "there isn't", "there aren't",
-                    "i don't see", "i do not see", "no ", "not ", "cannot see",
-                    "can't see", "nothing", "nobody", "no one")
-    pos_patterns = ("there is a", "there are", "i see a", "i can see",
-                    "someone", "a person", "a package", "a delivery")
+    neg_patterns = (
+        "there is no",
+        "there are no",
+        "there isn't",
+        "there aren't",
+        "i don't see",
+        "i do not see",
+        "no ",
+        "not ",
+        "cannot see",
+        "can't see",
+        "nothing",
+        "nobody",
+        "no one",
+    )
+    pos_patterns = (
+        "there is a",
+        "there are",
+        "i see a",
+        "i can see",
+        "someone",
+        "a person",
+        "a package",
+        "a delivery",
+    )
     for pat in neg_patterns:
         if pat in first_sentence:
             return False
@@ -730,8 +787,12 @@ def _resolve_media(source: str) -> tuple[str, str | None]:
         # Parse data URI: data:<mime>;base64,<data>
         header, data = source.split(",", 1)
         mime = header.split(":")[1].split(";")[0] if ":" in header else ""
-        ext = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
-               "video/mp4": ".mp4"}.get(mime, ".bin")
+        ext = {
+            "image/jpeg": ".jpg",
+            "image/png": ".png",
+            "image/webp": ".webp",
+            "video/mp4": ".mp4",
+        }.get(mime, ".bin")
 
         tmp = tempfile.NamedTemporaryFile(suffix=ext, delete=False)
         tmp.write(base64.b64decode(data))
@@ -747,6 +808,7 @@ def _cleanup_temp(temp_path: str | None) -> None:
     if temp_path is None:
         return
     import os
+
     try:
         os.unlink(temp_path)
     except OSError:
@@ -829,12 +891,19 @@ def _start_ffmpeg(effective_url: str, fps: float, frame_w: int, frame_h: int):
     import subprocess
 
     cmd = [
-        "ffmpeg", "-v", "quiet",
-        "-rtsp_transport", "tcp",
-        "-i", effective_url,
-        "-vf", f"fps={fps},scale={frame_w}:{frame_h}",
-        "-f", "rawvideo",
-        "-pix_fmt", "rgb24",
+        "ffmpeg",
+        "-v",
+        "quiet",
+        "-rtsp_transport",
+        "tcp",
+        "-i",
+        effective_url,
+        "-vf",
+        f"fps={fps},scale={frame_w}:{frame_h}",
+        "-f",
+        "rawvideo",
+        "-pix_fmt",
+        "rgb24",
         "-",
     ]
     return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -861,7 +930,9 @@ def _kill_ffmpeg(proc) -> None:
 
 
 async def _watch_sse_stream(
-    engine: TrioCore, ws: _WatchState, store=None,
+    engine: TrioCore,
+    ws: _WatchState,
+    store=None,
 ) -> AsyncIterator[str]:
     """Core watch loop: RTSP → frames → motion gate → inference + counting → SSE events.
 
@@ -873,7 +944,6 @@ async def _watch_sse_stream(
     """
     import base64
     import io
-    import subprocess
 
     from PIL import Image
 
@@ -890,6 +960,7 @@ async def _watch_sse_stream(
     if ws.enable_counting:
         try:
             from trio_core.counter import PeopleCounter
+
             counter = PeopleCounter()  # uses new defaults: tiled=True, c=0.25, f=1.6
             logger.info("Watch %s: people counting enabled (tiled+Kalman)", watch_id)
         except Exception as e:
@@ -921,16 +992,21 @@ async def _watch_sse_stream(
         _watches.pop(watch_id, None)
         return
 
-    model_name = engine.config.model.split("/")[-1] if "/" in engine.config.model else engine.config.model
+    model_name = (
+        engine.config.model.split("/")[-1] if "/" in engine.config.model else engine.config.model
+    )
 
     ws.state = "running"
     ws.resolution = f"{frame_w}x{frame_h}"
-    yield _sse_event("status", {
-        "watch_id": watch_id,
-        "state": "running",
-        "resolution": ws.resolution,
-        "model": model_name,
-    })
+    yield _sse_event(
+        "status",
+        {
+            "watch_id": watch_id,
+            "state": "running",
+            "resolution": ws.resolution,
+            "model": model_name,
+        },
+    )
 
     reconnect_count = 0
     last_heartbeat = _time.monotonic()
@@ -948,26 +1024,32 @@ async def _watch_sse_stream(
             except asyncio.TimeoutError:
                 # Read timed out — emit heartbeat and retry
                 last_heartbeat = _time.monotonic()
-                yield _sse_event("heartbeat", {
-                    "watch_id": watch_id,
-                    "ts": _iso_now(),
-                    "uptime_s": int(_time.time() - ws.started_at),
-                    "checks": ws.checks,
-                    "alerts": ws.alerts,
-                })
+                yield _sse_event(
+                    "heartbeat",
+                    {
+                        "watch_id": watch_id,
+                        "ts": _iso_now(),
+                        "uptime_s": int(_time.time() - ws.started_at),
+                        "checks": ws.checks,
+                        "alerts": ws.alerts,
+                    },
+                )
                 continue
 
             # Emit heartbeat if enough time passed during normal operation
             now = _time.monotonic()
             if now - last_heartbeat >= _WATCH_HEARTBEAT_INTERVAL:
                 last_heartbeat = now
-                yield _sse_event("heartbeat", {
-                    "watch_id": watch_id,
-                    "ts": _iso_now(),
-                    "uptime_s": int(_time.time() - ws.started_at),
-                    "checks": ws.checks,
-                    "alerts": ws.alerts,
-                })
+                yield _sse_event(
+                    "heartbeat",
+                    {
+                        "watch_id": watch_id,
+                        "ts": _iso_now(),
+                        "uptime_s": int(_time.time() - ws.started_at),
+                        "checks": ws.checks,
+                        "alerts": ws.alerts,
+                    },
+                )
 
             if len(raw) < frame_bytes:
                 if ws.stop_event.is_set():
@@ -975,14 +1057,21 @@ async def _watch_sse_stream(
                 # ── Auto-reconnect ──
                 if reconnect_count < _WATCH_MAX_RECONNECTS:
                     reconnect_count += 1
-                    logger.warning("Watch %s: RTSP stream lost, reconnecting (%d/%d)...",
-                                   watch_id, reconnect_count, _WATCH_MAX_RECONNECTS)
-                    yield _sse_event("status", {
-                        "watch_id": watch_id,
-                        "state": "reconnecting",
-                        "attempt": reconnect_count,
-                        "max_attempts": _WATCH_MAX_RECONNECTS,
-                    })
+                    logger.warning(
+                        "Watch %s: RTSP stream lost, reconnecting (%d/%d)...",
+                        watch_id,
+                        reconnect_count,
+                        _WATCH_MAX_RECONNECTS,
+                    )
+                    yield _sse_event(
+                        "status",
+                        {
+                            "watch_id": watch_id,
+                            "state": "reconnecting",
+                            "attempt": reconnect_count,
+                            "max_attempts": _WATCH_MAX_RECONNECTS,
+                        },
+                    )
                     # Kill old ffmpeg — terminate but don't close pipes yet,
                     # so that if reconnect fails, the retry loop reads EOF
                     # (b"") instead of raising on closed pipe.
@@ -1010,12 +1099,15 @@ async def _watch_sse_stream(
                                 pass
                         motion_gate.reset()
                         ws.state = "running"
-                        yield _sse_event("status", {
-                            "watch_id": watch_id,
-                            "state": "running",
-                            "resolution": ws.resolution,
-                            "reconnected": True,
-                        })
+                        yield _sse_event(
+                            "status",
+                            {
+                                "watch_id": watch_id,
+                                "state": "running",
+                                "resolution": ws.resolution,
+                                "reconnected": True,
+                            },
+                        )
                         continue
                     except Exception as e:
                         logger.error("Watch %s: reconnect failed: %s", watch_id, e)
@@ -1042,17 +1134,19 @@ async def _watch_sse_stream(
                         count_result = await loop.run_in_executor(None, counter.process, frame_bgr)
                         if store and ws.camera_id:
                             ts_now = _iso_now()
-                            await store.insert_metric({
-                                "timestamp": ts_now,
-                                "camera_id": ws.camera_id,
-                                "metric_type": "people_count",
-                                "value": count_result.by_class.get("person", 0),
-                                "confidence": count_result.kalman_confidence,
-                                "metadata": {
-                                    "raw": count_result.raw_count,
-                                    "velocity": count_result.velocity,
-                                },
-                            })
+                            await store.insert_metric(
+                                {
+                                    "timestamp": ts_now,
+                                    "camera_id": ws.camera_id,
+                                    "metric_type": "people_count",
+                                    "value": count_result.by_class.get("person", 0),
+                                    "confidence": count_result.kalman_confidence,
+                                    "metadata": {
+                                        "raw": count_result.raw_count,
+                                        "velocity": count_result.velocity,
+                                    },
+                                }
+                            )
                     except Exception as e:
                         logger.debug("Watch %s: counting error: %s", watch_id, e)
                 continue
@@ -1076,31 +1170,37 @@ async def _watch_sse_stream(
                     # Store metrics to DB
                     if store and ws.camera_id:
                         ts_now = _iso_now()
-                        await store.insert_metric({
-                            "timestamp": ts_now,
-                            "camera_id": ws.camera_id,
-                            "metric_type": "people_count",
-                            "value": person_count,
-                            "confidence": count_result.kalman_confidence,
-                            "metadata": {
-                                "raw": count_result.raw_count,
-                                "velocity": count_result.velocity,
-                            },
-                        })
+                        await store.insert_metric(
+                            {
+                                "timestamp": ts_now,
+                                "camera_id": ws.camera_id,
+                                "metric_type": "people_count",
+                                "value": person_count,
+                                "confidence": count_result.kalman_confidence,
+                                "metadata": {
+                                    "raw": count_result.raw_count,
+                                    "velocity": count_result.velocity,
+                                },
+                            }
+                        )
                         if count_result.people_in > 0:
-                            await store.insert_metric({
-                                "timestamp": ts_now,
-                                "camera_id": ws.camera_id,
-                                "metric_type": "people_in",
-                                "value": count_result.people_in,
-                            })
+                            await store.insert_metric(
+                                {
+                                    "timestamp": ts_now,
+                                    "camera_id": ws.camera_id,
+                                    "metric_type": "people_in",
+                                    "value": count_result.people_in,
+                                }
+                            )
                         if count_result.people_out > 0:
-                            await store.insert_metric({
-                                "timestamp": ts_now,
-                                "camera_id": ws.camera_id,
-                                "metric_type": "people_out",
-                                "value": count_result.people_out,
-                            })
+                            await store.insert_metric(
+                                {
+                                    "timestamp": ts_now,
+                                    "camera_id": ws.camera_id,
+                                    "metric_type": "people_out",
+                                    "value": count_result.people_out,
+                                }
+                            )
                 except Exception as e:
                     logger.warning("Watch %s: counting error: %s", watch_id, e)
 
@@ -1118,11 +1218,13 @@ async def _watch_sse_stream(
                 answer_text = _strip_think_tags(last_result.text)
                 triggered = _detect_triggered(answer_text)
 
-                condition_results.append(WatchConditionResult(
-                    id=cond.id,
-                    triggered=triggered is True,
-                    answer=answer_text,
-                ))
+                condition_results.append(
+                    WatchConditionResult(
+                        id=cond.id,
+                        triggered=triggered is True,
+                        answer=answer_text,
+                    )
+                )
                 if triggered:
                     any_triggered = True
 
@@ -1201,6 +1303,7 @@ def _sse_event(event_type: str, data: dict) -> str:
 def _iso_now() -> str:
     """Return current time in ISO 8601 format."""
     from datetime import datetime, timezone
+
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
@@ -1237,10 +1340,12 @@ async def _stream_chat_completion(
                 final = ChatCompletionChunk(
                     id=response_id,
                     model=model,
-                    choices=[StreamChoice(
-                        delta=DeltaContent(content=""),
-                        finish_reason="stop",
-                    )],
+                    choices=[
+                        StreamChoice(
+                            delta=DeltaContent(content=""),
+                            finish_reason="stop",
+                        )
+                    ],
                 )
                 yield f"data: {final.model_dump_json(exclude_none=True)}\n\n"
                 break
@@ -1257,10 +1362,12 @@ async def _stream_chat_completion(
         error_chunk = ChatCompletionChunk(
             id=response_id,
             model=model,
-            choices=[StreamChoice(
-                delta=DeltaContent(content=""),
-                finish_reason="error",
-            )],
+            choices=[
+                StreamChoice(
+                    delta=DeltaContent(content=""),
+                    finish_reason="error",
+                )
+            ],
         )
         yield f"data: {error_chunk.model_dump_json(exclude_none=True)}\n\n"
 

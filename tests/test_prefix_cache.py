@@ -1,8 +1,5 @@
 """Tests for prefix KV cache reuse in generate.py."""
 
-import hashlib
-
-import numpy as np
 import pytest
 
 mx = pytest.importorskip("mlx.core")
@@ -12,9 +9,11 @@ mx = pytest.importorskip("mlx.core")
 # _find_visual_boundary
 # ---------------------------------------------------------------------------
 
+
 class TestFindVisualBoundary:
     def _call(self, ids_list, img_id=100, vid_id=101):
         from unittest.mock import MagicMock
+
         from trio_core.generate import _find_visual_boundary
 
         model = MagicMock()
@@ -40,6 +39,7 @@ class TestFindVisualBoundary:
 
     def test_uses_image_token_index_fallback(self):
         from unittest.mock import MagicMock
+
         from trio_core.generate import _find_visual_boundary
 
         model = MagicMock()
@@ -55,10 +55,12 @@ class TestFindVisualBoundary:
 # PromptCache prefix methods
 # ---------------------------------------------------------------------------
 
+
 class TestPromptCachePrefixHit:
     def _make_cache(self):
         """Create a PromptCache with a mock model."""
-        from unittest.mock import MagicMock, PropertyMock
+        from unittest.mock import MagicMock
+
         from trio_core.generate import PromptCache
 
         model = MagicMock()
@@ -116,8 +118,10 @@ class TestPromptCachePrefixHit:
 
 class TestPromptCachePrefixRestore:
     def test_restore_creates_cache_with_prefix_kv(self):
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import MagicMock
+
         from mlx_lm.models.cache import KVCache
+
         from trio_core.generate import PromptCache
 
         model = MagicMock()
@@ -160,6 +164,7 @@ class TestPromptCachePrefixRestore:
 
     def test_save_prefix_zero_len_is_noop(self):
         from unittest.mock import MagicMock
+
         from trio_core.generate import PromptCache
 
         model = MagicMock()
@@ -174,9 +179,11 @@ class TestPromptCachePrefixRestore:
 # Visual similarity KV reuse
 # ---------------------------------------------------------------------------
 
+
 class TestVisualSimilarity:
     def _make_cache(self):
         from unittest.mock import MagicMock
+
         from trio_core.generate import PromptCache
 
         model = MagicMock()
@@ -321,7 +328,6 @@ class TestVisualSimilarity:
         # 1.0 >= 0.0 is True, but the caller gates with > 0 check
         assert cache.check_visual_hit(embeds, ids, threshold=0.0) is True
 
-
     def test_arrays_cache_deltanet_works(self):
         """DeltaNet ArraysCache (no offset/trim) should still support visual similarity."""
         cache = self._make_cache()
@@ -342,10 +348,12 @@ class TestVisualSimilarity:
 class TestVisualSimilarityConfig:
     def test_config_default_disabled(self):
         from trio_core.config import EngineConfig
+
         config = EngineConfig()
         assert config.visual_similarity_threshold == 0.0
 
     def test_config_custom(self):
         from trio_core.config import EngineConfig
+
         config = EngineConfig(visual_similarity_threshold=0.95)
         assert config.visual_similarity_threshold == 0.95

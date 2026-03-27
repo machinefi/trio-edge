@@ -39,6 +39,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class BenchmarkSample:
     """A single benchmark question."""
+
     id: str
     image: np.ndarray  # (H, W, 3) uint8 or (C, H, W) float32
     question: str
@@ -50,6 +51,7 @@ class BenchmarkSample:
 @dataclass
 class PredictionResult:
     """Result of running one sample."""
+
     id: str
     question: str
     answer_gt: str
@@ -58,18 +60,19 @@ class PredictionResult:
     latency_ms: float = 0.0
     prompt_tokens: int = 0
     # Performance metrics (from InferenceMetrics)
-    prompt_tps: float = 0.0        # prefill tokens/sec
-    generation_tps: float = 0.0    # decode tokens/sec
-    prefill_ms: float = 0.0        # prefill latency
-    decode_ms: float = 0.0         # decode latency
-    peak_memory_gb: float = 0.0    # peak metal memory
-    completion_tokens: int = 0     # output token count
+    prompt_tps: float = 0.0  # prefill tokens/sec
+    generation_tps: float = 0.0  # decode tokens/sec
+    prefill_ms: float = 0.0  # prefill latency
+    decode_ms: float = 0.0  # decode latency
+    peak_memory_gb: float = 0.0  # peak metal memory
+    completion_tokens: int = 0  # output token count
     metadata: dict = field(default_factory=dict)
 
 
 @dataclass
 class BenchmarkResult:
     """Aggregated benchmark results."""
+
     name: str
     n_samples: int
     predictions: list[PredictionResult] = field(default_factory=list)
@@ -178,20 +181,18 @@ class BenchmarkResult:
     def per_category_accuracy(self) -> dict[str, tuple[float, int]]:
         """Per-category accuracy: {category: (accuracy, count)}."""
         from collections import defaultdict
+
         cats: dict[str, list[bool]] = defaultdict(list)
         for p in self.predictions:
             cat = p.metadata.get("category", "") if p.metadata else ""
             cats[cat].append(p.correct)
-        return {
-            cat: (sum(vals) / len(vals), len(vals))
-            for cat, vals in sorted(cats.items())
-        }
+        return {cat: (sum(vals) / len(vals), len(vals)) for cat, vals in sorted(cats.items())}
 
     def print(self) -> None:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"  {self.name}")
         print(f"  Samples: {self.n_samples}  |  Time: {self.total_time_s:.1f}s")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         print(f"  Accuracy:         {self.accuracy:.1%}")
         print(f"  F1:               {self.f1:.3f}")
         print(f"  Recall:           {self.recall:.1%}")
@@ -215,7 +216,7 @@ class BenchmarkResult:
             for cat, (acc, cnt) in cat_acc.items():
                 if cat:
                     print(f"    {cat:<30s} {acc:.1%}  (n={cnt})")
-        print(f"{'='*60}\n")
+        print(f"{'=' * 60}\n")
 
     def save(self, path: str) -> None:
         data = {
@@ -264,11 +265,11 @@ class BenchmarkResult:
         a = json.loads(Path(path_a).read_text())
         b = json.loads(Path(path_b).read_text())
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print("  BENCHMARK COMPARISON")
         print(f"  A: {a['name']}  ({a.get('metadata', {}).get('backend', '?')})")
         print(f"  B: {b['name']}  ({b.get('metadata', {}).get('backend', '?')})")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         metrics = [
             ("accuracy", "{:.1%}"),
@@ -280,7 +281,7 @@ class BenchmarkResult:
 
         fmt = "  {:<20s} {:>12s} {:>12s} {:>12s}"
         print(fmt.format("Metric", "A", "B", "Delta"))
-        print(f"  {'-'*56}")
+        print(f"  {'-' * 56}")
 
         for key, vfmt in metrics:
             va = a.get(key, 0)
@@ -288,14 +289,16 @@ class BenchmarkResult:
             if va > 0:
                 delta = ((vb - va) / va) * 100
                 sign = "+" if delta > 0 else ""
-                print(fmt.format(
-                    key,
-                    vfmt.format(va),
-                    vfmt.format(vb),
-                    f"{sign}{delta:.1f}%",
-                ))
+                print(
+                    fmt.format(
+                        key,
+                        vfmt.format(va),
+                        vfmt.format(vb),
+                        f"{sign}{delta:.1f}%",
+                    )
+                )
 
-        print(f"{'='*60}\n")
+        print(f"{'=' * 60}\n")
 
 
 # ── Benchmark Definitions ──────────────────────────────────────────────────
@@ -306,8 +309,7 @@ class Benchmark(ABC):
 
     @property
     @abstractmethod
-    def name(self) -> str:
-        ...
+    def name(self) -> str: ...
 
     @abstractmethod
     def load(self) -> list[BenchmarkSample]:
@@ -322,6 +324,7 @@ class Benchmark(ABC):
     def _normalize(text: str) -> str:
         """Normalize text for yes/no comparison."""
         import re
+
         # Strip <think>...</think> blocks (Qwen3.5 thinking mode)
         text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
         # Take only first line to avoid hallucinated continuations
@@ -334,11 +337,27 @@ class Benchmark(ABC):
         if text.startswith("no"):
             return "no"
         # Handle indirect negation: "There is no...", "I don't see..."
-        neg_patterns = ["there is no", "there are no", "there isn't", "there aren't",
-                        "i don't see", "i do not see", "no,", "not present",
-                        "no existence", "does not", "doesn't", "cannot see",
-                        "can't see", "not visible", "is not", "are not",
-                        "without any", "no sign of", "absent"]
+        neg_patterns = [
+            "there is no",
+            "there are no",
+            "there isn't",
+            "there aren't",
+            "i don't see",
+            "i do not see",
+            "no,",
+            "not present",
+            "no existence",
+            "does not",
+            "doesn't",
+            "cannot see",
+            "can't see",
+            "not visible",
+            "is not",
+            "are not",
+            "without any",
+            "no sign of",
+            "absent",
+        ]
         for pat in neg_patterns:
             if pat in text:
                 return "no"
@@ -346,12 +365,24 @@ class Benchmark(ABC):
         if "yes" in text:
             return "yes"
         # Handle affirmative descriptions: "The image shows...", "There is a..."
-        aff_patterns = ["there is a", "there are", "the image shows",
-                        "the image features", "the image depicts",
-                        "can be seen", "is visible", "are visible",
-                        "is present", "are present", "i can see",
-                        "shows a", "depicts a", "features a",
-                        "contains a", "includes a"]
+        aff_patterns = [
+            "there is a",
+            "there are",
+            "the image shows",
+            "the image features",
+            "the image depicts",
+            "can be seen",
+            "is visible",
+            "are visible",
+            "is present",
+            "are present",
+            "i can see",
+            "shows a",
+            "depicts a",
+            "features a",
+            "contains a",
+            "includes a",
+        ]
         for pat in aff_patterns:
             if pat in text:
                 return "yes"
@@ -388,9 +419,7 @@ class POPEBenchmark(Benchmark):
         try:
             from datasets import load_dataset
         except ImportError:
-            raise ImportError(
-                "Install 'datasets' and 'Pillow': pip install datasets Pillow"
-            )
+            raise ImportError("Install 'datasets' and 'Pillow': pip install datasets Pillow")
 
         logger.info("Loading POPE dataset (split=%s)...", self.split)
 
@@ -413,13 +442,15 @@ class POPEBenchmark(Benchmark):
             frames = img.transpose(2, 0, 1).astype(np.float32) / 255.0
             frames = frames[np.newaxis]  # (1, 3, H, W)
 
-            samples.append(BenchmarkSample(
-                id=str(item.get("question_id", i)),
-                image=frames,
-                question=item["question"],
-                answer=item["answer"].lower(),
-                category=item.get("category", self.split),
-            ))
+            samples.append(
+                BenchmarkSample(
+                    id=str(item.get("question_id", i)),
+                    image=frames,
+                    question=item["question"],
+                    answer=item["answer"].lower(),
+                    category=item.get("category", self.split),
+                )
+            )
 
         logger.info("Loaded %d POPE samples", len(samples))
         return samples
@@ -471,13 +502,15 @@ class TextVQABenchmark(Benchmark):
             else:
                 answer = str(answers)
 
-            samples.append(BenchmarkSample(
-                id=str(item.get("question_id", i)),
-                image=frames,
-                question=item["question"],
-                answer=answer,
-                category="textvqa",
-            ))
+            samples.append(
+                BenchmarkSample(
+                    id=str(item.get("question_id", i)),
+                    image=frames,
+                    question=item["question"],
+                    answer=answer,
+                    category="textvqa",
+                )
+            )
 
         logger.info("Loaded %d TextVQA samples", len(samples))
         return samples
@@ -557,13 +590,15 @@ class GQABenchmark(Benchmark):
             frames = img.transpose(2, 0, 1).astype(np.float32) / 255.0
             frames = frames[np.newaxis]
 
-            samples.append(BenchmarkSample(
-                id=str(item["id"]),
-                image=frames,
-                question=item["question"],
-                answer=item["answer"].lower(),
-                category=item.get("types", {}).get("structural", ""),
-            ))
+            samples.append(
+                BenchmarkSample(
+                    id=str(item["id"]),
+                    image=frames,
+                    question=item["question"],
+                    answer=item["answer"].lower(),
+                    category=item.get("types", {}).get("structural", ""),
+                )
+            )
 
         logger.info("Loaded %d GQA samples", len(samples))
         return samples
@@ -579,7 +614,7 @@ class GQABenchmark(Benchmark):
         if pred.startswith(gt):
             return True
         # GT appears as a word in prediction
-        if re.search(r'\b' + re.escape(gt) + r'\b', pred):
+        if re.search(r"\b" + re.escape(gt) + r"\b", pred):
             return True
         return False
 
@@ -644,14 +679,16 @@ class MMBenchBenchmark(Benchmark):
             question = f"{hint_text}{item['question']}\n{options_text}\nAnswer with the option letter only."
             answer = item["answer"]
 
-            samples.append(BenchmarkSample(
-                id=str(item.get("index", i)),
-                image=frames,
-                question=question,
-                answer=answer,
-                category=item.get("category", ""),
-                metadata={"l2_category": item.get("l2-category", "")},
-            ))
+            samples.append(
+                BenchmarkSample(
+                    id=str(item.get("index", i)),
+                    image=frames,
+                    question=question,
+                    answer=answer,
+                    category=item.get("category", ""),
+                    metadata={"l2_category": item.get("l2-category", "")},
+                )
+            )
 
         logger.info("Loaded %d MMBench samples", len(samples))
         return samples
@@ -668,7 +705,7 @@ class MMBenchBenchmark(Benchmark):
         if pred and pred[0] == gt:
             return True
         # Look for pattern like "A." or "(A)" in prediction
-        match = re.match(r'^([A-E])[.\s)\]]', pred)
+        match = re.match(r"^([A-E])[.\s)\]]", pred)
         if match and match.group(1) == gt:
             return True
         return False
@@ -692,7 +729,12 @@ class MVBenchBenchmark(Benchmark):
         "action_sequence": ("action_sequence.json", "star/Charades_v1_480", "video", True),
         "action_prediction": ("action_prediction.json", "star/Charades_v1_480", "video", True),
         "action_antonym": ("action_antonym.json", "ssv2_video", "video", False),
-        "fine_grained_action": ("fine_grained_action.json", "Moments_in_Time_Raw/videos", "video", False),
+        "fine_grained_action": (
+            "fine_grained_action.json",
+            "Moments_in_Time_Raw/videos",
+            "video",
+            False,
+        ),
         "unexpected_action": ("unexpected_action.json", "FunQA_test/test", "video", False),
         "object_existence": ("object_existence.json", "clevrer/video_validation", "video", False),
         "object_interaction": ("object_interaction.json", "star/Charades_v1_480", "video", True),
@@ -708,13 +750,23 @@ class MVBenchBenchmark(Benchmark):
         "character_order": ("character_order.json", "perception/videos", "video", False),
         "egocentric_navigation": ("egocentric_navigation.json", "vlnqa", "video", False),
         "episodic_reasoning": ("episodic_reasoning.json", "tvqa/frames_fps3_hq", "frame", True),
-        "counterfactual_inference": ("counterfactual_inference.json", "clevrer/video_validation", "video", False),
+        "counterfactual_inference": (
+            "counterfactual_inference.json",
+            "clevrer/video_validation",
+            "video",
+            False,
+        ),
     }
 
     # Tasks grouped by video source for selective download
     VIDEO_SOURCES = {
-        "clevrer": ["object_existence", "moving_direction", "moving_count",
-                     "moving_attribute", "counterfactual_inference"],
+        "clevrer": [
+            "object_existence",
+            "moving_direction",
+            "moving_count",
+            "moving_attribute",
+            "counterfactual_inference",
+        ],
         "star": ["action_sequence", "action_prediction", "object_interaction"],
         "perception": ["object_shuffle", "action_count", "state_change", "character_order"],
         "scene_qa": ["scene_transition"],
@@ -770,7 +822,6 @@ class MVBenchBenchmark(Benchmark):
         except ImportError:
             raise ImportError("Install 'huggingface_hub': pip install huggingface_hub")
 
-
         tasks_to_run = self.tasks or list(self.TASK_CONFIG.keys())
         # Filter to tasks with valid config
         tasks_to_run = [t for t in tasks_to_run if t in self.TASK_CONFIG]
@@ -799,7 +850,9 @@ class MVBenchBenchmark(Benchmark):
                 video_path = self.video_dir / video_subdir / video_name
 
                 # Try with .mp4 extension if not found
-                if not video_path.exists() and not video_name.endswith((".mp4", ".avi", ".webm", ".mkv")):
+                if not video_path.exists() and not video_name.endswith(
+                    (".mp4", ".avi", ".webm", ".mkv")
+                ):
                     video_path = self.video_dir / video_subdir / f"{video_name}.mp4"
 
                 if not video_path.exists():
@@ -812,9 +865,7 @@ class MVBenchBenchmark(Benchmark):
                 if data_type == "frame":
                     frames = self._load_frame_sequence(video_path, start, end)
                 else:
-                    frames = self._extract_video_frames(
-                        str(video_path), start, end
-                    )
+                    frames = self._extract_video_frames(str(video_path), start, end)
 
                 if frames is None:
                     skipped += 1
@@ -838,17 +889,19 @@ class MVBenchBenchmark(Benchmark):
                         answer_letter = chr(ord("A") + i)
                         break
 
-                all_samples.append(BenchmarkSample(
-                    id=f"{task_name}_{task_samples}",
-                    image=frames,
-                    question=question,
-                    answer=answer_letter,
-                    category=task_name,
-                    metadata={
-                        "answer_text": answer_text,
-                        "video": video_name,
-                    },
-                ))
+                all_samples.append(
+                    BenchmarkSample(
+                        id=f"{task_name}_{task_samples}",
+                        image=frames,
+                        question=question,
+                        answer=answer_letter,
+                        category=task_name,
+                        metadata={
+                            "answer_text": answer_text,
+                            "video": video_name,
+                        },
+                    )
+                )
                 task_samples += 1
 
             logger.info("Loaded %d samples for task '%s'", task_samples, task_name)
@@ -857,7 +910,8 @@ class MVBenchBenchmark(Benchmark):
             logger.warning(
                 "Skipped %d samples (videos not found in %s). "
                 "Download videos with MVBenchBenchmark.download_videos().",
-                skipped, self.video_dir,
+                skipped,
+                self.video_dir,
             )
 
         logger.info("Loaded %d total MVBench samples", len(all_samples))
@@ -968,7 +1022,7 @@ class MVBenchBenchmark(Benchmark):
         if pred and pred[0] == gt:
             return True
         # Pattern like "A." or "(A)"
-        match = re.match(r'^([A-Z])[.\s)\]]', pred)
+        match = re.match(r"^([A-Z])[.\s)\]]", pred)
         if match and match.group(1) == gt:
             return True
         # Answer text match as fallback
@@ -1063,13 +1117,21 @@ class SurveillanceVQABenchmark(Benchmark):
 
     # QA types for abnormal clips
     ABNORMAL_QA_TYPES = [
-        "detection_qa_pairs", "classification_qa_pairs", "subject_qa_pairs",
-        "description_qa_pairs", "cause_qa_pairs", "result_qa_pairs",
+        "detection_qa_pairs",
+        "classification_qa_pairs",
+        "subject_qa_pairs",
+        "description_qa_pairs",
+        "cause_qa_pairs",
+        "result_qa_pairs",
     ]
     # QA types for normal clips
     NORMAL_QA_TYPES = [
-        "summary_qa_pairs", "generic_qa_pairs", "temporal_qa_pairs",
-        "spatial_qa_pairs", "reasoning_qa_pairs", "short_temporal_qa_pairs",
+        "summary_qa_pairs",
+        "generic_qa_pairs",
+        "temporal_qa_pairs",
+        "spatial_qa_pairs",
+        "reasoning_qa_pairs",
+        "short_temporal_qa_pairs",
     ]
 
     # Per-category prompt suffixes to constrain model output format
@@ -1147,7 +1209,11 @@ class SurveillanceVQABenchmark(Benchmark):
         candidates = [
             self.data_dir / f"{source}_qwen_category.json",
             self.data_dir / "output" / f"{source}_qwen_category.json",
-            self.data_dir / "github" / "6_find_normal_abnormal" / "output" / f"{source}_qwen_category.json",
+            self.data_dir
+            / "github"
+            / "6_find_normal_abnormal"
+            / "output"
+            / f"{source}_qwen_category.json",
         ]
         for path in candidates:
             if path.exists():
@@ -1177,11 +1243,13 @@ class SurveillanceVQABenchmark(Benchmark):
         ]
         # Also try Normal_Videos subfolders
         if "Normal" in video_name:
-            candidates.extend([
-                self.video_dir / "Normal_Videos_of_Events" / f"{video_name}.mp4",
-                self.video_dir / "Testing_Normal_Videos" / f"{video_name}.mp4",
-                self.video_dir / "Testing_Normal_Videos_Anomaly" / f"{video_name}.mp4",
-            ])
+            candidates.extend(
+                [
+                    self.video_dir / "Normal_Videos_of_Events" / f"{video_name}.mp4",
+                    self.video_dir / "Testing_Normal_Videos" / f"{video_name}.mp4",
+                    self.video_dir / "Testing_Normal_Videos_Anomaly" / f"{video_name}.mp4",
+                ]
+            )
 
         for path in candidates:
             if path.exists():
@@ -1247,7 +1315,7 @@ class SurveillanceVQABenchmark(Benchmark):
 
         # For detection mode: also include normal clips with "No" answers
         # to create a balanced yes/no benchmark (like POPE)
-        add_normal_detection = (self.qa_type == "detection")
+        add_normal_detection = self.qa_type == "detection"
 
         all_samples = []
         skipped_no_video = 0
@@ -1321,20 +1389,22 @@ class SurveillanceVQABenchmark(Benchmark):
                     # For normal clips in detection mode: synthesize "No" answer
                     if is_normal_dir and add_normal_detection:
                         q = self._DETECTION_QUESTION + self._PROMPT_SUFFIX.get("detection", "")
-                        all_samples.append(BenchmarkSample(
-                            id=f"{source}_{stem}_detection_0",
-                            image=frames,
-                            question=q,
-                            answer="No",
-                            category="detection",
-                            metadata={
-                                "source": source,
-                                "video": video_name,
-                                "clip_idx": clip_idx,
-                                "anomaly_type": "normal",
-                                "subdir": subdir_name,
-                            },
-                        ))
+                        all_samples.append(
+                            BenchmarkSample(
+                                id=f"{source}_{stem}_detection_0",
+                                image=frames,
+                                question=q,
+                                answer="No",
+                                category="detection",
+                                metadata={
+                                    "source": source,
+                                    "video": video_name,
+                                    "clip_idx": clip_idx,
+                                    "anomaly_type": "normal",
+                                    "subdir": subdir_name,
+                                },
+                            )
+                        )
                         subdir_count += 1
                         continue  # skip QA extraction for normal clips in detection mode
 
@@ -1351,25 +1421,29 @@ class SurveillanceVQABenchmark(Benchmark):
                             if "classification" in qa_key:
                                 anomaly_type = qa_pair["A"]
                             elif "detection" in qa_key:
-                                anomaly_type = "abnormal" if qa_pair["A"].lower() == "yes" else "normal"
+                                anomaly_type = (
+                                    "abnormal" if qa_pair["A"].lower() == "yes" else "normal"
+                                )
 
                             # Apply per-category prompt suffix
                             q = qa_pair["Q"] + self._PROMPT_SUFFIX.get(qa_category, "")
 
-                            all_samples.append(BenchmarkSample(
-                                id=f"{source}_{stem}_{qa_category}_{qi}",
-                                image=frames,
-                                question=q,
-                                answer=qa_pair["A"],
-                                category=qa_category,
-                                metadata={
-                                    "source": source,
-                                    "video": video_name,
-                                    "clip_idx": clip_idx,
-                                    "anomaly_type": anomaly_type,
-                                    "subdir": subdir_name,
-                                },
-                            ))
+                            all_samples.append(
+                                BenchmarkSample(
+                                    id=f"{source}_{stem}_{qa_category}_{qi}",
+                                    image=frames,
+                                    question=q,
+                                    answer=qa_pair["A"],
+                                    category=qa_category,
+                                    metadata={
+                                        "source": source,
+                                        "video": video_name,
+                                        "clip_idx": clip_idx,
+                                        "anomaly_type": anomaly_type,
+                                        "subdir": subdir_name,
+                                    },
+                                )
+                            )
                     subdir_count += 1
 
                 if self.max_samples and len(all_samples) >= self.max_samples:
@@ -1377,9 +1451,9 @@ class SurveillanceVQABenchmark(Benchmark):
 
         if skipped_no_video:
             logger.warning(
-                "Skipped %d clips (video not found in %s). "
-                "Download UCF-Crime videos to video_dir.",
-                skipped_no_video, self.video_dir,
+                "Skipped %d clips (video not found in %s). Download UCF-Crime videos to video_dir.",
+                skipped_no_video,
+                self.video_dir,
             )
         if skipped_no_frames:
             logger.warning("Skipped %d clips (frame extraction failed).", skipped_no_frames)
@@ -1454,13 +1528,15 @@ class CustomBenchmark(Benchmark):
             frames = img.transpose(2, 0, 1).astype(np.float32) / 255.0
             frames = frames[np.newaxis]
 
-            samples.append(BenchmarkSample(
-                id=str(item.get("id", len(samples))),
-                image=frames,
-                question=item["question"],
-                answer=item["answer"],
-                category=item.get("category", ""),
-            ))
+            samples.append(
+                BenchmarkSample(
+                    id=str(item.get("id", len(samples))),
+                    image=frames,
+                    question=item["question"],
+                    answer=item["answer"],
+                    category=item.get("category", ""),
+                )
+            )
 
         return samples
 
@@ -1506,7 +1582,7 @@ class BenchmarkRunner:
             # Use benchmark-specific template, then user override
             if self.prompt_template:
                 question = self.prompt_template.format(question=question)
-            elif hasattr(benchmark, 'PROMPT_TEMPLATE'):
+            elif hasattr(benchmark, "PROMPT_TEMPLATE"):
                 question = benchmark.PROMPT_TEMPLATE.format(question=question)
 
             # Analyze
@@ -1526,26 +1602,28 @@ class BenchmarkRunner:
                 pred_text = ""  # entirely thinking, no answer produced
             correct = benchmark.judge(sample, pred_text)
 
-            result.predictions.append(PredictionResult(
-                id=sample.id,
-                question=sample.question,
-                answer_gt=sample.answer,
-                answer_pred=pred_text,
-                correct=correct,
-                latency_ms=latency,
-                prompt_tokens=out.metrics.prompt_tokens,
-                prompt_tps=out.metrics.prompt_tps,
-                generation_tps=out.metrics.tokens_per_sec,
-                prefill_ms=out.metrics.prefill_ms,
-                decode_ms=out.metrics.decode_ms,
-                peak_memory_gb=out.metrics.peak_memory_gb,
-                completion_tokens=out.metrics.completion_tokens,
-                metadata={"category": sample.category},
-            ))
+            result.predictions.append(
+                PredictionResult(
+                    id=sample.id,
+                    question=sample.question,
+                    answer_gt=sample.answer,
+                    answer_pred=pred_text,
+                    correct=correct,
+                    latency_ms=latency,
+                    prompt_tokens=out.metrics.prompt_tokens,
+                    prompt_tps=out.metrics.prompt_tps,
+                    generation_tps=out.metrics.tokens_per_sec,
+                    prefill_ms=out.metrics.prefill_ms,
+                    decode_ms=out.metrics.decode_ms,
+                    peak_memory_gb=out.metrics.peak_memory_gb,
+                    completion_tokens=out.metrics.completion_tokens,
+                    metadata={"category": sample.category},
+                )
+            )
 
             if (i + 1) % 50 == 0 or (i + 1) == len(samples):
                 running_acc = sum(p.correct for p in result.predictions) / len(result.predictions)
-                print(f"  [{i+1}/{len(samples)}] accuracy={running_acc:.1%}", flush=True)
+                print(f"  [{i + 1}/{len(samples)}] accuracy={running_acc:.1%}", flush=True)
 
         result.total_time_s = time.time() - t0
         return result

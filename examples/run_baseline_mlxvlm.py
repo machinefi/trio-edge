@@ -41,10 +41,14 @@ def build_config_key(model: str) -> str:
 
 
 def run_benchmarks(args) -> dict:
-    from mlx_vlm import load, generate
+    from mlx_vlm import generate, load
     from mlx_vlm.prompt_utils import apply_chat_template
+
     from trio_core.eval_benchmarks import (
-        POPEBenchmark, TextVQABenchmark, GQABenchmark, MMBenchBenchmark,
+        GQABenchmark,
+        MMBenchBenchmark,
+        POPEBenchmark,
+        TextVQABenchmark,
     )
 
     model_id = args.model
@@ -84,13 +88,21 @@ def run_benchmarks(args) -> dict:
 
             # Build chat-template prompt via mlx_vlm (handles model-specific formatting)
             prompt = apply_chat_template(
-                processor, model.config, question, num_images=1,
+                processor,
+                model.config,
+                question,
+                num_images=1,
             )
 
             tic = time.perf_counter()
             result = generate(
-                model, processor, prompt, image=[pil_img],
-                max_tokens=16, temperature=0.0, verbose=False,
+                model,
+                processor,
+                prompt,
+                image=[pil_img],
+                max_tokens=16,
+                temperature=0.0,
+                verbose=False,
             )
             latency_ms = (time.perf_counter() - tic) * 1000
             latencies.append(latency_ms)
@@ -117,8 +129,10 @@ def run_benchmarks(args) -> dict:
             entry["yes_rate"] = round(yes_count / total, 4) if total else 0
 
         results["benchmarks"][bench_name] = entry
-        print(f"  Accuracy: {accuracy:.1%}" +
-              (f"  Yes-rate: {entry['yes_rate']:.1%}" if track_yes_rate else ""))
+        print(
+            f"  Accuracy: {accuracy:.1%}"
+            + (f"  Yes-rate: {entry['yes_rate']:.1%}" if track_yes_rate else "")
+        )
         print(f"  Avg latency: {avg_latency:.0f}ms")
         print()
 
@@ -126,7 +140,9 @@ def run_benchmarks(args) -> dict:
     run_single(POPEBenchmark(split="random", max_samples=n), "pope_random", track_yes_rate=True)
 
     # POPE — adversarial
-    run_single(POPEBenchmark(split="adversarial", max_samples=n), "pope_adversarial", track_yes_rate=True)
+    run_single(
+        POPEBenchmark(split="adversarial", max_samples=n), "pope_adversarial", track_yes_rate=True
+    )
 
     # TextVQA
     run_single(TextVQABenchmark(max_samples=n), "textvqa")
@@ -144,17 +160,25 @@ def run_benchmarks(args) -> dict:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Native mlx-vlm baseline (no trio-core in inference path)")
-    parser.add_argument("--model", "-m", default=DEFAULT_MODEL,
-                        help=f"Model ID (default: {DEFAULT_MODEL})")
-    parser.add_argument("--samples", "-n", type=int, default=DEFAULT_SAMPLES,
-                        help=f"Samples per benchmark (default: {DEFAULT_SAMPLES})")
-    parser.add_argument("--save-baseline", action="store_true",
-                        help="Save as permanent baseline (otherwise saves as _latest)")
-    parser.add_argument("--skip-gqa", action="store_true",
-                        help="Skip GQA benchmark")
-    parser.add_argument("--skip-mmbench", action="store_true",
-                        help="Skip MMBench benchmark")
+        description="Native mlx-vlm baseline (no trio-core in inference path)"
+    )
+    parser.add_argument(
+        "--model", "-m", default=DEFAULT_MODEL, help=f"Model ID (default: {DEFAULT_MODEL})"
+    )
+    parser.add_argument(
+        "--samples",
+        "-n",
+        type=int,
+        default=DEFAULT_SAMPLES,
+        help=f"Samples per benchmark (default: {DEFAULT_SAMPLES})",
+    )
+    parser.add_argument(
+        "--save-baseline",
+        action="store_true",
+        help="Save as permanent baseline (otherwise saves as _latest)",
+    )
+    parser.add_argument("--skip-gqa", action="store_true", help="Skip GQA benchmark")
+    parser.add_argument("--skip-mmbench", action="store_true", help="Skip MMBench benchmark")
     args = parser.parse_args()
 
     results = run_benchmarks(args)

@@ -60,7 +60,10 @@ def create_app() -> FastAPI:
         if content_length and int(content_length) > _MAX_BODY_BYTES:
             return JSONResponse(
                 status_code=413,
-                content={"error": "payload_too_large", "message": f"Request body exceeds {_MAX_BODY_BYTES // (1024*1024)}MB limit"},
+                content={
+                    "error": "payload_too_large",
+                    "message": f"Request body exceeds {_MAX_BODY_BYTES // (1024 * 1024)}MB limit",
+                },
             )
         return await call_next(request)
 
@@ -78,6 +81,7 @@ def create_app() -> FastAPI:
             if hmac.compare_digest(auth.encode(), expected.encode()):
                 return await call_next(request)
             return JSONResponse(status_code=401, content={"detail": "Invalid API key"})
+
         logger.info("API key auth enabled (TRIO_API_KEY is set)")
     else:
         logger.warning("No API key auth (TRIO_API_KEY not set) — server is UNPROTECTED")

@@ -20,8 +20,8 @@ logger = logging.getLogger(__name__)
 
 # ── Defaults (Qwen2.5-VL compatible) ────────────────────────────────────────
 
-DEFAULT_IMAGE_FACTOR = 28       # Qwen2.5-VL: patch=14 × merge=2
-DEFAULT_FRAME_FACTOR = 2        # temporal_patch=2 for all Qwen VL
+DEFAULT_IMAGE_FACTOR = 28  # Qwen2.5-VL: patch=14 × merge=2
+DEFAULT_FRAME_FACTOR = 2  # temporal_patch=2 for all Qwen VL
 DEFAULT_FPS = 2.0
 DEFAULT_MIN_FRAMES = 4
 DEFAULT_MAX_FRAMES = 128
@@ -101,7 +101,9 @@ def load_video(
         source = _download_video(source)
 
     return _extract_frames(
-        source, fps, max_frames,
+        source,
+        fps,
+        max_frames,
         image_factor=image_factor,
         frame_factor=frame_factor,
         min_frames=min_frames,
@@ -138,6 +140,7 @@ def _download_video(url: str) -> str:
 def cleanup_temp_files() -> int:
     """Remove all temp files created by video downloads. Returns count removed."""
     import os
+
     removed = 0
     while _TEMP_FILES:
         path = _TEMP_FILES.pop()
@@ -157,17 +160,21 @@ def _probe_video(path: str) -> dict:
     try:
         result = subprocess.run(
             [
-                "ffprobe", "-v", "quiet",
-                "-print_format", "json",
-                "-show_streams", "-show_format",
+                "ffprobe",
+                "-v",
+                "quiet",
+                "-print_format",
+                "json",
+                "-show_streams",
+                "-show_format",
                 path,
             ],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
     except FileNotFoundError:
-        raise RuntimeError(
-            "ffmpeg/ffprobe not found. Install ffmpeg: brew install ffmpeg"
-        )
+        raise RuntimeError("ffmpeg/ffprobe not found. Install ffmpeg: brew install ffmpeg")
 
     if result.returncode != 0:
         raise IOError(f"ffprobe failed on {path}: {result.stderr[:200]}")
@@ -184,7 +191,9 @@ def _probe_video(path: str) -> dict:
                 "height": int(stream["height"]),
                 "fps": fps,
                 "nb_frames": int(stream.get("nb_frames", 0)),
-                "duration": float(stream.get("duration", info.get("format", {}).get("duration", 0))),
+                "duration": float(
+                    stream.get("duration", info.get("format", {}).get("duration", 0))
+                ),
             }
     raise IOError(f"No video stream found in: {path}")
 
@@ -210,14 +219,21 @@ def _extract_frames(
         total = max(1, int(probe["duration"] * native_fps))
 
     nframes = smart_nframes(
-        total, native_fps, target_fps,
-        min_frames=min_frames, max_frames=max_frames, frame_factor=frame_factor,
+        total,
+        native_fps,
+        target_fps,
+        min_frames=min_frames,
+        max_frames=max_frames,
+        frame_factor=frame_factor,
     )
     nframes = min(nframes, max_frames)
 
     # Compute target size
     target_h, target_w = smart_resize(
-        height, width, image_factor=image_factor, max_pixels=max_pixels,
+        height,
+        width,
+        image_factor=image_factor,
+        max_pixels=max_pixels,
     )
 
     # Build ffmpeg select filter for evenly-spaced frames
@@ -227,20 +243,26 @@ def _extract_frames(
     try:
         result = subprocess.run(
             [
-                "ffmpeg", "-v", "quiet",
-                "-i", path,
-                "-vf", f"select='{select_expr}',scale={target_w}:{target_h}",
-                "-vsync", "vfr",
-                "-f", "rawvideo",
-                "-pix_fmt", "rgb24",
+                "ffmpeg",
+                "-v",
+                "quiet",
+                "-i",
+                path,
+                "-vf",
+                f"select='{select_expr}',scale={target_w}:{target_h}",
+                "-vsync",
+                "vfr",
+                "-f",
+                "rawvideo",
+                "-pix_fmt",
+                "rgb24",
                 "-",
             ],
-            capture_output=True, timeout=120,
+            capture_output=True,
+            timeout=120,
         )
     except FileNotFoundError:
-        raise RuntimeError(
-            "ffmpeg not found. Install ffmpeg: brew install ffmpeg"
-        )
+        raise RuntimeError("ffmpeg not found. Install ffmpeg: brew install ffmpeg")
 
     if result.returncode != 0:
         raise IOError(f"ffmpeg failed on {path}: {result.stderr[:200]}")
@@ -260,7 +282,13 @@ def _extract_frames(
 
     logger.info(
         "Extracted %d/%d frames from %s (%.1f fps → %.1f fps, %dx%d)",
-        n_extracted, total, path, native_fps, target_fps, target_w, target_h,
+        n_extracted,
+        total,
+        path,
+        native_fps,
+        target_fps,
+        target_w,
+        target_h,
     )
     return frames
 
@@ -321,7 +349,13 @@ class TemporalDeduplicator:
 
         removed = t - len(kept)
         if removed > 0:
-            logger.info("Dedup: %d → %d frames (removed %d, threshold=%.2f)", t, len(kept), removed, self.threshold)
+            logger.info(
+                "Dedup: %d → %d frames (removed %d, threshold=%.2f)",
+                t,
+                len(kept),
+                removed,
+                self.threshold,
+            )
 
         return DeduplicationResult(
             frames=kept_frames,
@@ -347,7 +381,7 @@ class MotionGate:
         motion_fraction: float = 0.05,
         warmup_frames: int = 3,
     ):
-        self.threshold = threshold          # Per-pixel intensity change threshold
+        self.threshold = threshold  # Per-pixel intensity change threshold
         self.motion_fraction = motion_fraction  # Fraction of pixels that must change
         self.warmup_frames = warmup_frames
         self._bg: np.ndarray | None = None
@@ -408,6 +442,7 @@ def _import_cv2():
     """Lazy import cv2, with helpful error message."""
     try:
         import cv2
+
         return cv2
     except ImportError:
         raise ImportError(
@@ -478,8 +513,13 @@ class StreamCapture:
         self.running = True
         self._thread = threading.Thread(target=self._capture_loop, daemon=True)
         self._thread.start()
-        logger.info("StreamCapture started: %s (%.1f fps, stride=%d, buffer=%s)",
-                     self.source, self.fps, self.vid_stride, self.buffer)
+        logger.info(
+            "StreamCapture started: %s (%.1f fps, stride=%d, buffer=%s)",
+            self.source,
+            self.fps,
+            self.vid_stride,
+            self.buffer,
+        )
         return self
 
     def stop(self) -> None:
@@ -553,6 +593,7 @@ class StreamCapture:
 
             # BGR → RGB (cv2 is already imported if we got here)
             import cv2
+
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
             # Resize if requested
@@ -577,12 +618,14 @@ class StreamCapture:
     def _try_reconnect(self) -> None:
         """Attempt to reconnect to the stream."""
         self._reconnect_count += 1
-        logger.warning("Reconnecting (%d/%d): %s",
-                       self._reconnect_count, self.max_reconnects, self.source)
+        logger.warning(
+            "Reconnecting (%d/%d): %s", self._reconnect_count, self.max_reconnects, self.source
+        )
         if self._cap is not None:
             self._cap.release()
         _time.sleep(STREAM_RECONNECT_DELAY)
         import cv2
+
         source = self._resolve_source(self.source)
         self._cap = cv2.VideoCapture(source)
         if self._cap.isOpened():
@@ -607,9 +650,12 @@ class StreamCapture:
         if parsed.hostname in ("www.youtube.com", "youtube.com", "youtu.be"):
             try:
                 import subprocess
+
                 result = subprocess.run(
                     ["yt-dlp", "-f", "best", "--get-url", source],
-                    capture_output=True, text=True, timeout=30,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
                 )
                 if result.returncode == 0 and result.stdout.strip():
                     resolved = result.stdout.strip()

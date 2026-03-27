@@ -25,7 +25,6 @@ Usage:
 
 import argparse
 import json
-import os
 import subprocess
 import sys
 import time
@@ -103,11 +102,16 @@ def download_model(hf_id: str) -> bool:
 def run_pope(model_id: str, output_path: str, samples: int = 100, tome: int = 0) -> dict | None:
     """Run POPE benchmark for a model."""
     cmd = [
-        sys.executable, "examples/run_benchmark.py",
-        "--bench", "pope",
-        "--samples", str(samples),
-        "--model", model_id,
-        "--output", output_path,
+        sys.executable,
+        "examples/run_benchmark.py",
+        "--bench",
+        "pope",
+        "--samples",
+        str(samples),
+        "--model",
+        model_id,
+        "--output",
+        output_path,
     ]
     if tome > 0:
         cmd.extend(["--tome", str(tome)])
@@ -128,15 +132,21 @@ def run_pope(model_id: str, output_path: str, samples: int = 100, tome: int = 0)
     return None
 
 
-def run_eval(model_id: str, output_path: str, resolution: str = "480p",
-             runs: int = 3, tome: int = 0) -> dict | None:
+def run_eval(
+    model_id: str, output_path: str, resolution: str = "480p", runs: int = 3, tome: int = 0
+) -> dict | None:
     """Run synthetic eval for a model."""
     cmd = [
-        sys.executable, "examples/run_eval.py",
-        "--model", model_id,
-        "--output", output_path,
-        "--resolution", resolution,
-        "--runs", str(runs),
+        sys.executable,
+        "examples/run_eval.py",
+        "--model",
+        model_id,
+        "--output",
+        output_path,
+        "--resolution",
+        resolution,
+        "--runs",
+        str(runs),
     ]
     if tome > 0:
         cmd.extend(["--tome", str(tome)])
@@ -181,7 +191,9 @@ def print_summary(results: dict):
     eval_results = {k: v for k, v in results.items() if v.get("eval")}
     if eval_results:
         print("\n--- Synthetic Eval (480p, 3 runs, averaged across complexity levels) ---")
-        print(f"{'Model':<20} {'Prefill':>10} {'Decode TPS':>12} {'Vis Tokens':>12} {'Peak Mem':>10}")
+        print(
+            f"{'Model':<20} {'Prefill':>10} {'Decode TPS':>12} {'Vis Tokens':>12} {'Peak Mem':>10}"
+        )
         print("-" * 70)
         for name in MODEL_ORDER:
             if name in eval_results and eval_results[name]["eval"]:
@@ -191,7 +203,9 @@ def print_summary(results: dict):
                     continue
                 # Average across complexity levels
                 prefills = [c["summary"]["prefill_ms"]["mean"] for c in cases if "summary" in c]
-                decode_tps_list = [c["summary"]["generation_tps"]["mean"] for c in cases if "summary" in c]
+                decode_tps_list = [
+                    c["summary"]["generation_tps"]["mean"] for c in cases if "summary" in c
+                ]
                 vis_toks = [c["summary"]["prompt_tokens"]["mean"] for c in cases if "summary" in c]
                 mems = [c["summary"]["peak_memory_gb"]["mean"] for c in cases if "summary" in c]
                 if prefills:
@@ -199,7 +213,9 @@ def print_summary(results: dict):
                     decode_tps = sum(decode_tps_list) / len(decode_tps_list)
                     vis_tok = sum(vis_toks) / len(vis_toks)
                     mem = max(mems)
-                    print(f"{name:<20} {prefill:>8.0f}ms {decode_tps:>12.1f} {vis_tok:>12.0f} {mem:>8.1f} GB")
+                    print(
+                        f"{name:<20} {prefill:>8.0f}ms {decode_tps:>12.1f} {vis_tok:>12.0f} {mem:>8.1f} GB"
+                    )
 
     print("\n" + "=" * 90)
 
@@ -207,14 +223,18 @@ def print_summary(results: dict):
 def main():
     parser = argparse.ArgumentParser(description="Tier 1 comprehensive benchmark")
     parser.add_argument("--model", default=None, help="Run specific model only")
-    parser.add_argument("--no-download", action="store_true", help="Skip downloading, use cached only")
+    parser.add_argument(
+        "--no-download", action="store_true", help="Skip downloading, use cached only"
+    )
     parser.add_argument("--pope-only", action="store_true", help="Only run POPE benchmark")
     parser.add_argument("--eval-only", action="store_true", help="Only run synthetic eval")
     parser.add_argument("--pope-samples", type=int, default=100, help="POPE samples (default: 100)")
     parser.add_argument("--eval-runs", type=int, default=3, help="Eval runs (default: 3)")
     parser.add_argument("--resolution", default="480p", choices=["480p", "720p", "1080p"])
     parser.add_argument("--tome", type=int, default=0, help="ToMe r (0=disabled)")
-    parser.add_argument("--output-dir", default="research/eval-results/tier1", help="Output directory")
+    parser.add_argument(
+        "--output-dir", default="research/eval-results/tier1", help="Output directory"
+    )
     args = parser.parse_args()
 
     output_dir = Path(args.output_dir)
@@ -261,9 +281,9 @@ def main():
     total_start = time.monotonic()
 
     for i, (name, hf_id) in enumerate(available.items()):
-        print(f"\n{'='*60}")
-        print(f"[{i+1}/{len(available)}] Benchmarking: {name} ({hf_id})")
-        print(f"{'='*60}")
+        print(f"\n{'=' * 60}")
+        print(f"[{i + 1}/{len(available)}] Benchmarking: {name} ({hf_id})")
+        print(f"{'=' * 60}")
 
         model_results = {"model": name, "hf_id": hf_id, "pope": None, "eval": None}
         model_start = time.monotonic()
@@ -284,11 +304,12 @@ def main():
         if not args.pope_only:
             eval_path = str(output_dir / f"eval_{name}_{args.resolution}{suffix}.json")
             print(f"\n  Running synthetic eval ({args.resolution}, {args.eval_runs} runs)...")
-            ev = run_eval(hf_id, eval_path, resolution=args.resolution,
-                         runs=args.eval_runs, tome=args.tome)
+            ev = run_eval(
+                hf_id, eval_path, resolution=args.resolution, runs=args.eval_runs, tome=args.tome
+            )
             if ev:
                 model_results["eval"] = ev
-                print(f"  Eval done")
+                print("  Eval done")
             else:
                 print("  Eval: SKIPPED/FAILED")
 
@@ -297,7 +318,7 @@ def main():
         all_results[name] = model_results
 
     total_elapsed = time.monotonic() - total_start
-    print(f"\n\nTotal benchmark time: {total_elapsed:.0f}s ({total_elapsed/60:.1f} min)")
+    print(f"\n\nTotal benchmark time: {total_elapsed:.0f}s ({total_elapsed / 60:.1f} min)")
 
     # Save combined results
     combined_path = output_dir / f"tier1_combined{suffix}.json"

@@ -17,12 +17,18 @@ import logging
 
 import mlx.core as mx
 
-from trio_core.tome import bipartite_soft_matching, merge_tokens, compute_k_metric, compute_content_diversity
+from trio_core.tome import (
+    bipartite_soft_matching,
+    compute_content_diversity,
+    compute_k_metric,
+    merge_tokens,
+)
 
 logger = logging.getLogger(__name__)
 
 
 # ── Shared ToMe logic ───────────────────────────────────────────────────────
+
 
 class _ToMeMixin:
     """Shared ToMe configuration and helpers for native vision models."""
@@ -39,8 +45,13 @@ class _ToMeMixin:
     _content_r_factor: float  # computed per-image, scales r
 
     def _init_tome(
-        self, r: int, skip_first: int, skip_last: int,
-        min_keep_ratio: float, metric: str, adaptive: bool,
+        self,
+        r: int,
+        skip_first: int,
+        skip_last: int,
+        min_keep_ratio: float,
+        metric: str,
+        adaptive: bool,
         content_aware: bool = False,
     ):
         self.tome_r = r
@@ -92,8 +103,10 @@ class _ToMeMixin:
         self._content_r_factor = max(0.2, min(1.0, factor))
         logger.info(
             "Content-aware: diversity=%.3f → r_factor=%.2f (r %d→%d)",
-            diversity, self._content_r_factor,
-            self.tome_r, int(self.tome_r * self._content_r_factor),
+            diversity,
+            self._content_r_factor,
+            self.tome_r,
+            int(self.tome_r * self._content_r_factor),
         )
 
     def _get_metric(self, hidden_states, block, rotary_pos_emb=None):
@@ -120,6 +133,7 @@ class _ToMeMixin:
 
 # ── Qwen2.5-VL ──────────────────────────────────────────────────────────────
 
+
 class NativeToMeQwen25Vision(_ToMeMixin):
     """Qwen2.5-VL vision encoder with built-in Token Merging.
 
@@ -131,13 +145,29 @@ class NativeToMeQwen25Vision(_ToMeMixin):
         model.vision_tower = create_tome_vision(model.vision_tower, tome_r=4)
     """
 
-    def __init__(self, original_vision, *, tome_r=8, skip_first=2, skip_last=2,
-                 min_keep_ratio=0.3, metric="hidden", adaptive=False,
-                 content_aware=False):
+    def __init__(
+        self,
+        original_vision,
+        *,
+        tome_r=8,
+        skip_first=2,
+        skip_last=2,
+        min_keep_ratio=0.3,
+        metric="hidden",
+        adaptive=False,
+        content_aware=False,
+    ):
         # Store reference to original model (keeps all weights/modules)
         self._vm = original_vision
-        self._init_tome(tome_r, skip_first, skip_last, min_keep_ratio, metric, adaptive,
-                        content_aware=content_aware)
+        self._init_tome(
+            tome_r,
+            skip_first,
+            skip_last,
+            min_keep_ratio,
+            metric,
+            adaptive,
+            content_aware=content_aware,
+        )
 
     def _should_merge(self, layer_num: int, n_blocks: int) -> bool:
         return (
@@ -166,8 +196,12 @@ class NativeToMeQwen25Vision(_ToMeMixin):
         smu = vm.spatial_merge_unit
 
         # Reorder by window index
-        hidden_states = hidden_states.reshape(seq_len // smu, smu, -1)[window_index, :, :].reshape(seq_len, -1)
-        rotary_pos_emb = rotary_pos_emb.reshape(seq_len // smu, smu, -1)[window_index, :, :].reshape(seq_len, -1)
+        hidden_states = hidden_states.reshape(seq_len // smu, smu, -1)[window_index, :, :].reshape(
+            seq_len, -1
+        )
+        rotary_pos_emb = rotary_pos_emb.reshape(seq_len // smu, smu, -1)[
+            window_index, :, :
+        ].reshape(seq_len, -1)
 
         # Full-attention cu_seqlens
         cu_seqlens = []
@@ -184,12 +218,20 @@ class NativeToMeQwen25Vision(_ToMeMixin):
         content_factor_computed = False
 
         for layer_num, blk in enumerate(vm.blocks):
-            cu_seqlens_now = cu_seqlens if layer_num in vm.fullatt_block_indexes else cu_window_seqlens
+            cu_seqlens_now = (
+                cu_seqlens if layer_num in vm.fullatt_block_indexes else cu_window_seqlens
+            )
 
-            hidden_states = blk(hidden_states, cu_seqlens=cu_seqlens_now, rotary_pos_emb=rotary_pos_emb)
+            hidden_states = blk(
+                hidden_states, cu_seqlens=cu_seqlens_now, rotary_pos_emb=rotary_pos_emb
+            )
 
             # Content-aware: compute diversity factor once at first mergeable layer
-            if self.tome_content_aware and not content_factor_computed and self._should_merge(layer_num, n_blocks):
+            if (
+                self.tome_content_aware
+                and not content_factor_computed
+                and self._should_merge(layer_num, n_blocks)
+            ):
                 self._compute_content_factor(hidden_states)
                 content_factor_computed = True
 
@@ -204,8 +246,13 @@ class NativeToMeQwen25Vision(_ToMeMixin):
 
                 hidden_states, rotary_pos_emb, cu_window_seqlens, token_size = (
                     self._merge_in_windows(
-                        hidden_states, rotary_pos_emb, cu_window_seqlens,
-                        token_size, blk, initial_window_sizes, r=layer_r,
+                        hidden_states,
+                        rotary_pos_emb,
+                        cu_window_seqlens,
+                        token_size,
+                        blk,
+                        initial_window_sizes,
+                        r=layer_r,
                     )
                 )
                 after = hidden_states.shape[0]
@@ -213,13 +260,18 @@ class NativeToMeQwen25Vision(_ToMeMixin):
                 if before != after:
                     ratio = after / before
                     cu_seqlens = mx.minimum(
-                        (cu_seqlens.astype(mx.float32) * ratio).astype(mx.int32), after,
+                        (cu_seqlens.astype(mx.float32) * ratio).astype(mx.int32),
+                        after,
                     )
 
-                self._merge_log.append({
-                    "layer": layer_num, "before": before,
-                    "after": after, "merged": before - after,
-                })
+                self._merge_log.append(
+                    {
+                        "layer": layer_num,
+                        "before": before,
+                        "after": after,
+                        "merged": before - after,
+                    }
+                )
 
         # PatchMerger — pad to multiple of spatial_merge_unit
         current_len = hidden_states.shape[0]
@@ -236,12 +288,22 @@ class NativeToMeQwen25Vision(_ToMeMixin):
 
         total_merged = sum(e["merged"] for e in self._merge_log)
         if total_merged > 0:
-            logger.info("ToMe: merged %d tokens across %d layers", total_merged, len(self._merge_log))
+            logger.info(
+                "ToMe: merged %d tokens across %d layers", total_merged, len(self._merge_log)
+            )
 
         return hidden_states
 
-    def _merge_in_windows(self, hidden_states, rotary_pos_emb, cu_window_seqlens,
-                          token_size, block, initial_window_sizes, r):
+    def _merge_in_windows(
+        self,
+        hidden_states,
+        rotary_pos_emb,
+        cu_window_seqlens,
+        token_size,
+        block,
+        initial_window_sizes,
+        r,
+    ):
         n_windows = cu_window_seqlens.shape[0] - 1
         seqlens_list = cu_window_seqlens.tolist()
 
@@ -293,12 +355,13 @@ class NativeToMeQwen25Vision(_ToMeMixin):
 
     def __getattr__(self, name):
         """Delegate attribute access to original vision model."""
-        if name.startswith('_') or name.startswith('tome_'):
+        if name.startswith("_") or name.startswith("tome_"):
             raise AttributeError(name)
         return getattr(self._vm, name)
 
 
 # ── Qwen3-VL / Qwen3.5 ─────────────────────────────────────────────────────
+
 
 class NativeToMeQwen3Vision(_ToMeMixin):
     """Qwen3-VL/Qwen3.5 vision encoder with built-in Token Merging.
@@ -307,12 +370,28 @@ class NativeToMeQwen3Vision(_ToMeMixin):
     feature extraction at intermediate layers.
     """
 
-    def __init__(self, original_vision, *, tome_r=8, skip_first=2, skip_last=2,
-                 min_keep_ratio=0.3, metric="hidden", adaptive=False,
-                 content_aware=False):
+    def __init__(
+        self,
+        original_vision,
+        *,
+        tome_r=8,
+        skip_first=2,
+        skip_last=2,
+        min_keep_ratio=0.3,
+        metric="hidden",
+        adaptive=False,
+        content_aware=False,
+    ):
         self._vm = original_vision
-        self._init_tome(tome_r, skip_first, skip_last, min_keep_ratio, metric, adaptive,
-                        content_aware=content_aware)
+        self._init_tome(
+            tome_r,
+            skip_first,
+            skip_last,
+            min_keep_ratio,
+            metric,
+            adaptive,
+            content_aware=content_aware,
+        )
 
     def __call__(self, hidden_states, grid_thw, **kwargs):
         vm = self._vm
@@ -347,13 +426,15 @@ class NativeToMeQwen3Vision(_ToMeMixin):
 
             # Deepstack: extract features at specified layers
             if layer_num in vm.deepstack_visual_indexes:
-                ds_merger = vm.deepstack_merger_list[
-                    vm.deepstack_visual_indexes.index(layer_num)
-                ]
+                ds_merger = vm.deepstack_merger_list[vm.deepstack_visual_indexes.index(layer_num)]
                 deepstack_feature_lists.append(ds_merger(hidden_states))
 
             # Content-aware: compute diversity factor once at first mergeable layer
-            if self.tome_content_aware and not content_factor_computed and self._should_merge(layer_num, n_blocks):
+            if (
+                self.tome_content_aware
+                and not content_factor_computed
+                and self._should_merge(layer_num, n_blocks)
+            ):
                 self._compute_content_factor(hidden_states)
                 content_factor_computed = True
 
@@ -363,24 +444,33 @@ class NativeToMeQwen3Vision(_ToMeMixin):
                 before = hidden_states.shape[0]
 
                 hidden_states, rotary_pos_emb, token_size = self._merge_segment(
-                    hidden_states, rotary_pos_emb, token_size,
-                    blk, self._initial_seq_len, r=layer_r,
+                    hidden_states,
+                    rotary_pos_emb,
+                    token_size,
+                    blk,
+                    self._initial_seq_len,
+                    r=layer_r,
                 )
                 after = hidden_states.shape[0]
 
                 if before != after:
                     ratio = after / before
                     cu_seqlens = mx.minimum(
-                        (cu_seqlens.astype(mx.float32) * ratio).astype(mx.int32), after,
+                        (cu_seqlens.astype(mx.float32) * ratio).astype(mx.int32),
+                        after,
                     )
 
-                self._merge_log.append({
-                    "layer": layer_num, "before": before,
-                    "after": after, "merged": before - after,
-                })
+                self._merge_log.append(
+                    {
+                        "layer": layer_num,
+                        "before": before,
+                        "after": after,
+                        "merged": before - after,
+                    }
+                )
 
         # PatchMerger
-        smu = vm.spatial_merge_size ** 2
+        smu = vm.spatial_merge_size**2
         current_len = hidden_states.shape[0]
         remainder = current_len % smu
         if remainder != 0:
@@ -390,17 +480,20 @@ class NativeToMeQwen3Vision(_ToMeMixin):
 
         total_merged = sum(e["merged"] for e in self._merge_log)
         if total_merged > 0:
-            logger.info("ToMe: merged %d tokens across %d layers", total_merged, len(self._merge_log))
+            logger.info(
+                "ToMe: merged %d tokens across %d layers", total_merged, len(self._merge_log)
+            )
 
         return hidden_states, deepstack_feature_lists
 
     def __getattr__(self, name):
-        if name.startswith('_') or name.startswith('tome_'):
+        if name.startswith("_") or name.startswith("tome_"):
             raise AttributeError(name)
         return getattr(self._vm, name)
 
 
 # ── Factory ──────────────────────────────────────────────────────────────────
+
 
 def create_tome_vision(
     vision_model,
@@ -438,41 +531,47 @@ def create_tome_vision(
     Raises:
         ValueError: If vision model architecture doesn't support ToMe.
     """
-    model_type = getattr(vision_model, 'model_type', '')
+    model_type = getattr(vision_model, "model_type", "")
     vt_type = type(vision_model).__name__.lower()
 
     # Reject unsupported architectures
-    if 'intern' in vt_type:
+    if "intern" in vt_type:
         raise ValueError(
             "InternViT does not support ToMe — pixel_shuffle after ViT "
             "disrupts spatial structure. Use Compressed instead."
         )
-    if 'fastvlm' in vt_type or 'fastvithd' in vt_type:
+    if "fastvlm" in vt_type or "fastvithd" in vt_type:
         raise ValueError(
             "FastVLM does not support ToMe — CNN encoder is fundamentally "
             "different from ViT. Use Compressed instead."
         )
 
     kwargs = dict(
-        tome_r=tome_r, skip_first=skip_first, skip_last=skip_last,
-        min_keep_ratio=min_keep_ratio, metric=metric, adaptive=adaptive,
+        tome_r=tome_r,
+        skip_first=skip_first,
+        skip_last=skip_last,
+        min_keep_ratio=min_keep_ratio,
+        metric=metric,
+        adaptive=adaptive,
         content_aware=content_aware,
     )
 
-    if model_type in ('qwen3_vl', 'qwen3_5', 'qwen3_5_moe'):
+    if model_type in ("qwen3_vl", "qwen3_5", "qwen3_5_moe"):
         cls = NativeToMeQwen3Vision
-    elif model_type in ('qwen2_vl', 'qwen2_5_vl', ''):
+    elif model_type in ("qwen2_vl", "qwen2_5_vl", ""):
         # Check if this is a standard ViT (SigLIP, etc.)
-        if 'siglip' in vt_type or 'clip' in vt_type:
+        if "siglip" in vt_type or "clip" in vt_type:
             from trio_core.native_vision_standard import NativeToMeStandardVision
+
             cls = NativeToMeStandardVision
         else:
             # Default to Qwen2.5-VL (backward compatible)
             cls = NativeToMeQwen25Vision
     else:
         # Unknown model_type — try standard ViT wrapper
-        if 'siglip' in vt_type or 'clip' in vt_type:
+        if "siglip" in vt_type or "clip" in vt_type:
             from trio_core.native_vision_standard import NativeToMeStandardVision
+
             cls = NativeToMeStandardVision
         else:
             cls = NativeToMeQwen25Vision
@@ -480,6 +579,11 @@ def create_tome_vision(
     native = cls(vision_model, **kwargs)
     logger.info(
         "[NativeToMe] Created %s (r=%d, metric=%s, min_keep=%.0f%%, adaptive=%s, content_aware=%s)",
-        cls.__name__, tome_r, metric, min_keep_ratio * 100, adaptive, content_aware,
+        cls.__name__,
+        tome_r,
+        metric,
+        min_keep_ratio * 100,
+        adaptive,
+        content_aware,
     )
     return native

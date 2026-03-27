@@ -1,12 +1,10 @@
 """Tests for trio_core.video.StreamCapture."""
 
 import threading
-import time
 
 import numpy as np
-import pytest
 
-from trio_core.video import StreamCapture, STREAM_BUFFER_CAP
+from trio_core.video import STREAM_BUFFER_CAP, StreamCapture
 
 
 class TestStreamCaptureInit:
@@ -30,7 +28,10 @@ class TestStreamCaptureInit:
 
 class TestStreamCaptureResolveSource:
     def test_non_youtube_passthrough(self):
-        assert StreamCapture._resolve_source("rtsp://192.168.1.1/stream") == "rtsp://192.168.1.1/stream"
+        assert (
+            StreamCapture._resolve_source("rtsp://192.168.1.1/stream")
+            == "rtsp://192.168.1.1/stream"
+        )
         assert StreamCapture._resolve_source("/tmp/video.mp4") == "/tmp/video.mp4"
 
 

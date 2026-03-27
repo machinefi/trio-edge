@@ -1,12 +1,11 @@
 """Tests for OpenClaw node integration — protocol, handshake, invoke dispatch."""
 
 import pytest
+
 cv2 = pytest.importorskip("cv2")
 
 import asyncio
 import json
-import signal
-import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import numpy as np
@@ -14,6 +13,14 @@ import pytest
 import websockets
 from websockets.asyncio.server import serve
 
+from trio_core.claw.commands import (
+    CAPTURE_WARN_THRESHOLD,
+    CommandHandler,
+    NodeMetrics,
+    WatchTask,
+    _detect_triggered,
+)
+from trio_core.claw.node import ClawNode
 from trio_core.claw.protocol import (
     InvokeRequest,
     InvokeResult,
@@ -24,20 +31,11 @@ from trio_core.claw.protocol import (
     make_res,
     pair_request_params,
 )
-from trio_core.claw.node import ClawNode, AuthError
-from trio_core.claw.commands import (
-    CommandHandler,
-    NodeMetrics,
-    WatchTask,
-    _detect_triggered,
-    CAPTURE_WARN_THRESHOLD,
-    CAPTURE_STOP_THRESHOLD,
-)
-
 
 # =============================================================================
 # Protocol unit tests
 # =============================================================================
+
 
 class TestProtocol:
     def test_make_req(self):
@@ -85,12 +83,14 @@ class TestProtocol:
         assert params["silent"] is False
 
     def test_invoke_request_from_payload(self):
-        payload = json.dumps({
-            "id": "inv1",
-            "nodeId": "node1",
-            "command": "vision.analyze",
-            "params": {"question": "what do you see?"},
-        })
+        payload = json.dumps(
+            {
+                "id": "inv1",
+                "nodeId": "node1",
+                "command": "vision.analyze",
+                "params": {"question": "what do you see?"},
+            }
+        )
         req = InvokeRequest.from_payload(payload)
         assert req.id == "inv1"
         assert req.command == "vision.analyze"
@@ -98,18 +98,22 @@ class TestProtocol:
 
     def test_invoke_request_double_encoded_params(self):
         """Params may be a JSON string (double-encoded)."""
-        payload = json.dumps({
-            "id": "inv2",
-            "nodeId": "n",
-            "command": "camera.snap",
-            "params": json.dumps({"deviceId": "cam-0"}),
-        })
+        payload = json.dumps(
+            {
+                "id": "inv2",
+                "nodeId": "n",
+                "command": "camera.snap",
+                "params": json.dumps({"deviceId": "cam-0"}),
+            }
+        )
         req = InvokeRequest.from_payload(payload)
         assert req.params["deviceId"] == "cam-0"
 
     def test_invoke_result_ok(self):
         result = InvokeResult(
-            id="inv1", node_id="n", ok=True,
+            id="inv1",
+            node_id="n",
+            ok=True,
             payload={"answer": "a dog"},
         )
         frame = result.to_req_frame()
@@ -120,8 +124,11 @@ class TestProtocol:
 
     def test_invoke_result_error(self):
         result = InvokeResult(
-            id="inv1", node_id="n", ok=False,
-            error_code="CAPTURE_FAILED", error_message="no camera",
+            id="inv1",
+            node_id="n",
+            ok=False,
+            error_code="CAPTURE_FAILED",
+            error_message="no camera",
         )
         frame = result.to_req_frame()
         params = frame["params"]
@@ -132,6 +139,7 @@ class TestProtocol:
 # =============================================================================
 # CommandHandler unit tests (no engine, no camera)
 # =============================================================================
+
 
 class TestCommandHandler:
     @pytest.fixture
@@ -158,7 +166,9 @@ class TestCommandHandler:
     @pytest.mark.asyncio
     async def test_vision_analyze_no_engine(self, handler):
         req = InvokeRequest(
-            id="1", node_id="n", command="vision.analyze",
+            id="1",
+            node_id="n",
+            command="vision.analyze",
             params={"question": "test"},
         )
         result = await handler.handle(req)
@@ -168,7 +178,9 @@ class TestCommandHandler:
     @pytest.mark.asyncio
     async def test_vision_analyze_no_question(self, handler):
         req = InvokeRequest(
-            id="1", node_id="n", command="vision.analyze",
+            id="1",
+            node_id="n",
+            command="vision.analyze",
             params={},
         )
         result = await handler.handle(req)
@@ -200,6 +212,7 @@ class TestCommandHandler:
 # NodeMetrics unit tests
 # =============================================================================
 
+
 class TestNodeMetrics:
     def test_initial_state(self):
         m = NodeMetrics()
@@ -226,6 +239,7 @@ class TestNodeMetrics:
 # Node integration test (mock Gateway)
 # =============================================================================
 
+
 class TestClawNode:
     @pytest.mark.asyncio
     async def test_handshake_and_invoke(self):
@@ -235,11 +249,15 @@ class TestClawNode:
 
         async def mock_gateway(ws):
             # 1. Send challenge
-            await ws.send(json.dumps({
-                "type": "event",
-                "event": "connect.challenge",
-                "payloadJSON": json.dumps({"nonce": "abc123"}),
-            }))
+            await ws.send(
+                json.dumps(
+                    {
+                        "type": "event",
+                        "event": "connect.challenge",
+                        "payloadJSON": json.dumps({"nonce": "abc123"}),
+                    }
+                )
+            )
 
             # 2. Receive connect request
             frame = json.loads(await ws.recv())
@@ -248,12 +266,16 @@ class TestClawNode:
             assert frame["params"]["auth"]["token"] == "test-token"
 
             # 3. Send hello-ok
-            await ws.send(json.dumps({
-                "type": "res",
-                "id": frame["id"],
-                "ok": True,
-                "payload": {"type": "hello-ok"},
-            }))
+            await ws.send(
+                json.dumps(
+                    {
+                        "type": "res",
+                        "id": frame["id"],
+                        "ok": True,
+                        "payload": {"type": "hello-ok"},
+                    }
+                )
+            )
 
             # 4. Send invoke request (camera.list — works without camera)
             invoke_payload = {
@@ -262,11 +284,15 @@ class TestClawNode:
                 "command": "camera.list",
                 "params": {},
             }
-            await ws.send(json.dumps({
-                "type": "event",
-                "event": "node.invoke.request",
-                "payloadJSON": json.dumps(invoke_payload),
-            }))
+            await ws.send(
+                json.dumps(
+                    {
+                        "type": "event",
+                        "event": "node.invoke.request",
+                        "payloadJSON": json.dumps(invoke_payload),
+                    }
+                )
+            )
 
             # 5. Receive invoke result
             result_frame = json.loads(await ws.recv())
@@ -314,20 +340,38 @@ class TestClawNode:
 
         async def mock_gateway(ws):
             # Handshake
-            await ws.send(json.dumps({
-                "type": "event", "event": "connect.challenge",
-                "payloadJSON": "{}",
-            }))
+            await ws.send(
+                json.dumps(
+                    {
+                        "type": "event",
+                        "event": "connect.challenge",
+                        "payloadJSON": "{}",
+                    }
+                )
+            )
             frame = json.loads(await ws.recv())
-            await ws.send(json.dumps({
-                "type": "res", "id": frame["id"], "ok": True,
-                "payload": {"type": "hello-ok"},
-            }))
+            await ws.send(
+                json.dumps(
+                    {
+                        "type": "res",
+                        "id": frame["id"],
+                        "ok": True,
+                        "payload": {"type": "hello-ok"},
+                    }
+                )
+            )
 
             # Send ping request
-            await ws.send(json.dumps({
-                "type": "req", "id": "ping1", "method": "ping", "params": {},
-            }))
+            await ws.send(
+                json.dumps(
+                    {
+                        "type": "req",
+                        "id": "ping1",
+                        "method": "ping",
+                        "params": {},
+                    }
+                )
+            )
 
             # Expect pong response
             resp = json.loads(await ws.recv())
@@ -360,17 +404,28 @@ class TestClawNode:
             nonlocal connect_attempts
             connect_attempts += 1
             # Send challenge
-            await ws.send(json.dumps({
-                "type": "event", "event": "connect.challenge",
-                "payloadJSON": json.dumps({"nonce": "n1"}),
-            }))
+            await ws.send(
+                json.dumps(
+                    {
+                        "type": "event",
+                        "event": "connect.challenge",
+                        "payloadJSON": json.dumps({"nonce": "n1"}),
+                    }
+                )
+            )
             # Receive connect
             frame = json.loads(await ws.recv())
             # Reject with auth error
-            await ws.send(json.dumps({
-                "type": "res", "id": frame["id"], "ok": False,
-                "error": {"code": "AUTH_FAILED", "message": "Invalid token"},
-            }))
+            await ws.send(
+                json.dumps(
+                    {
+                        "type": "res",
+                        "id": frame["id"],
+                        "ok": False,
+                        "error": {"code": "AUTH_FAILED", "message": "Invalid token"},
+                    }
+                )
+            )
             await ws.close()
 
         async with serve(mock_gateway, "127.0.0.1", 0) as server:
@@ -407,15 +462,26 @@ class TestClawNode:
 
         async def mock_gateway(ws):
             # Handshake
-            await ws.send(json.dumps({
-                "type": "event", "event": "connect.challenge",
-                "payloadJSON": json.dumps({"nonce": "n1"}),
-            }))
+            await ws.send(
+                json.dumps(
+                    {
+                        "type": "event",
+                        "event": "connect.challenge",
+                        "payloadJSON": json.dumps({"nonce": "n1"}),
+                    }
+                )
+            )
             frame = json.loads(await ws.recv())
-            await ws.send(json.dumps({
-                "type": "res", "id": frame["id"], "ok": True,
-                "payload": {"type": "hello-ok"},
-            }))
+            await ws.send(
+                json.dumps(
+                    {
+                        "type": "res",
+                        "id": frame["id"],
+                        "ok": True,
+                        "payload": {"type": "hello-ok"},
+                    }
+                )
+            )
             handshake_done.set()
             # Keep connection open
             try:
@@ -449,24 +515,43 @@ class TestClawNode:
         async def mock_gateway(ws):
             nonlocal first_connect
             # Handshake
-            await ws.send(json.dumps({
-                "type": "event", "event": "connect.challenge",
-                "payloadJSON": json.dumps({"nonce": "n1"}),
-            }))
+            await ws.send(
+                json.dumps(
+                    {
+                        "type": "event",
+                        "event": "connect.challenge",
+                        "payloadJSON": json.dumps({"nonce": "n1"}),
+                    }
+                )
+            )
             frame = json.loads(await ws.recv())
-            await ws.send(json.dumps({
-                "type": "res", "id": frame["id"], "ok": True,
-                "payload": {"type": "hello-ok"},
-            }))
+            await ws.send(
+                json.dumps(
+                    {
+                        "type": "res",
+                        "id": frame["id"],
+                        "ok": True,
+                        "payload": {"type": "hello-ok"},
+                    }
+                )
+            )
 
             if first_connect:
                 first_connect = False
                 # Start a watch
-                await ws.send(json.dumps(make_event("node.invoke.request", {
-                    "id": "w1", "nodeId": "test-node",
-                    "command": "vision.watch",
-                    "params": {"question": "test?", "interval": 60},
-                })))
+                await ws.send(
+                    json.dumps(
+                        make_event(
+                            "node.invoke.request",
+                            {
+                                "id": "w1",
+                                "nodeId": "test-node",
+                                "command": "vision.watch",
+                                "params": {"question": "test?", "interval": 60},
+                            },
+                        )
+                    )
+                )
                 # Wait for ack, then disconnect
                 try:
                     await asyncio.wait_for(ws.recv(), timeout=5)
@@ -511,6 +596,7 @@ class TestClawNode:
 # _detect_triggered unit tests
 # =============================================================================
 
+
 class TestDetectTriggeredClaw:
     def test_yes(self):
         assert _detect_triggered("Yes, there is a person.") is True
@@ -532,6 +618,7 @@ class TestDetectTriggeredClaw:
 # vision.watch + vision.watch.stop unit tests
 # =============================================================================
 
+
 class TestVisionWatch:
     @pytest.mark.asyncio
     async def test_watch_requires_question(self):
@@ -547,7 +634,9 @@ class TestVisionWatch:
         handler = CommandHandler(engine=None, camera_sources=["0"])
         handler._ws = AsyncMock()
         req = InvokeRequest(
-            id="1", node_id="n", command="vision.watch",
+            id="1",
+            node_id="n",
+            command="vision.watch",
             params={"question": "Are there people?"},
         )
         result = await handler.handle(req)
@@ -559,7 +648,9 @@ class TestVisionWatch:
         handler = CommandHandler(engine=MagicMock(), camera_sources=["0"])
         # _ws is None by default
         req = InvokeRequest(
-            id="1", node_id="n", command="vision.watch",
+            id="1",
+            node_id="n",
+            command="vision.watch",
             params={"question": "Are there people?"},
         )
         result = await handler.handle(req)
@@ -571,7 +662,9 @@ class TestVisionWatch:
         handler = CommandHandler(engine=MagicMock(), camera_sources=["0"])
         handler._ws = AsyncMock()
         req = InvokeRequest(
-            id="1", node_id="n", command="vision.watch",
+            id="1",
+            node_id="n",
+            command="vision.watch",
             params={"question": "Are there people?", "interval": 5},
         )
         result = await handler.handle(req)
@@ -584,7 +677,9 @@ class TestVisionWatch:
         watch_id = result.payload["watchId"]
         assert watch_id in handler._watches
         stop_req = InvokeRequest(
-            id="2", node_id="n", command="vision.watch.stop",
+            id="2",
+            node_id="n",
+            command="vision.watch.stop",
             params={"watchId": watch_id},
         )
         stop_result = await handler.handle(stop_req)
@@ -597,7 +692,9 @@ class TestVisionWatch:
         handler = CommandHandler(engine=MagicMock(), camera_sources=["0"])
         handler._ws = AsyncMock()
         req = InvokeRequest(
-            id="1", node_id="n", command="vision.watch",
+            id="1",
+            node_id="n",
+            command="vision.watch",
             params={"question": "test", "interval": 0.5},
         )
         result = await handler.handle(req)
@@ -618,7 +715,9 @@ class TestVisionWatch:
         # Start two watches
         for i in range(2):
             req = InvokeRequest(
-                id=str(i), node_id="n", command="vision.watch",
+                id=str(i),
+                node_id="n",
+                command="vision.watch",
                 params={"question": f"q{i}"},
             )
             await handler.handle(req)
@@ -626,7 +725,10 @@ class TestVisionWatch:
 
         # Stop all (no watchId param)
         stop_req = InvokeRequest(
-            id="stop", node_id="n", command="vision.watch.stop", params={},
+            id="stop",
+            node_id="n",
+            command="vision.watch.stop",
+            params={},
         )
         result = await handler.handle(stop_req)
         assert result.ok
@@ -638,7 +740,9 @@ class TestVisionWatch:
         handler = CommandHandler(engine=MagicMock(), camera_sources=["0"])
         handler._ws = AsyncMock()
         req = InvokeRequest(
-            id="1", node_id="n", command="vision.watch.stop",
+            id="1",
+            node_id="n",
+            command="vision.watch.stop",
             params={"watchId": "nonexistent"},
         )
         result = await handler.handle(req)
@@ -655,7 +759,9 @@ class TestVisionWatch:
         # Start 2 watches (at limit)
         for i in range(2):
             req = InvokeRequest(
-                id=str(i), node_id="n", command="vision.watch",
+                id=str(i),
+                node_id="n",
+                command="vision.watch",
                 params={"question": f"q{i}"},
             )
             result = await handler.handle(req)
@@ -663,7 +769,9 @@ class TestVisionWatch:
 
         # Third should fail
         req = InvokeRequest(
-            id="3", node_id="n", command="vision.watch",
+            id="3",
+            node_id="n",
+            command="vision.watch",
             params={"question": "q3"},
         )
         result = await handler.handle(req)
@@ -684,7 +792,9 @@ class TestVisionWatch:
 
         for i in range(3):
             req = InvokeRequest(
-                id=str(i), node_id="n", command="vision.watch",
+                id=str(i),
+                node_id="n",
+                command="vision.watch",
                 params={"question": f"q{i}"},
             )
             await handler.handle(req)
@@ -700,7 +810,9 @@ class TestVisionWatch:
 
         # Start a watch
         req = InvokeRequest(
-            id="1", node_id="n", command="vision.watch",
+            id="1",
+            node_id="n",
+            command="vision.watch",
             params={"question": "test"},
         )
         await handler.handle(req)
@@ -723,6 +835,7 @@ class TestVisionWatch:
 # RTSP failure escalation tests
 # =============================================================================
 
+
 class TestCaptureFailureEscalation:
     @pytest.mark.asyncio
     async def test_consecutive_failures_trigger_warning(self):
@@ -734,7 +847,6 @@ class TestCaptureFailureEscalation:
 
         # Track what gets sent via WebSocket
         sent_frames = []
-        original_send = handler._ws.send
 
         async def capture_send(data):
             sent_frames.append(json.loads(data))
@@ -757,9 +869,7 @@ class TestCaptureFailureEscalation:
             handler._watches["test-w"] = watch
 
             # Run the watch loop briefly
-            task = asyncio.create_task(
-                handler._watch_loop(watch, "0", "inv-1")
-            )
+            task = asyncio.create_task(handler._watch_loop(watch, "0", "inv-1"))
             # Give it time to hit the threshold
             await asyncio.sleep(0.5)
             watch.stop_event.set()
@@ -770,7 +880,8 @@ class TestCaptureFailureEscalation:
 
         # Check that a camera.offline event was sent
         offline_events = [
-            f for f in sent_frames
+            f
+            for f in sent_frames
             if f.get("method") == "node.event"
             and f.get("params", {}).get("event") == "camera.offline"
         ]
@@ -795,9 +906,7 @@ class TestCaptureFailureEscalation:
             watch = WatchTask(watch_id="test-w2", condition="test?", interval=0.01)
             handler._watches["test-w2"] = watch
 
-            task = asyncio.create_task(
-                handler._watch_loop(watch, "0", "inv-2")
-            )
+            task = asyncio.create_task(handler._watch_loop(watch, "0", "inv-2"))
             # Wait for it to hit the stop threshold and exit
             await asyncio.wait_for(task, timeout=10)
 
@@ -826,9 +935,7 @@ class TestCaptureFailureEscalation:
             watch = WatchTask(watch_id="test-w3", condition="test?", interval=0.01)
             handler._watches["test-w3"] = watch
 
-            task = asyncio.create_task(
-                handler._watch_loop(watch, "0", "inv-3")
-            )
+            task = asyncio.create_task(handler._watch_loop(watch, "0", "inv-3"))
             # Let it run a few cycles
             await asyncio.sleep(0.5)
             watch.stop_event.set()
@@ -846,6 +953,7 @@ class TestCaptureFailureEscalation:
 # =============================================================================
 # Full watch loop integration test (mock Gateway + mock engine + mock camera)
 # =============================================================================
+
 
 def _fake_frame():
     """Return a 64x64 BGR frame."""
@@ -866,6 +974,7 @@ def _mock_engine(answer="Yes, there is a person."):
 # Temporal mode tests
 # =============================================================================
 
+
 class TestTemporalMode:
     """Tests for temporal (StreamMem) watch mode."""
 
@@ -875,7 +984,9 @@ class TestTemporalMode:
         handler = CommandHandler(engine=MagicMock(), camera_sources=["0"])
         handler._ws = AsyncMock()
         req = InvokeRequest(
-            id="1", node_id="n", command="vision.watch",
+            id="1",
+            node_id="n",
+            command="vision.watch",
             params={"question": "Is the door open?", "temporal": True},
         )
         result = await handler.handle(req)
@@ -899,13 +1010,18 @@ class TestTemporalMode:
         handler._ws = AsyncMock()
 
         req = InvokeRequest(
-            id="1", node_id="n", command="vision.watch",
+            id="1",
+            node_id="n",
+            command="vision.watch",
             params={"question": "test?", "temporal": True},
         )
         await handler.handle(req)
 
         backend.set_streaming_memory.assert_called_once_with(
-            enabled=True, budget=6000, prototype_ratio=0.1, n_sink_tokens=4,
+            enabled=True,
+            budget=6000,
+            prototype_ratio=0.1,
+            n_sink_tokens=4,
         )
 
         # Cleanup
@@ -923,7 +1039,10 @@ class TestTemporalMode:
         handler._ws = AsyncMock()
 
         watch = WatchTask(
-            watch_id="tw-1", condition="test?", interval=10, temporal=True,
+            watch_id="tw-1",
+            condition="test?",
+            interval=10,
+            temporal=True,
         )
         handler._watches["tw-1"] = watch
         await handler._stop_watch(watch)
@@ -937,7 +1056,9 @@ class TestTemporalMode:
         handler._ws = AsyncMock()
 
         watch = WatchTask(
-            watch_id="tw-2", condition="test?", interval=10,
+            watch_id="tw-2",
+            condition="test?",
+            interval=10,
             temporal=True,
         )
         watch.checks = 10
@@ -954,7 +1075,9 @@ class TestTemporalMode:
         handler._ws = AsyncMock()
 
         watch = WatchTask(
-            watch_id="tw-3", condition="test?", interval=10,
+            watch_id="tw-3",
+            condition="test?",
+            interval=10,
             temporal=True,
         )
         watch.last_state = "door is closed"
@@ -978,6 +1101,7 @@ class TestTemporalHelpers:
 
     def test_build_prompt_first_check(self):
         from trio_core.claw.commands import _build_temporal_prompt
+
         prompt = _build_temporal_prompt("Is the door open?", None)
         assert "Is the door open?" in prompt
         assert "STATE:" in prompt
@@ -985,14 +1109,17 @@ class TestTemporalHelpers:
 
     def test_build_prompt_subsequent_check(self):
         from trio_core.claw.commands import _build_temporal_prompt
+
         prompt = _build_temporal_prompt("Is the door open?", "door is closed")
         assert "door is closed" in prompt
         assert "CHANGED or SAME" in prompt
 
     def test_detect_transition_first_check_yes(self):
         from trio_core.claw.commands import _detect_temporal_transition
+
         triggered, transition = _detect_temporal_transition(
-            "STATE: door is open | ANSWER: YES", None,
+            "STATE: door is open | ANSWER: YES",
+            None,
         )
         assert triggered is True
         assert transition["new_state"] == "door is open"
@@ -1000,6 +1127,7 @@ class TestTemporalHelpers:
 
     def test_detect_transition_changed(self):
         from trio_core.claw.commands import _detect_temporal_transition
+
         triggered, transition = _detect_temporal_transition(
             "STATE: door is now open | CHANGED",
             "door is closed",
@@ -1010,6 +1138,7 @@ class TestTemporalHelpers:
 
     def test_detect_transition_same(self):
         from trio_core.claw.commands import _detect_temporal_transition
+
         triggered, transition = _detect_temporal_transition(
             "STATE: door is closed | SAME",
             "door is closed",
@@ -1034,23 +1163,41 @@ class TestWatchLoopIntegration:
             nonlocal start_result, stop_result
 
             # --- Handshake ---
-            await ws.send(json.dumps({
-                "type": "event", "event": "connect.challenge",
-                "payloadJSON": json.dumps({"nonce": "n1"}),
-            }))
+            await ws.send(
+                json.dumps(
+                    {
+                        "type": "event",
+                        "event": "connect.challenge",
+                        "payloadJSON": json.dumps({"nonce": "n1"}),
+                    }
+                )
+            )
             frame = json.loads(await ws.recv())
-            await ws.send(json.dumps({
-                "type": "res", "id": frame["id"], "ok": True,
-                "payload": {"type": "hello-ok"},
-            }))
+            await ws.send(
+                json.dumps(
+                    {
+                        "type": "res",
+                        "id": frame["id"],
+                        "ok": True,
+                        "payload": {"type": "hello-ok"},
+                    }
+                )
+            )
 
             # --- Send vision.watch invoke ---
-            await ws.send(json.dumps(make_event("node.invoke.request", {
-                "id": "watch-inv-1",
-                "nodeId": "test-node",
-                "command": "vision.watch",
-                "params": {"question": "Is there a person?", "interval": 2},
-            })))
+            await ws.send(
+                json.dumps(
+                    make_event(
+                        "node.invoke.request",
+                        {
+                            "id": "watch-inv-1",
+                            "nodeId": "test-node",
+                            "command": "vision.watch",
+                            "params": {"question": "Is there a person?", "interval": 2},
+                        },
+                    )
+                )
+            )
 
             # --- Collect frames ---
             # First frame: the start acknowledgement (node.invoke.result with watchId)
@@ -1064,19 +1211,30 @@ class TestWatchLoopIntegration:
                     params = msg["params"]
                     payload = json.loads(params.get("payloadJSON", "{}"))
 
-                    if "watchId" in payload and "status" in payload and payload["status"] == "started":
+                    if (
+                        "watchId" in payload
+                        and "status" in payload
+                        and payload["status"] == "started"
+                    ):
                         start_result = payload
                     elif params.get("streaming"):
                         streaming_results.append(payload)
                         # After 2 streaming results, send stop
                         if len(streaming_results) >= 2:
                             watch_id = payload["watchId"]
-                            await ws.send(json.dumps(make_event("node.invoke.request", {
-                                "id": "stop-inv-1",
-                                "nodeId": "test-node",
-                                "command": "vision.watch.stop",
-                                "params": {"watchId": watch_id},
-                            })))
+                            await ws.send(
+                                json.dumps(
+                                    make_event(
+                                        "node.invoke.request",
+                                        {
+                                            "id": "stop-inv-1",
+                                            "nodeId": "test-node",
+                                            "command": "vision.watch.stop",
+                                            "params": {"watchId": watch_id},
+                                        },
+                                    )
+                                )
+                            )
                     elif "status" in payload and payload["status"] == "stopped":
                         stop_result = payload
                         done.set()
@@ -1141,23 +1299,41 @@ class TestWatchLoopIntegration:
         async def mock_gateway(ws):
             nonlocal streaming_result
             # Handshake
-            await ws.send(json.dumps({
-                "type": "event", "event": "connect.challenge",
-                "payloadJSON": json.dumps({"nonce": "n2"}),
-            }))
+            await ws.send(
+                json.dumps(
+                    {
+                        "type": "event",
+                        "event": "connect.challenge",
+                        "payloadJSON": json.dumps({"nonce": "n2"}),
+                    }
+                )
+            )
             frame = json.loads(await ws.recv())
-            await ws.send(json.dumps({
-                "type": "res", "id": frame["id"], "ok": True,
-                "payload": {"type": "hello-ok"},
-            }))
+            await ws.send(
+                json.dumps(
+                    {
+                        "type": "res",
+                        "id": frame["id"],
+                        "ok": True,
+                        "payload": {"type": "hello-ok"},
+                    }
+                )
+            )
 
             # Send vision.watch
-            await ws.send(json.dumps(make_event("node.invoke.request", {
-                "id": "w2",
-                "nodeId": "test-node",
-                "command": "vision.watch",
-                "params": {"question": "Is it raining?", "interval": 2},
-            })))
+            await ws.send(
+                json.dumps(
+                    make_event(
+                        "node.invoke.request",
+                        {
+                            "id": "w2",
+                            "nodeId": "test-node",
+                            "command": "vision.watch",
+                            "params": {"question": "Is it raining?", "interval": 2},
+                        },
+                    )
+                )
+            )
 
             # Collect: skip start ack, grab first streaming result
             try:
@@ -1206,23 +1382,41 @@ class TestWatchLoopIntegration:
 
         async def mock_gateway(ws):
             # Handshake
-            await ws.send(json.dumps({
-                "type": "event", "event": "connect.challenge",
-                "payloadJSON": json.dumps({"nonce": "n3"}),
-            }))
+            await ws.send(
+                json.dumps(
+                    {
+                        "type": "event",
+                        "event": "connect.challenge",
+                        "payloadJSON": json.dumps({"nonce": "n3"}),
+                    }
+                )
+            )
             frame = json.loads(await ws.recv())
-            await ws.send(json.dumps({
-                "type": "res", "id": frame["id"], "ok": True,
-                "payload": {"type": "hello-ok"},
-            }))
+            await ws.send(
+                json.dumps(
+                    {
+                        "type": "res",
+                        "id": frame["id"],
+                        "ok": True,
+                        "payload": {"type": "hello-ok"},
+                    }
+                )
+            )
 
             # Start a watch
-            await ws.send(json.dumps(make_event("node.invoke.request", {
-                "id": "w3",
-                "nodeId": "test-node",
-                "command": "vision.watch",
-                "params": {"question": "test?", "interval": 2},
-            })))
+            await ws.send(
+                json.dumps(
+                    make_event(
+                        "node.invoke.request",
+                        {
+                            "id": "w3",
+                            "nodeId": "test-node",
+                            "command": "vision.watch",
+                            "params": {"question": "test?", "interval": 2},
+                        },
+                    )
+                )
+            )
 
             # Wait for at least one streaming result then close abruptly
             try:
@@ -1269,6 +1463,7 @@ class TestWatchLoopIntegration:
 # Health server tests
 # =============================================================================
 
+
 class TestHealthServer:
     @pytest.mark.asyncio
     async def test_health_endpoint(self):
@@ -1283,7 +1478,9 @@ class TestHealthServer:
         server = HealthServer(node, port=0)
         # Use a random port
         raw_server = await asyncio.start_server(
-            server._handle_connection, "127.0.0.1", 0,
+            server._handle_connection,
+            "127.0.0.1",
+            0,
         )
         port = raw_server.sockets[0].getsockname()[1]
 
@@ -1324,7 +1521,9 @@ class TestHealthServer:
 
         server = HealthServer(node, port=0)
         raw_server = await asyncio.start_server(
-            server._handle_connection, "127.0.0.1", 0,
+            server._handle_connection,
+            "127.0.0.1",
+            0,
         )
         port = raw_server.sockets[0].getsockname()[1]
 
@@ -1358,7 +1557,9 @@ class TestHealthServer:
 
         server = HealthServer(node, port=0)
         raw_server = await asyncio.start_server(
-            server._handle_connection, "127.0.0.1", 0,
+            server._handle_connection,
+            "127.0.0.1",
+            0,
         )
         port = raw_server.sockets[0].getsockname()[1]
 
@@ -1381,6 +1582,7 @@ class TestHealthServer:
 # Smoke test — full lifecycle end-to-end
 # =============================================================================
 
+
 class TestClawSmoke:
     """End-to-end smoke test: mock Gateway → handshake → camera.list →
     vision.analyze → vision.watch (1 cycle) → health endpoint → shutdown.
@@ -1396,45 +1598,81 @@ class TestClawSmoke:
 
         async def mock_gateway(ws):
             # --- Handshake ---
-            await ws.send(json.dumps({
-                "type": "event", "event": "connect.challenge",
-                "payloadJSON": json.dumps({"nonce": "smoke-nonce"}),
-            }))
+            await ws.send(
+                json.dumps(
+                    {
+                        "type": "event",
+                        "event": "connect.challenge",
+                        "payloadJSON": json.dumps({"nonce": "smoke-nonce"}),
+                    }
+                )
+            )
             frame = json.loads(await ws.recv())
             assert frame["method"] == "connect"
             assert frame["params"]["role"] == "node"
-            await ws.send(json.dumps({
-                "type": "res", "id": frame["id"], "ok": True,
-                "payload": {"type": "hello-ok"},
-            }))
+            await ws.send(
+                json.dumps(
+                    {
+                        "type": "res",
+                        "id": frame["id"],
+                        "ok": True,
+                        "payload": {"type": "hello-ok"},
+                    }
+                )
+            )
 
             # --- Phase 1: camera.list ---
-            await ws.send(json.dumps(make_event("node.invoke.request", {
-                "id": "smoke-list", "nodeId": "smoke-node",
-                "command": "camera.list", "params": {},
-            })))
+            await ws.send(
+                json.dumps(
+                    make_event(
+                        "node.invoke.request",
+                        {
+                            "id": "smoke-list",
+                            "nodeId": "smoke-node",
+                            "command": "camera.list",
+                            "params": {},
+                        },
+                    )
+                )
+            )
             msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=5))
             payload = json.loads(msg["params"]["payloadJSON"])
             results["list"] = payload
             phases_done["list"] = True
 
             # --- Phase 2: vision.analyze ---
-            await ws.send(json.dumps(make_event("node.invoke.request", {
-                "id": "smoke-analyze", "nodeId": "smoke-node",
-                "command": "vision.analyze",
-                "params": {"question": "What do you see?"},
-            })))
+            await ws.send(
+                json.dumps(
+                    make_event(
+                        "node.invoke.request",
+                        {
+                            "id": "smoke-analyze",
+                            "nodeId": "smoke-node",
+                            "command": "vision.analyze",
+                            "params": {"question": "What do you see?"},
+                        },
+                    )
+                )
+            )
             msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=5))
             payload = json.loads(msg["params"]["payloadJSON"])
             results["analyze"] = payload
             phases_done["analyze"] = True
 
             # --- Phase 3: vision.watch (collect 1 streaming result, then stop) ---
-            await ws.send(json.dumps(make_event("node.invoke.request", {
-                "id": "smoke-watch", "nodeId": "smoke-node",
-                "command": "vision.watch",
-                "params": {"question": "Is anyone there?", "interval": 2},
-            })))
+            await ws.send(
+                json.dumps(
+                    make_event(
+                        "node.invoke.request",
+                        {
+                            "id": "smoke-watch",
+                            "nodeId": "smoke-node",
+                            "command": "vision.watch",
+                            "params": {"question": "Is anyone there?", "interval": 2},
+                        },
+                    )
+                )
+            )
             # Collect start ack + first streaming result
             watch_id = None
             try:
@@ -1452,11 +1690,19 @@ class TestClawSmoke:
                         results["watch_result"] = p
                         phases_done["watch_result"] = True
                         # Stop the watch
-                        await ws.send(json.dumps(make_event("node.invoke.request", {
-                            "id": "smoke-stop", "nodeId": "smoke-node",
-                            "command": "vision.watch.stop",
-                            "params": {"watchId": watch_id},
-                        })))
+                        await ws.send(
+                            json.dumps(
+                                make_event(
+                                    "node.invoke.request",
+                                    {
+                                        "id": "smoke-stop",
+                                        "nodeId": "smoke-node",
+                                        "command": "vision.watch.stop",
+                                        "params": {"watchId": watch_id},
+                                    },
+                                )
+                            )
+                        )
                     elif p.get("status") == "stopped":
                         results["watch_stop"] = p
                         break
@@ -1487,8 +1733,11 @@ class TestClawSmoke:
 
                 # Start health server
                 from trio_core.claw.health import HealthServer
+
                 health_srv = await asyncio.start_server(
-                    HealthServer(node)._handle_connection, "127.0.0.1", 0,
+                    HealthServer(node)._handle_connection,
+                    "127.0.0.1",
+                    0,
                 )
                 health_port = health_srv.sockets[0].getsockname()[1]
 

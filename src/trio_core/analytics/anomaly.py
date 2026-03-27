@@ -16,6 +16,7 @@ from trio_core.analytics.aggregator import Bin
 @dataclass
 class Anomaly:
     """A detected anomaly in traffic data."""
+
     timestamp: datetime
     expected: float
     actual: float
@@ -64,16 +65,18 @@ class AnomalyDetector:
                 deviation_pct = abs(b.count - mean) / mean * 100
                 direction = "above" if b.count > mean else "below"
                 severity = self._severity(abs(z))
-                anomalies.append(Anomaly(
-                    timestamp=b.start,
-                    expected=round(mean, 1),
-                    actual=b.count,
-                    z_score=round(z, 2),
-                    deviation_pct=round(deviation_pct, 1),
-                    direction=direction,
-                    description=f"Traffic {deviation_pct:.0f}% {direction} average at {b.start.strftime('%H:%M')} (expected ~{mean:.0f}, got {b.count})",
-                    severity=severity,
-                ))
+                anomalies.append(
+                    Anomaly(
+                        timestamp=b.start,
+                        expected=round(mean, 1),
+                        actual=b.count,
+                        z_score=round(z, 2),
+                        deviation_pct=round(deviation_pct, 1),
+                        direction=direction,
+                        description=f"Traffic {deviation_pct:.0f}% {direction} average at {b.start.strftime('%H:%M')} (expected ~{mean:.0f}, got {b.count})",
+                        severity=severity,
+                    )
+                )
 
         return anomalies
 
@@ -105,16 +108,18 @@ class AnomalyDetector:
                 direction = "above" if b.count > mean else "below"
                 severity = self._severity(abs(z))
                 dow_name = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][b.start.weekday()]
-                anomalies.append(Anomaly(
-                    timestamp=b.start,
-                    expected=round(mean, 1),
-                    actual=b.count,
-                    z_score=round(z, 2),
-                    deviation_pct=round(deviation_pct, 1),
-                    direction=direction,
-                    description=f"Traffic {deviation_pct:.0f}% {direction} typical {dow_name} {b.start.hour:02d}:00 (expected ~{mean:.0f}, got {b.count})",
-                    severity=severity,
-                ))
+                anomalies.append(
+                    Anomaly(
+                        timestamp=b.start,
+                        expected=round(mean, 1),
+                        actual=b.count,
+                        z_score=round(z, 2),
+                        deviation_pct=round(deviation_pct, 1),
+                        direction=direction,
+                        description=f"Traffic {deviation_pct:.0f}% {direction} typical {dow_name} {b.start.hour:02d}:00 (expected ~{mean:.0f}, got {b.count})",
+                        severity=severity,
+                    )
+                )
 
         return anomalies
 

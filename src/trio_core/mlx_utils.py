@@ -12,7 +12,6 @@ from typing import Optional
 
 import mlx.core as mx
 
-
 # ── Attention Mask (from mlx_lm.models.base) ────────────────────────────────
 
 
@@ -38,7 +37,10 @@ def create_causal_mask(
 
 
 def create_attention_mask(
-    h, cache=None, window_size: Optional[int] = None, return_array: bool = False,
+    h,
+    cache=None,
+    window_size: Optional[int] = None,
+    return_array: bool = False,
 ):
     N = h.shape[1]
     if cache and hasattr(cache, "make_mask"):
@@ -82,8 +84,10 @@ def pixel_shuffle(input_tensor, shuffle_ratio):
     )
     reshaped = reshaped.transpose(0, 2, 1, 3)
     reshaped = reshaped.reshape(
-        batch_size, int(height * shuffle_ratio), int(width * shuffle_ratio),
-        int(channels / (shuffle_ratio ** 2)),
+        batch_size,
+        int(height * shuffle_ratio),
+        int(width * shuffle_ratio),
+        int(channels / (shuffle_ratio**2)),
     )
     reshaped = reshaped.transpose(0, 2, 1, 3)
     return reshaped.reshape(batch_size, -1, reshaped.shape[-1])

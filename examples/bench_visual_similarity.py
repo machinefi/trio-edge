@@ -38,35 +38,40 @@ def run_sequence(backend, prompt, frames, max_tokens):
         tic = time.perf_counter()
         result = backend.generate(frame, prompt, max_tokens=max_tokens, temperature=0.0)
         elapsed = time.perf_counter() - tic
-        results.append({
-            "frame": i,
-            "total_ms": elapsed * 1000,
-            "prompt_tps": result.prompt_tps,
-            "gen_tps": result.generation_tps,
-            "text": result.text[:80],
-            "prompt_tokens": result.prompt_tokens,
-            "gen_tokens": result.completion_tokens,
-        })
+        results.append(
+            {
+                "frame": i,
+                "total_ms": elapsed * 1000,
+                "prompt_tps": result.prompt_tps,
+                "gen_tps": result.generation_tps,
+                "text": result.text[:80],
+                "prompt_tokens": result.prompt_tokens,
+                "gen_tokens": result.completion_tokens,
+            }
+        )
     return results
 
 
 def main():
     parser = argparse.ArgumentParser(description="Visual similarity KV reuse benchmark")
-    parser.add_argument("--model", "-m",
-                        default="mlx-community/Qwen2.5-VL-3B-Instruct-4bit")
-    parser.add_argument("--runs", "-n", type=int, default=3,
-                        help="Number of frame sequences to benchmark")
-    parser.add_argument("--frames-per-seq", type=int, default=5,
-                        help="Frames per sequence")
+    parser.add_argument("--model", "-m", default="mlx-community/Qwen2.5-VL-3B-Instruct-4bit")
+    parser.add_argument(
+        "--runs", "-n", type=int, default=3, help="Number of frame sequences to benchmark"
+    )
+    parser.add_argument("--frames-per-seq", type=int, default=5, help="Frames per sequence")
     parser.add_argument("--max-tokens", type=int, default=32)
-    parser.add_argument("--threshold", type=float, default=0.95,
-                        help="Visual similarity threshold")
-    parser.add_argument("--noise", type=float, default=0.01,
-                        help="Noise level for frame perturbation (0.01=very similar)")
+    parser.add_argument("--threshold", type=float, default=0.95, help="Visual similarity threshold")
+    parser.add_argument(
+        "--noise",
+        type=float,
+        default=0.01,
+        help="Noise level for frame perturbation (0.01=very similar)",
+    )
     parser.add_argument("--prompt", default="Describe what you see in this image.")
     args = parser.parse_args()
 
     import mlx.core as mx
+
     from trio_core.backends import MLXBackend
     from trio_core.generate import _wired_limit
 
@@ -92,13 +97,15 @@ def main():
     backend.set_visual_similarity(0.0)
     with _wired_limit(backend._model):
         _ = run_sequence(backend, args.prompt, sequences[0][:2], args.max_tokens)
-    mx.clear_cache(); gc.collect()
+    mx.clear_cache()
+    gc.collect()
 
     print("Warmup (with similarity)...")
     backend.set_visual_similarity(args.threshold)
     with _wired_limit(backend._model):
         _ = run_sequence(backend, args.prompt, sequences[0][:2], args.max_tokens)
-    mx.clear_cache(); gc.collect()
+    mx.clear_cache()
+    gc.collect()
     print()
 
     # Benchmark
@@ -112,12 +119,14 @@ def main():
             # Baseline: no visual similarity
             backend.set_visual_similarity(0.0)
             baseline = run_sequence(backend, args.prompt, frames, args.max_tokens)
-            mx.clear_cache(); gc.collect()
+            mx.clear_cache()
+            gc.collect()
 
             # With visual similarity
             backend.set_visual_similarity(args.threshold)
             similarity = run_sequence(backend, args.prompt, frames, args.max_tokens)
-            mx.clear_cache(); gc.collect()
+            mx.clear_cache()
+            gc.collect()
 
             all_baseline.append(baseline)
             all_similarity.append(similarity)
@@ -128,15 +137,19 @@ def main():
             # Frame 0 is always cold; frames 1+ benefit from similarity
             avg_base_warm = np.mean([r["total_ms"] for r in baseline[1:]])
             avg_sim_warm = np.mean([r["total_ms"] for r in similarity[1:]])
-            print(f"Run {run_i+1}/{args.runs}:  "
-                  f"baseline avg={avg_base:.0f}ms (warm={avg_base_warm:.0f}ms)  |  "
-                  f"similarity avg={avg_sim:.0f}ms (warm={avg_sim_warm:.0f}ms)  "
-                  f"speedup={avg_base_warm/max(avg_sim_warm,1):.2f}x")
+            print(
+                f"Run {run_i + 1}/{args.runs}:  "
+                f"baseline avg={avg_base:.0f}ms (warm={avg_base_warm:.0f}ms)  |  "
+                f"similarity avg={avg_sim:.0f}ms (warm={avg_sim_warm:.0f}ms)  "
+                f"speedup={avg_base_warm / max(avg_sim_warm, 1):.2f}x"
+            )
 
     # Summary
-    print(f"\n{'='*70}")
-    print(f"  Visual Similarity KV Reuse Benchmark (threshold={args.threshold}, noise={args.noise})")
-    print(f"  {'='*66}")
+    print(f"\n{'=' * 70}")
+    print(
+        f"  Visual Similarity KV Reuse Benchmark (threshold={args.threshold}, noise={args.noise})"
+    )
+    print(f"  {'=' * 66}")
 
     # Aggregate warm frames (frame 1+) across all runs
     base_warm_times = [r["total_ms"] for run in all_baseline for r in run[1:]]
@@ -150,18 +163,22 @@ def main():
     sim_cold_avg = np.mean(sim_cold_times)
 
     print(f"\n  {'Metric':<30} {'Baseline':>12} {'Similarity':>12} {'Speedup':>10}")
-    print(f"  {'-'*30} {'-'*12} {'-'*12} {'-'*10}")
-    print(f"  {'Cold frame (ms)':<30} {base_cold_avg:>12.0f} {sim_cold_avg:>12.0f} "
-          f"{base_cold_avg/max(sim_cold_avg,1):>9.2f}x")
-    print(f"  {'Warm frames avg (ms)':<30} {base_warm_avg:>12.0f} {sim_warm_avg:>12.0f} "
-          f"{base_warm_avg/max(sim_warm_avg,1):>9.2f}x")
+    print(f"  {'-' * 30} {'-' * 12} {'-' * 12} {'-' * 10}")
+    print(
+        f"  {'Cold frame (ms)':<30} {base_cold_avg:>12.0f} {sim_cold_avg:>12.0f} "
+        f"{base_cold_avg / max(sim_cold_avg, 1):>9.2f}x"
+    )
+    print(
+        f"  {'Warm frames avg (ms)':<30} {base_warm_avg:>12.0f} {sim_warm_avg:>12.0f} "
+        f"{base_warm_avg / max(sim_warm_avg, 1):>9.2f}x"
+    )
 
     savings_pct = (1 - sim_warm_avg / max(base_warm_avg, 1)) * 100
     print(f"\n  Warm frame savings: {savings_pct:.1f}%")
-    print(f"  (Warm = frames 1+ in each sequence, where similarity KV reuse applies)")
+    print("  (Warm = frames 1+ in each sequence, where similarity KV reuse applies)")
 
     # Check output consistency
-    print(f"\n  Output comparison (first sequence):")
+    print("\n  Output comparison (first sequence):")
     for i in range(min(3, len(all_baseline[0]))):
         base_text = all_baseline[0][i]["text"]
         sim_text = all_similarity[0][i]["text"]
@@ -170,7 +187,7 @@ def main():
         if base_text != sim_text:
             print(f"             similarity='{sim_text[:50]}...'")
 
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
 
 
 if __name__ == "__main__":

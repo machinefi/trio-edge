@@ -27,10 +27,10 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-
 # =============================================================================
 # Wire frame types
 # =============================================================================
+
 
 def make_req(method: str, params: dict, req_id: str | None = None) -> dict:
     """Build a request frame."""
@@ -42,8 +42,7 @@ def make_req(method: str, params: dict, req_id: str | None = None) -> dict:
     }
 
 
-def make_res(req_id: str, ok: bool, payload: dict | None = None,
-             error: dict | None = None) -> dict:
+def make_res(req_id: str, ok: bool, payload: dict | None = None, error: dict | None = None) -> dict:
     """Build a response frame."""
     frame = {"type": "res", "id": req_id, "ok": ok}
     if payload:
@@ -84,8 +83,8 @@ def _b64url_decode(s: str) -> bytes:
 
 def load_or_create_identity() -> tuple:
     """Load or generate Ed25519 identity. Returns (device_id, private_key, raw_pub)."""
-    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
     from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
     if IDENTITY_FILE.exists():
         data = json.loads(IDENTITY_FILE.read_text())
@@ -99,7 +98,8 @@ def load_or_create_identity() -> tuple:
     private_key = Ed25519PrivateKey.generate()
     public_key = private_key.public_key()
     raw_pub = public_key.public_bytes(
-        serialization.Encoding.Raw, serialization.PublicFormat.Raw,
+        serialization.Encoding.Raw,
+        serialization.PublicFormat.Raw,
     )
     raw_priv = private_key.private_bytes(
         serialization.Encoding.Raw,
@@ -110,11 +110,16 @@ def load_or_create_identity() -> tuple:
 
     # Save
     STATE_DIR.mkdir(parents=True, exist_ok=True)
-    IDENTITY_FILE.write_text(json.dumps({
-        "deviceId": device_id,
-        "publicKey": _b64url_encode(raw_pub),
-        "privateKey": _b64url_encode(raw_priv),
-    }, indent=2))
+    IDENTITY_FILE.write_text(
+        json.dumps(
+            {
+                "deviceId": device_id,
+                "publicKey": _b64url_encode(raw_pub),
+                "privateKey": _b64url_encode(raw_priv),
+            },
+            indent=2,
+        )
+    )
 
     return device_id, private_key, raw_pub
 
@@ -137,19 +142,21 @@ def build_device_params(
     device_family = device_family.strip().lower()
 
     # v3 payload: pipe-delimited string
-    payload = "|".join([
-        "v3",
-        device_id,
-        client_id,
-        client_mode,
-        role,
-        "",  # scopes (empty for nodes)
-        str(signed_at_ms),
-        token or "",
-        nonce,
-        plat,
-        device_family,
-    ])
+    payload = "|".join(
+        [
+            "v3",
+            device_id,
+            client_id,
+            client_mode,
+            role,
+            "",  # scopes (empty for nodes)
+            str(signed_at_ms),
+            token or "",
+            nonce,
+            plat,
+            device_family,
+        ]
+    )
 
     signature = private_key.sign(payload.encode("utf-8"))
 
@@ -165,6 +172,7 @@ def build_device_params(
 # =============================================================================
 # Connect params
 # =============================================================================
+
 
 def connect_params(
     node_id: str,
@@ -233,9 +241,12 @@ def pair_request_params(
         caps = ["camera", "vision"]
     if commands is None:
         commands = [
-            "camera.snap", "camera.list",
-            "vision.analyze", "vision.watch",
-            "vision.watch.stop", "vision.status",
+            "camera.snap",
+            "camera.list",
+            "vision.analyze",
+            "vision.watch",
+            "vision.watch.stop",
+            "vision.status",
         ]
 
     return {
@@ -254,9 +265,11 @@ def pair_request_params(
 # Invoke types
 # =============================================================================
 
+
 @dataclass
 class InvokeRequest:
     """Parsed invoke request from gateway."""
+
     id: str
     node_id: str
     command: str
@@ -282,6 +295,7 @@ class InvokeRequest:
 @dataclass
 class InvokeResult:
     """Result to send back to gateway after executing a command."""
+
     id: str
     node_id: str
     ok: bool
@@ -309,6 +323,7 @@ class InvokeResult:
 # =============================================================================
 # Utilities
 # =============================================================================
+
 
 def generate_id(length: int = 8) -> str:
     """Generate a random request ID."""

@@ -13,27 +13,34 @@ Requires:
 
 import argparse
 import json
-import sys
 import time
 
-from trio_core import TrioCore, EngineConfig, StreamCapture
+from trio_core import EngineConfig, StreamCapture, TrioCore
 
 
 def main():
     parser = argparse.ArgumentParser(description="Monitor a live stream with VLM")
     parser.add_argument("source", help="RTSP URL, YouTube URL, or camera index")
-    parser.add_argument("--condition", "-c", required=True,
-                        help="Yes/no condition to watch for (e.g., 'Is there a person?')")
-    parser.add_argument("--webhook", "-w", default=None,
-                        help="Webhook URL to POST when condition triggers")
-    parser.add_argument("--stride", type=int, default=60,
-                        help="Check every N-th frame (default: 60, ~2s at 30fps)")
+    parser.add_argument(
+        "--condition",
+        "-c",
+        required=True,
+        help="Yes/no condition to watch for (e.g., 'Is there a person?')",
+    )
+    parser.add_argument(
+        "--webhook", "-w", default=None, help="Webhook URL to POST when condition triggers"
+    )
+    parser.add_argument(
+        "--stride", type=int, default=60, help="Check every N-th frame (default: 60, ~2s at 30fps)"
+    )
     parser.add_argument("--model", "-m", default=None, help="Model name")
     parser.add_argument("--backend", "-b", default=None, help="Force backend")
-    parser.add_argument("--motion", action="store_true",
-                        help="Enable motion gate (skip VLM on static scenes)")
-    parser.add_argument("--max-checks", type=int, default=0,
-                        help="Stop after N checks (0=unlimited)")
+    parser.add_argument(
+        "--motion", action="store_true", help="Enable motion gate (skip VLM on static scenes)"
+    )
+    parser.add_argument(
+        "--max-checks", type=int, default=0, help="Stop after N checks (0=unlimited)"
+    )
     args = parser.parse_args()
 
     # Configure
@@ -47,10 +54,7 @@ def main():
     engine.load()
 
     # Build the monitoring prompt
-    prompt = (
-        f"Answer YES or NO: {args.condition}\n"
-        f"Then explain briefly in one sentence."
-    )
+    prompt = f"Answer YES or NO: {args.condition}\nThen explain briefly in one sentence."
 
     # Register callback for trigger detection
     triggers = []
@@ -98,17 +102,20 @@ def _send_webhook(url: str, condition: str, explanation: str):
     """POST trigger notification to webhook URL."""
     import urllib.request
 
-    payload = json.dumps({
-        "type": "watch_trigger",
-        "triggered": True,
-        "condition": condition,
-        "explanation": explanation,
-        "timestamp": time.time(),
-    }).encode()
+    payload = json.dumps(
+        {
+            "type": "watch_trigger",
+            "triggered": True,
+            "condition": condition,
+            "explanation": explanation,
+            "timestamp": time.time(),
+        }
+    ).encode()
 
     try:
         req = urllib.request.Request(
-            url, data=payload,
+            url,
+            data=payload,
             headers={"Content-Type": "application/json"},
         )
         urllib.request.urlopen(req, timeout=10)

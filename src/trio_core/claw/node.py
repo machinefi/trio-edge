@@ -29,7 +29,6 @@ from .protocol import (
     InvokeRequest,
     InvokeResult,
     connect_params,
-    generate_id,
     load_or_create_identity,
     make_req,
     make_res,
@@ -97,7 +96,8 @@ class ClawNode:
 
             # 2. Send connect with device identity (+ gateway token if provided)
             params = connect_params(
-                self.node_id, token=self.token,
+                self.node_id,
+                token=self.token,
                 nonce=nonce,
                 device_id=self._device_id,
                 private_key=self._private_key,
@@ -106,14 +106,14 @@ class ClawNode:
             await ws.send(json.dumps(make_req("connect", params)))
 
             # 3. Read hello response
-            res = json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
+            json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
             # For pairing, we may get hello-ok or need to proceed anyway
 
             # 4. Send pair request
             pair_params = pair_request_params(self.node_id, display_name)
             await ws.send(json.dumps(make_req("node.pair.request", pair_params)))
             logger.info("Pairing request sent. Waiting for operator approval...")
-            print(f"\n  Approve in OpenClaw: openclaw devices approve\n")
+            print("\n  Approve in OpenClaw: openclaw devices approve\n")
 
             # 5. Wait for device.pair.resolved event
             loop = asyncio.get_running_loop()
@@ -197,12 +197,14 @@ class ClawNode:
         watches = []
         if self.handler and hasattr(self.handler, "_watches"):
             for w in self.handler._watches.values():
-                watches.append({
-                    "watchId": w.watch_id,
-                    "condition": w.condition,
-                    "checks": w.checks,
-                    "alerts": w.alerts,
-                })
+                watches.append(
+                    {
+                        "watchId": w.watch_id,
+                        "condition": w.condition,
+                        "checks": w.checks,
+                        "alerts": w.alerts,
+                    }
+                )
         model = "unknown"
         if self.handler and hasattr(self.handler, "engine") and self.handler.engine:
             try:
@@ -239,8 +241,9 @@ class ClawNode:
     def _on_shutdown_signal(self, sig: signal.Signals) -> None:
         """Handle SIGTERM/SIGINT — initiate graceful shutdown."""
         sig_name = sig.name
-        logger.info("Received %s — shutting down gracefully (timeout %ds)...",
-                     sig_name, SHUTDOWN_TIMEOUT)
+        logger.info(
+            "Received %s — shutting down gracefully (timeout %ds)...", sig_name, SHUTDOWN_TIMEOUT
+        )
         self._running = False
         self._shutdown.set()
 
@@ -250,15 +253,16 @@ class ClawNode:
 
     def _force_exit(self, sig_name: str) -> None:
         """Force exit if graceful shutdown exceeds timeout."""
-        logger.warning("Graceful shutdown timed out after %ds (%s). Forcing exit.",
-                       SHUTDOWN_TIMEOUT, sig_name)
+        logger.warning(
+            "Graceful shutdown timed out after %ds (%s). Forcing exit.", SHUTDOWN_TIMEOUT, sig_name
+        )
         sys.exit(1)
 
     def _on_status_signal(self) -> None:
         """Handle SIGUSR1 — dump status to stderr."""
         s = self.status()
         lines = [
-            f"--- trio-claw status ---",
+            "--- trio-claw status ---",
             f"  status:     {s['status']}",
             f"  uptime:     {s['uptime_s']:.0f}s",
             f"  reconnects: {s['reconnects']}",
@@ -267,8 +271,10 @@ class ClawNode:
             f"  watches:    {s['watches_active']}",
         ]
         for w in s["watches"]:
-            lines.append(f"    - {w['watchId']}: {w['condition']} "
-                         f"(checks={w['checks']}, alerts={w['alerts']})")
+            lines.append(
+                f"    - {w['watchId']}: {w['condition']} "
+                f"(checks={w['checks']}, alerts={w['alerts']})"
+            )
         lines.append("---")
         sys.stderr.write("\n".join(lines) + "\n")
         sys.stderr.flush()
@@ -307,8 +313,11 @@ class ClawNode:
                     elif frame_type == "req":
                         await self._handle_request(ws, frame)
                     elif frame_type == "res":
-                        logger.debug("Response frame (ignored): id=%s ok=%s",
-                                     frame.get("id"), frame.get("ok"))
+                        logger.debug(
+                            "Response frame (ignored): id=%s ok=%s",
+                            frame.get("id"),
+                            frame.get("ok"),
+                        )
                     else:
                         logger.debug("Unknown frame type: %s", frame_type)
             finally:
@@ -340,7 +349,8 @@ class ClawNode:
 
         # 2. Send connect with device identity + auth token
         params = connect_params(
-            self.node_id, token=self.token,
+            self.node_id,
+            token=self.token,
             nonce=nonce,
             device_id=self._device_id,
             private_key=self._private_key,
@@ -357,13 +367,18 @@ class ClawNode:
             error_msg = error.get("message", str(res)) if isinstance(error, dict) else str(res)
 
             # Auth-related error codes from Gateway
-            auth_codes = {"AUTH_FAILED", "UNAUTHORIZED", "TOKEN_EXPIRED",
-                          "TOKEN_INVALID", "FORBIDDEN", "INVALID_TOKEN"}
+            auth_codes = {
+                "AUTH_FAILED",
+                "UNAUTHORIZED",
+                "TOKEN_EXPIRED",
+                "TOKEN_INVALID",
+                "FORBIDDEN",
+                "INVALID_TOKEN",
+            }
             auth_keywords = {"auth", "token", "unauthorized", "forbidden", "credential"}
 
-            is_auth = (
-                error_code.upper() in auth_codes
-                or any(kw in error_msg.lower() for kw in auth_keywords)
+            is_auth = error_code.upper() in auth_codes or any(
+                kw in error_msg.lower() for kw in auth_keywords
             )
             if is_auth:
                 raise AuthError(f"Token rejected by Gateway: {error_msg}")
@@ -387,7 +402,11 @@ class ClawNode:
                 p = frame["payload"]
                 raw = json.dumps(p) if isinstance(p, dict) else p
             elif "params" in frame:
-                raw = json.dumps(frame["params"]) if isinstance(frame["params"], dict) else frame["params"]
+                raw = (
+                    json.dumps(frame["params"])
+                    if isinstance(frame["params"], dict)
+                    else frame["params"]
+                )
             else:
                 raw = "{}"
 
@@ -446,8 +465,11 @@ class ClawNode:
         """Execute a command and send the result back."""
         if self.handler is None:
             result = InvokeResult(
-                id=req.id, node_id=self.node_id, ok=False,
-                error_code="UNAVAILABLE", error_message="No handler configured",
+                id=req.id,
+                node_id=self.node_id,
+                ok=False,
+                error_code="UNAVAILABLE",
+                error_message="No handler configured",
             )
         else:
             # Give handler access to the WebSocket for streaming results (vision.watch)
@@ -457,8 +479,11 @@ class ClawNode:
             except Exception as e:
                 logger.exception("Command %s failed", req.command)
                 result = InvokeResult(
-                    id=req.id, node_id=self.node_id, ok=False,
-                    error_code="INTERNAL_ERROR", error_message=str(e),
+                    id=req.id,
+                    node_id=self.node_id,
+                    ok=False,
+                    error_code="INTERNAL_ERROR",
+                    error_message=str(e),
                 )
 
         logger.info("Invoke result: command=%s ok=%s id=%s", req.command, result.ok, req.id)
@@ -490,6 +515,7 @@ class ClawNode:
 # Helpers
 # =============================================================================
 
+
 def _extract_nonce(frame: dict) -> str:
     """Extract nonce from a connect.challenge frame."""
     if "payloadJSON" in frame:
@@ -510,6 +536,7 @@ def _extract_nonce(frame: dict) -> str:
 # =============================================================================
 # Token persistence (~/.trio/claw_state.json)
 # =============================================================================
+
 
 def _load_token() -> str | None:
     """Load saved device token."""
@@ -532,4 +559,5 @@ def _save_token(token: str) -> None:
 def _default_node_id() -> str:
     """Generate a default node ID from hostname."""
     import socket
+
     return f"trio-{socket.gethostname().split('.')[0].lower()}"

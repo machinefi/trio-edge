@@ -6,7 +6,6 @@ Tests each model on the same set of crops and scores them.
 
 from __future__ import annotations
 
-import json
 import sys
 import time
 from pathlib import Path
@@ -34,18 +33,55 @@ VEHICLE_PROMPT = (
     "make/model/brand if possible, and any distinguishing features."
 )
 
-KEYWORDS_PERSON = ["male", "female", "man", "woman", "wearing", "shirt", "dress",
-                    "suit", "jacket", "pants", "bag", "walking", "standing",
-                    "carrying", "age", "young", "old", "elderly", "middle"]
+KEYWORDS_PERSON = [
+    "male",
+    "female",
+    "man",
+    "woman",
+    "wearing",
+    "shirt",
+    "dress",
+    "suit",
+    "jacket",
+    "pants",
+    "bag",
+    "walking",
+    "standing",
+    "carrying",
+    "age",
+    "young",
+    "old",
+    "elderly",
+    "middle",
+]
 
-KEYWORDS_VEHICLE = ["sedan", "suv", "truck", "bus", "taxi", "toyota", "ford",
-                     "honda", "bmw", "tesla", "white", "black", "red", "blue",
-                     "yellow", "silver", "model", "pickup", "van"]
+KEYWORDS_VEHICLE = [
+    "sedan",
+    "suv",
+    "truck",
+    "bus",
+    "taxi",
+    "toyota",
+    "ford",
+    "honda",
+    "bmw",
+    "tesla",
+    "white",
+    "black",
+    "red",
+    "blue",
+    "yellow",
+    "silver",
+    "model",
+    "pickup",
+    "van",
+]
 
 
 def get_test_crops():
     """Get crops from benchmark frames."""
     from trio_core.counter import PeopleCounter
+
     counter = PeopleCounter(model_path="models/yolov10n/onnx/model.onnx")
 
     crops = []
@@ -70,11 +106,11 @@ def get_test_crops():
 
 def bench_model(model_name: str, crops: list):
     """Benchmark a single model."""
-    from trio_core import TrioCore, EngineConfig
+    from trio_core import EngineConfig, TrioCore
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Model: {model_name}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     config = EngineConfig(model=model_name)
     engine = TrioCore(config)
@@ -112,13 +148,15 @@ def bench_model(model_name: str, crops: list):
         total_keywords += hits
         descriptions.append(text)
 
-        results.append({
-            "class": cls_name,
-            "latency_ms": round(latency),
-            "text_len": len(text),
-            "keyword_hits": hits,
-            "text": text[:150],
-        })
+        results.append(
+            {
+                "class": cls_name,
+                "latency_ms": round(latency),
+                "text_len": len(text),
+                "keyword_hits": hits,
+                "text": text[:150],
+            }
+        )
 
     n = len(results)
     if n == 0:
@@ -129,18 +167,14 @@ def bench_model(model_name: str, crops: list):
     unique_ratio = len(set(d[:50] for d in descriptions)) / max(len(descriptions), 1)
 
     # Score
-    score = (
-        avg_keywords * 10
-        + unique_ratio * 20
-        + min(20, max(0, (3000 - avg_latency) / 150))
-    )
+    score = avg_keywords * 10 + unique_ratio * 20 + min(20, max(0, (3000 - avg_latency) / 150))
     score = min(100, max(0, score))
 
     print(f"  Avg latency: {avg_latency:.0f}ms")
     print(f"  Avg keywords: {avg_keywords:.1f}")
     print(f"  Unique ratio: {unique_ratio:.2f}")
     print(f"  Score: {score:.1f}/100")
-    print(f"  Sample descriptions:")
+    print("  Sample descriptions:")
     for r in results[:3]:
         print(f"    [{r['class']}] {r['text'][:120]}")
 
@@ -157,7 +191,9 @@ def bench_model(model_name: str, crops: list):
 
 def main():
     crops = get_test_crops()
-    print(f"Test crops: {len(crops)} ({sum(1 for c,_ in crops if c=='person')} person, {sum(1 for c,_ in crops if c!='person')} vehicle)")
+    print(
+        f"Test crops: {len(crops)} ({sum(1 for c, _ in crops if c == 'person')} person, {sum(1 for c, _ in crops if c != 'person')} vehicle)"
+    )
 
     all_results = []
     for model in MODELS:
@@ -165,14 +201,16 @@ def main():
         if result:
             all_results.append(result)
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("FINAL RANKING")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"{'Model':<50} {'Score':>6} {'Latency':>8} {'Keywords':>9} {'Load':>6}")
     print("-" * 85)
     for r in sorted(all_results, key=lambda x: x["score"], reverse=True):
         short = r["model"].split("/")[-1]
-        print(f"{short:<50} {r['score']:>6.1f} {r['avg_latency_ms']:>7}ms {r['avg_keywords']:>8.1f} {r['load_time_s']:>5.1f}s")
+        print(
+            f"{short:<50} {r['score']:>6.1f} {r['avg_latency_ms']:>7}ms {r['avg_keywords']:>8.1f} {r['load_time_s']:>5.1f}s"
+        )
 
 
 if __name__ == "__main__":

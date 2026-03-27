@@ -24,9 +24,11 @@ logger = logging.getLogger(__name__)
 
 # ── Data classes ──────────────────────────────────────────────────────────────
 
+
 @dataclass
 class VisionOutput:
     """Result from running the vision encoder."""
+
     hidden_states: Any  # mx.array — (N, D) visual features
     deepstack_embeds: list | None = None  # Qwen3-VL deepstack features
 
@@ -34,11 +36,13 @@ class VisionOutput:
 @dataclass
 class MergeResult:
     """Result from merging visual features into text embeddings."""
+
     embeds: Any  # mx.array — (B, L, D) merged embeddings
     image_mask: Any | None = None  # mx.array — Qwen3-VL image mask
 
 
 # ── Abstract adapter ─────────────────────────────────────────────────────────
+
 
 class ModelAdapter(ABC):
     """Abstract adapter for model-family-specific operations."""
@@ -98,7 +102,7 @@ class ModelAdapter(ABC):
         Qwen adapters override for MRoPE with multimodal RoPE.
         """
         attn = layer.self_attn
-        rope = getattr(attn, 'rotary_emb', getattr(attn, 'rope', None))
+        rope = getattr(attn, "rotary_emb", getattr(attn, "rope", None))
         q = rope(q, offset=cache_offset)
         k = rope(k, offset=cache_offset)
         return q, k
@@ -109,18 +113,18 @@ class ModelAdapter(ABC):
 
     def get_vision_dtype(self):
         """Get the dtype of the vision encoder weights."""
-        vt = getattr(self._model, 'vision_tower',
-                     getattr(self._model, 'vision_model', None))
+        vt = getattr(self._model, "vision_tower", getattr(self._model, "vision_model", None))
         # Try common paths
-        if hasattr(vt, 'patch_embed'):
-            if hasattr(vt.patch_embed, 'proj'):
+        if hasattr(vt, "patch_embed"):
+            if hasattr(vt.patch_embed, "proj"):
                 return vt.patch_embed.proj.weight.dtype
-            if hasattr(vt.patch_embed, 'linear_patches'):
+            if hasattr(vt.patch_embed, "linear_patches"):
                 return vt.patch_embed.linear_patches.weight.dtype
         # Fallback for CNN encoders
-        if hasattr(vt, 'model') and hasattr(vt.model, 'patch_embed'):
+        if hasattr(vt, "model") and hasattr(vt.model, "patch_embed"):
             return vt.model.patch_embed.proj.weight.dtype
         import mlx.core as mx
+
         return mx.float16
 
     def original_token_count(self, grid_thw) -> int:
@@ -136,6 +140,7 @@ class ModelAdapter(ABC):
 
 
 # ── Qwen2.5-VL ───────────────────────────────────────────────────────────────
+
 
 class Qwen25VLAdapter(ModelAdapter):
     """Adapter for Qwen2.5-VL models."""
@@ -165,19 +170,26 @@ class Qwen25VLAdapter(ModelAdapter):
     def merge_visual_features(self, hidden_states, text_embeds, input_ids) -> MergeResult:
         vid_id, img_id = self.get_visual_token_ids()
         embeds = self._model.merge_input_ids_with_image_features(
-            img_id, vid_id, hidden_states, text_embeds, input_ids,
+            img_id,
+            vid_id,
+            hidden_states,
+            text_embeds,
+            input_ids,
         )
         return MergeResult(embeds=embeds)
 
     def compute_position_ids(self, input_ids, attention_mask, **grid_kwargs):
         return self._model.language_model.get_rope_index(
-            input_ids, attention_mask=attention_mask, **grid_kwargs,
+            input_ids,
+            attention_mask=attention_mask,
+            **grid_kwargs,
         )
 
     def apply_rope_at_layer(self, q, k, v, position_ids, layer, cache_offset=0):
         attn = layer.self_attn
         cos, sin = attn.rotary_emb(v, position_ids)
         from trio_core.mlx_utils import apply_multimodal_rotary_pos_emb
+
         q, k = apply_multimodal_rotary_pos_emb(q, k, cos, sin, unqueeze_dim=1)
         return q, k
 
@@ -186,6 +198,7 @@ class Qwen25VLAdapter(ModelAdapter):
 
 
 # ── Qwen3-VL / Qwen3.5 ──────────────────────────────────────────────────────
+
 
 class Qwen3VLAdapter(ModelAdapter):
     """Adapter for Qwen3-VL and Qwen3.5 models."""
@@ -208,14 +221,8 @@ class Qwen3VLAdapter(ModelAdapter):
 
     def get_visual_token_ids(self) -> tuple:
         cfg = self._model.config
-        vid_id = (
-            getattr(cfg, 'video_token_index', None) or
-            getattr(cfg, 'video_token_id', None)
-        )
-        img_id = (
-            getattr(cfg, 'image_token_index', None) or
-            getattr(cfg, 'image_token_id', None)
-        )
+        vid_id = getattr(cfg, "video_token_index", None) or getattr(cfg, "video_token_id", None)
+        img_id = getattr(cfg, "image_token_index", None) or getattr(cfg, "image_token_id", None)
         return vid_id, img_id
 
     def run_vision_encoder(self, pixel_values, grid_thw=None) -> VisionOutput:
@@ -234,20 +241,26 @@ class Qwen3VLAdapter(ModelAdapter):
     def merge_visual_features(self, hidden_states, text_embeds, input_ids) -> MergeResult:
         vid_id, img_id = self.get_visual_token_ids()
         embeds, image_mask = self._model.merge_input_ids_with_image_features(
-            hidden_states, text_embeds, input_ids,
-            img_id, vid_id,
+            hidden_states,
+            text_embeds,
+            input_ids,
+            img_id,
+            vid_id,
         )
         return MergeResult(embeds=embeds, image_mask=image_mask)
 
     def compute_position_ids(self, input_ids, attention_mask, **grid_kwargs):
         return self._model.language_model.get_rope_index(
-            input_ids, attention_mask=attention_mask, **grid_kwargs,
+            input_ids,
+            attention_mask=attention_mask,
+            **grid_kwargs,
         )
 
     def apply_rope_at_layer(self, q, k, v, position_ids, layer, cache_offset=0):
         attn = layer.self_attn
         cos, sin = attn.rotary_emb(v, position_ids)
         from trio_core.mlx_utils import apply_multimodal_rotary_pos_emb
+
         q, k = apply_multimodal_rotary_pos_emb(q, k, cos, sin, unqueeze_dim=1)
         return q, k
 
@@ -256,6 +269,7 @@ class Qwen3VLAdapter(ModelAdapter):
 
 
 # ── InternVL3 ────────────────────────────────────────────────────────────────
+
 
 class InternVLAdapter(ModelAdapter):
     """Adapter for InternVL3 models (InternViT + pixel_shuffle + MLP + Qwen2.5 LLM).
@@ -277,8 +291,7 @@ class InternVLAdapter(ModelAdapter):
 
     def get_visual_token_ids(self) -> tuple:
         cfg = self._model.config
-        img_id = getattr(cfg, 'image_token_index',
-                 getattr(cfg, 'image_token_id', None))
+        img_id = getattr(cfg, "image_token_index", getattr(cfg, "image_token_id", None))
         # InternVL uses same token for video frames
         vid_id = img_id
         return vid_id, img_id
@@ -290,10 +303,12 @@ class InternVLAdapter(ModelAdapter):
             pv = pv[0]
         # Full pipeline: vision_model → CLS removal → pixel_shuffle → mlp1
         hs, _, _ = self._model.vision_model(
-            pv.transpose(0, 2, 3, 1), output_hidden_states=True,
+            pv.transpose(0, 2, 3, 1),
+            output_hidden_states=True,
         )
         hs = hs[:, 1:, :]  # remove CLS token
         from trio_core.mlx_utils import pixel_shuffle
+
         hs = pixel_shuffle(hs, shuffle_ratio=self._model.downsample_ratio)
         for layer in self._model.mlp1:
             hs = layer(hs)
@@ -305,7 +320,9 @@ class InternVLAdapter(ModelAdapter):
         # hidden_states is (N, D) flat; need (1, N, D) for merge
         hs = hidden_states[None] if hidden_states.ndim == 2 else hidden_states
         embeds = self._model._merge_input_ids_with_image_features(
-            hs, text_embeds, input_ids,
+            hs,
+            text_embeds,
+            input_ids,
         )
         if isinstance(embeds, tuple):
             return MergeResult(embeds=embeds[0], image_mask=embeds[1] if len(embeds) > 1 else None)
@@ -323,6 +340,7 @@ class InternVLAdapter(ModelAdapter):
 
 
 # ── nanoLLaVA (SigLIP) ───────────────────────────────────────────────────────
+
 
 class LLaVAAdapter(ModelAdapter):
     """Adapter for nanoLLaVA (SigLIP + MLP + Qwen1.5 LLM).
@@ -344,8 +362,7 @@ class LLaVAAdapter(ModelAdapter):
 
     def get_visual_token_ids(self) -> tuple:
         cfg = self._model.config
-        img_id = getattr(cfg, 'image_token_index',
-                 getattr(cfg, 'image_token_id', None))
+        img_id = getattr(cfg, "image_token_index", getattr(cfg, "image_token_id", None))
         vid_id = img_id
         return vid_id, img_id
 
@@ -354,7 +371,8 @@ class LLaVAAdapter(ModelAdapter):
         pv = pixel_values.astype(dtype)
         # Full pipeline: vision_tower → hidden_state[-1] → mm_projector
         *_, hidden_state = self._model.vision_tower(
-            pv.transpose(0, 2, 3, 1), output_hidden_states=True,
+            pv.transpose(0, 2, 3, 1),
+            output_hidden_states=True,
         )
         image_features = hidden_state[-1].astype(pv.dtype)
         image_features = self._model.mm_projector(image_features)
@@ -366,7 +384,9 @@ class LLaVAAdapter(ModelAdapter):
         # hidden_states is (N, D) flat; need (1, N, D) for merge
         hs = hidden_states[None] if hidden_states.ndim == 2 else hidden_states
         embeds = self._model._prepare_inputs_for_multimodal(
-            hs, text_embeds, input_ids,
+            hs,
+            text_embeds,
+            input_ids,
         )
         if isinstance(embeds, tuple):
             return MergeResult(embeds=embeds[0], image_mask=embeds[1] if len(embeds) > 1 else None)
@@ -383,6 +403,7 @@ class LLaVAAdapter(ModelAdapter):
 
 
 # ── FastVLM ──────────────────────────────────────────────────────────────────
+
 
 class FastVLMAdapter(ModelAdapter):
     """Adapter for Apple FastVLM (FastViTHD CNN + MLP + Qwen2 LLM).
@@ -404,8 +425,7 @@ class FastVLMAdapter(ModelAdapter):
 
     def get_visual_token_ids(self) -> tuple:
         cfg = self._model.config
-        img_id = getattr(cfg, 'image_token_index',
-                 getattr(cfg, 'image_token_id', None))
+        img_id = getattr(cfg, "image_token_index", getattr(cfg, "image_token_id", None))
         vid_id = img_id
         return vid_id, img_id
 
@@ -418,7 +438,11 @@ class FastVLMAdapter(ModelAdapter):
     def merge_visual_features(self, hidden_states, text_embeds, input_ids) -> MergeResult:
         vid_id, img_id = self.get_visual_token_ids()
         embeds = self._model.merge_input_ids_with_image_features(
-            img_id, vid_id, hidden_states, text_embeds, input_ids,
+            img_id,
+            vid_id,
+            hidden_states,
+            text_embeds,
+            input_ids,
         )
         if isinstance(embeds, tuple):
             return MergeResult(embeds=embeds[0], image_mask=embeds[1] if len(embeds) > 1 else None)
@@ -427,14 +451,15 @@ class FastVLMAdapter(ModelAdapter):
     def get_vision_dtype(self):
         """FastVLM uses CNN encoder — different weight path."""
         import mlx.core as mx
+
         vt = self._model.vision_tower
-        if hasattr(vt, 'model') and hasattr(vt.model, 'patch_embed'):
+        if hasattr(vt, "model") and hasattr(vt.model, "patch_embed"):
             pe = vt.model.patch_embed
-            if hasattr(pe, 'proj'):
+            if hasattr(pe, "proj"):
                 return pe.proj.weight.dtype
-        if hasattr(vt, 'patch_embed'):
+        if hasattr(vt, "patch_embed"):
             pe = vt.patch_embed
-            if hasattr(pe, 'proj'):
+            if hasattr(pe, "proj"):
                 return pe.proj.weight.dtype
         return mx.float16
 
@@ -450,6 +475,7 @@ class FastVLMAdapter(ModelAdapter):
 
 # ── Factory ──────────────────────────────────────────────────────────────────
 
+
 def get_adapter(model) -> ModelAdapter:
     """Auto-detect model family and return the appropriate adapter.
 
@@ -459,22 +485,22 @@ def get_adapter(model) -> ModelAdapter:
     3. Check module names for specific architectures
     """
     # Qwen family detection via vision_tower model_type
-    vt = getattr(model, 'vision_tower', None)
-    model_type = getattr(vt, 'model_type', '') if vt else ''
+    vt = getattr(model, "vision_tower", None)
+    model_type = getattr(vt, "model_type", "") if vt else ""
 
-    if model_type in ('qwen3_vl', 'qwen3_5', 'qwen3_5_moe'):
+    if model_type in ("qwen3_vl", "qwen3_5", "qwen3_5_moe"):
         logger.debug("Detected Qwen3-VL/Qwen3.5 model")
         return Qwen3VLAdapter(model)
 
-    if model_type in ('qwen2_vl', 'qwen2_5_vl'):
+    if model_type in ("qwen2_vl", "qwen2_5_vl"):
         logger.debug("Detected Qwen2.5-VL model")
         return Qwen25VLAdapter(model)
 
     # Check for InternVL: has vision_model (not vision_tower) or InternViT markers
-    cfg = getattr(model, 'config', None)
-    model_type_cfg = getattr(cfg, 'model_type', '') if cfg else ''
+    cfg = getattr(model, "config", None)
+    model_type_cfg = getattr(cfg, "model_type", "") if cfg else ""
 
-    if 'internvl' in model_type_cfg.lower():
+    if "internvl" in model_type_cfg.lower():
         logger.debug("Detected InternVL model")
         return InternVLAdapter(model)
 
@@ -483,27 +509,27 @@ def get_adapter(model) -> ModelAdapter:
         vt_type = type(vt).__name__.lower()
 
         # InternViT marker
-        if 'intern' in vt_type:
+        if "intern" in vt_type:
             logger.debug("Detected InternVL via vision tower type: %s", type(vt).__name__)
             return InternVLAdapter(model)
 
         # FastVLM: CNN-based encoder
-        if 'fastvlm' in vt_type or 'fastvithd' in vt_type:
+        if "fastvlm" in vt_type or "fastvithd" in vt_type:
             logger.debug("Detected FastVLM via vision tower type: %s", type(vt).__name__)
             return FastVLMAdapter(model)
 
         # SigLIP marker (nanoLLaVA, Bunny, etc.)
-        if 'siglip' in vt_type:
+        if "siglip" in vt_type:
             logger.debug("Detected SigLIP-based model (LLaVA-style)")
             return LLaVAAdapter(model)
 
     # Check config model_type for known patterns
     if model_type_cfg:
         mt = model_type_cfg.lower()
-        if 'bunny' in mt or 'llava' in mt or 'nanollava' in mt:
+        if "bunny" in mt or "llava" in mt or "nanollava" in mt:
             logger.debug("Detected LLaVA-style model via config.model_type")
             return LLaVAAdapter(model)
-        if 'fastvlm' in mt:
+        if "fastvlm" in mt:
             logger.debug("Detected FastVLM via config.model_type")
             return FastVLMAdapter(model)
 

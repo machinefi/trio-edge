@@ -72,10 +72,15 @@ def _parse_digest(text):
     text = re.sub(r"</?think>", "", text).strip()
     # Check for "nothing" / "no change" variants
     lower = text.lower()
-    if (lower.startswith("nothing") or lower.startswith("no change")
-            or lower.startswith("no new") or lower.startswith("no,")
-            or "there is no person" in lower or "no person, animal" in lower
-            or "there are no" in lower):
+    if (
+        lower.startswith("nothing")
+        or lower.startswith("no change")
+        or lower.startswith("no new")
+        or lower.startswith("no,")
+        or "there is no person" in lower
+        or "no person, animal" in lower
+        or "there are no" in lower
+    ):
         return None
     # Strip "EVENT:" prefix if present
     text = re.sub(r"^EVENT:\s*", "", text, flags=re.IGNORECASE).strip()
@@ -100,12 +105,19 @@ def _wrap_text(text, font, font_scale, thickness, max_width):
     return lines
 
 
-def draw_overlay(frame: np.ndarray, description: str, metrics: str = "",
-                 watch_mode: bool = False, triggered: bool = False,
-                 events: list | None = None, watch_text: str = "",
-                 counters: dict | None = None,
-                 digest_events: list | None = None,
-                 chat_input: str = "", chat_history: list | None = None) -> np.ndarray:
+def draw_overlay(
+    frame: np.ndarray,
+    description: str,
+    metrics: str = "",
+    watch_mode: bool = False,
+    triggered: bool = False,
+    events: list | None = None,
+    watch_text: str = "",
+    counters: dict | None = None,
+    digest_events: list | None = None,
+    chat_input: str = "",
+    chat_history: list | None = None,
+) -> np.ndarray:
     """Draw status bar (top) + description box (bottom) + event log + counters."""
     h, w = frame.shape[:2]
     overlay = frame.copy()
@@ -123,18 +135,18 @@ def draw_overlay(frame: np.ndarray, description: str, metrics: str = "",
 
         status = "!! ALERT !!" if triggered else "CLEAR"
         ts = datetime.now().strftime("%H:%M:%S")
-        cv2.putText(frame, f"{status}", (margin, 42),
-                    font, 1.2, (255, 255, 255), 3, cv2.LINE_AA)
-        cv2.putText(frame, ts, (w - 150, 42),
-                    font, 0.8, (255, 255, 255), 2, cv2.LINE_AA)
+        cv2.putText(frame, f"{status}", (margin, 42), font, 1.2, (255, 255, 255), 3, cv2.LINE_AA)
+        cv2.putText(frame, ts, (w - 150, 42), font, 0.8, (255, 255, 255), 2, cv2.LINE_AA)
 
     # --- Watch condition (left side, below status bar) ---
     if watch_mode and watch_text:
         cond_y = 90
-        cv2.putText(frame, "Watching for:", (margin, cond_y),
-                    font, 0.6, (0, 255, 255), 2, cv2.LINE_AA)  # bright cyan
-        cv2.putText(frame, watch_text, (margin, cond_y + 25),
-                    font, 0.6, (0, 255, 0), 2, cv2.LINE_AA)  # bright green
+        cv2.putText(
+            frame, "Watching for:", (margin, cond_y), font, 0.6, (0, 255, 255), 2, cv2.LINE_AA
+        )  # bright cyan
+        cv2.putText(
+            frame, watch_text, (margin, cond_y + 25), font, 0.6, (0, 255, 0), 2, cv2.LINE_AA
+        )  # bright green
 
     # --- Event log (top-right, watch mode only) — all triggered events ---
     if events:
@@ -147,14 +159,16 @@ def draw_overlay(frame: np.ndarray, description: str, metrics: str = "",
             log_y_start = 85 if watch_mode else 10
             # Dark background behind event log
             log_h = len(show_alerts) * log_line_h + 10
-            cv2.rectangle(overlay, (log_x - 5, log_y_start - 20),
-                          (w, log_y_start + log_h - 10), (0, 0, 0), -1)
+            cv2.rectangle(
+                overlay, (log_x - 5, log_y_start - 20), (w, log_y_start + log_h - 10), (0, 0, 0), -1
+            )
             frame = cv2.addWeighted(overlay, 0.6, frame, 0.4, 0)
             overlay = frame.copy()
             for i, evt in enumerate(show_alerts):
                 y = log_y_start + i * log_line_h
-                cv2.putText(frame, evt["text"], (log_x, y),
-                            font, 0.6, (100, 100, 255), 2, cv2.LINE_AA)
+                cv2.putText(
+                    frame, evt["text"], (log_x, y), font, 0.6, (100, 100, 255), 2, cv2.LINE_AA
+                )
 
     # --- Digest event timeline (left side, scrolling) ---
     if digest_events:
@@ -171,16 +185,17 @@ def draw_overlay(frame: np.ndarray, description: str, metrics: str = "",
         frame = cv2.addWeighted(overlay, 0.65, frame, 0.35, 0)
         overlay = frame.copy()
 
-        cv2.putText(frame, "Event Log", (margin, panel_y + 14),
-                    font, 0.55, (0, 255, 255), 1, cv2.LINE_AA)
+        cv2.putText(
+            frame, "Event Log", (margin, panel_y + 14), font, 0.55, (0, 255, 255), 1, cv2.LINE_AA
+        )
         for i, evt in enumerate(show_events):
             y = panel_y + 35 + i * log_line_h
             text = evt["text"][:80]
             # Color: cyan for timestamp, white for text
-            cv2.putText(frame, text, (margin + 2, y),
-                        font, 0.5, (0, 0, 0), 2, cv2.LINE_AA)  # shadow
-            cv2.putText(frame, text, (margin, y),
-                        font, 0.5, (200, 255, 200), 1, cv2.LINE_AA)
+            cv2.putText(
+                frame, text, (margin + 2, y), font, 0.5, (0, 0, 0), 2, cv2.LINE_AA
+            )  # shadow
+            cv2.putText(frame, text, (margin, y), font, 0.5, (200, 255, 200), 1, cv2.LINE_AA)
 
     # --- Counters panel (left side, with dark background) ---
     if counters:
@@ -192,18 +207,28 @@ def draw_overlay(frame: np.ndarray, description: str, metrics: str = "",
         frame = cv2.addWeighted(overlay, 0.7, frame, 0.3, 0)
         overlay = frame.copy()
 
-        cv2.putText(frame, "Cumulative Count", (margin, panel_y + 5),
-                    font, 0.55, (200, 200, 200), 1, cv2.LINE_AA)
+        cv2.putText(
+            frame,
+            "Cumulative Count",
+            (margin, panel_y + 5),
+            font,
+            0.55,
+            (200, 200, 200),
+            1,
+            cv2.LINE_AA,
+        )
         labels = {"people": "People", "cars": "Cars", "dogs": "Dogs", "cats": "Cats"}
         for i, key in enumerate(["people", "cars", "dogs", "cats"]):
             y = panel_y + 35 + i * 32
             total = counters.get(key, 0)
             label = f"{labels[key]}: {total}"
             # White text with black outline for readability
-            cv2.putText(frame, label, (margin + 5, y),
-                        font, 0.75, (0, 0, 0), 3, cv2.LINE_AA)  # black outline
-            cv2.putText(frame, label, (margin + 5, y),
-                        font, 0.75, (255, 255, 255), 2, cv2.LINE_AA)  # white fill
+            cv2.putText(
+                frame, label, (margin + 5, y), font, 0.75, (0, 0, 0), 3, cv2.LINE_AA
+            )  # black outline
+            cv2.putText(
+                frame, label, (margin + 5, y), font, 0.75, (255, 255, 255), 2, cv2.LINE_AA
+            )  # white fill
 
     # --- Chat history + input bar (bottom) ---
     bottom_lines = []
@@ -246,28 +271,46 @@ def draw_overlay(frame: np.ndarray, description: str, metrics: str = "",
 
 def main():
     parser = argparse.ArgumentParser(description="Webcam GUI with live VLM analysis")
-    parser.add_argument("--source", "-s", default="0",
-                        help="RTSP URL, video file, or camera index (default: 0)")
-    parser.add_argument("--prompt", "-p", default=None,
-                        help="Question to ask the VLM (auto-set in watch mode)")
-    parser.add_argument("--watch", "-w", default=None,
-                        help="Watch condition in natural language, e.g. 'someone is at the door'")
+    parser.add_argument(
+        "--source", "-s", default="0", help="RTSP URL, video file, or camera index (default: 0)"
+    )
+    parser.add_argument(
+        "--prompt", "-p", default=None, help="Question to ask the VLM (auto-set in watch mode)"
+    )
+    parser.add_argument(
+        "--watch",
+        "-w",
+        default=None,
+        help="Watch condition in natural language, e.g. 'someone is at the door'",
+    )
     parser.add_argument("--model", "-m", default=None, help="Model name (auto-detected if omitted)")
     parser.add_argument("--backend", "-b", default=None, help="Force backend: mlx or transformers")
     parser.add_argument("--max-tokens", type=int, default=80, help="Max generation tokens")
-    parser.add_argument("--interval", type=float, default=3.0,
-                        help="Seconds between VLM analyses (default: 3.0)")
-    parser.add_argument("--frames", type=int, default=4,
-                        help="Number of frames per analysis for temporal understanding (default: 4)")
-    parser.add_argument("--resolution", type=int, default=None,
-                        help="Max resolution for inference (e.g. 480, 360). Lower = faster.")
+    parser.add_argument(
+        "--interval", type=float, default=3.0, help="Seconds between VLM analyses (default: 3.0)"
+    )
+    parser.add_argument(
+        "--frames",
+        type=int,
+        default=4,
+        help="Number of frames per analysis for temporal understanding (default: 4)",
+    )
+    parser.add_argument(
+        "--resolution",
+        type=int,
+        default=None,
+        help="Max resolution for inference (e.g. 480, 360). Lower = faster.",
+    )
     parser.add_argument("--no-sound", action="store_true", help="Disable audio alerts")
-    parser.add_argument("--count", action="store_true",
-                        help="Count people, cars, and dogs (cumulative)")
-    parser.add_argument("--digest", action="store_true",
-                        help="Smart event timeline — logs activities with scene understanding")
-    parser.add_argument("--adapter", default=None,
-                        help="LoRA adapter directory path")
+    parser.add_argument(
+        "--count", action="store_true", help="Count people, cars, and dogs (cumulative)"
+    )
+    parser.add_argument(
+        "--digest",
+        action="store_true",
+        help="Smart event timeline — logs activities with scene understanding",
+    )
+    parser.add_argument("--adapter", default=None, help="LoRA adapter directory path")
     args = parser.parse_args()
 
     watch_mode = args.watch is not None
@@ -275,11 +318,15 @@ def main():
     digest_mode = args.digest
 
     count_suffix = (
-        "\nAlso carefully count ALL visible objects including small or partially occluded ones. "
-        "Look closely for animals (dogs, cats) even if they are small, far away, or partially hidden. "
-        "End your answer with a line in EXACTLY this format:\n"
-        "COUNT people:N cars:N dogs:N cats:N"
-    ) if count_mode else ""
+        (
+            "\nAlso carefully count ALL visible objects including small or partially occluded ones. "
+            "Look closely for animals (dogs, cats) even if they are small, far away, or partially hidden. "
+            "End your answer with a line in EXACTLY this format:\n"
+            "COUNT people:N cars:N dogs:N cats:N"
+        )
+        if count_mode
+        else ""
+    )
 
     # Build prompt
     if args.prompt:
@@ -303,7 +350,7 @@ def main():
     elif watch_mode:
         prompt = (
             f"You are a security monitor. Look at this image carefully.\n"
-            f"Check if the following is true: \"{args.watch}\"\n"
+            f'Check if the following is true: "{args.watch}"\n'
             f"{{prev_context}}"
             f"Answer YES or NO first, then briefly explain why."
             f"{count_suffix}"
@@ -312,7 +359,7 @@ def main():
         prompt = "Describe what you see briefly.{prev_context}" + count_suffix
 
     # Initialize engine
-    from trio_core import TrioCore, EngineConfig
+    from trio_core import EngineConfig, TrioCore
 
     config_kwargs = {"max_tokens": args.max_tokens}
     if args.model:
@@ -329,7 +376,7 @@ def main():
     print(f"Device: {health.get('backend', {}).get('device', 'unknown')}")
     print(f"Temporal frames: {args.frames} per analysis")
     if watch_mode:
-        print(f"Watch condition: \"{args.watch}\"")
+        print(f'Watch condition: "{args.watch}"')
     if digest_mode:
         print("Mode: Event digest (smart activity timeline)")
 
@@ -347,25 +394,54 @@ def main():
             return
         # Auto-proxy for Tailscale on macOS
         from trio_core._rtsp_proxy import ensure_rtsp_url
+
         proxied = ensure_rtsp_url(source)
         if proxied != source:
             time.sleep(1)  # let proxy settle
             source = proxied
         probe = subprocess.run(
-            ["ffprobe", "-v", "error", "-rtsp_transport", "tcp",
-             "-select_streams", "v:0",
-             "-show_entries", "stream=width,height",
-             "-of", "csv=p=0", source],
-            capture_output=True, text=True, timeout=20,
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-rtsp_transport",
+                "tcp",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=width,height",
+                "-of",
+                "csv=p=0",
+                source,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=20,
         )
         if not probe.stdout.strip():
             print(f"Error: Cannot probe RTSP stream: {source}")
             return
         rtsp_w, rtsp_h = [int(x) for x in probe.stdout.strip().split(",")]
         ffmpeg_proc = subprocess.Popen(
-            ["ffmpeg", "-rtsp_transport", "tcp", "-i", source,
-             "-f", "rawvideo", "-pix_fmt", "bgr24", "-an", "-sn", "-v", "error", "-"],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=rtsp_w * rtsp_h * 3 * 2,
+            [
+                "ffmpeg",
+                "-rtsp_transport",
+                "tcp",
+                "-i",
+                source,
+                "-f",
+                "rawvideo",
+                "-pix_fmt",
+                "bgr24",
+                "-an",
+                "-sn",
+                "-v",
+                "error",
+                "-",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            bufsize=rtsp_w * rtsp_h * 3 * 2,
         )
         cap = None
     else:
@@ -403,8 +479,10 @@ def main():
                 args.resolution = int(max(h_orig, w_orig) * scale)
                 # Clamp to reasonable range
                 args.resolution = max(args.resolution, 180)
-                print(f"  Full-res inference: {cal_time:.1f}s → auto-set resolution={args.resolution}px "
-                      f"(~{target_time:.0f}s target)")
+                print(
+                    f"  Full-res inference: {cal_time:.1f}s → auto-set resolution={args.resolution}px "
+                    f"(~{target_time:.0f}s target)"
+                )
             else:
                 print(f"  Full-res inference: {cal_time:.1f}s — fast enough, no downscale needed")
         else:
@@ -443,8 +521,9 @@ def main():
         if args.no_sound:
             return
         try:
-            subprocess.Popen(["say", "-r", "200", text],
-                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.Popen(
+                ["say", "-r", "200", text], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
         except FileNotFoundError:
             pass
 
@@ -487,7 +566,9 @@ def main():
                 diff = cv2.absdiff(baseline_frame, current_gray)
                 motion_pixels = np.sum(diff > 15) / diff.size
                 # Update baseline slowly (rolling average)
-                baseline_frame = cv2.addWeighted(baseline_frame, 0.95, current_gray, 0.05, 0).astype(np.uint8)
+                baseline_frame = cv2.addWeighted(
+                    baseline_frame, 0.95, current_gray, 0.05, 0
+                ).astype(np.uint8)
                 if motion_pixels < MOTION_THRESHOLD:
                     nothing_count += 1
                     motion_mask = None
@@ -535,13 +616,14 @@ def main():
             else:
                 prev_ctx = ""
                 if prev_description:
-                    prev_ctx = f"\nPrevious observation: \"{prev_description}\"\n"
+                    prev_ctx = f'\nPrevious observation: "{prev_description}"\n'
                 current_prompt = prompt.replace("{prev_context}", prev_ctx)
 
             try:
                 t0 = time.monotonic()
-                result = engine.analyze_video(video_array, current_prompt,
-                                              max_tokens=args.max_tokens)
+                result = engine.analyze_video(
+                    video_array, current_prompt, max_tokens=args.max_tokens
+                )
                 elapsed = time.monotonic() - t0
                 text = result.text.strip().replace("\n", " ")
                 # Strip thinking tags
@@ -569,7 +651,9 @@ def main():
                             if zero_streak[key] >= DEBOUNCE_FRAMES:
                                 prev_visible[key] = 0
                     # Strip COUNT line from display text
-                    answer = re.sub(r"\s*COUNT\s+people:\d+\s+cars:\d+\s+dogs:\d+\s+cats:\d+", "", answer).strip()
+                    answer = re.sub(
+                        r"\s*COUNT\s+people:\d+\s+cars:\d+\s+dogs:\d+\s+cats:\d+", "", answer
+                    ).strip()
 
                 # Digest mode: motion gate already confirmed activity, log it
                 if digest_mode:
@@ -585,23 +669,29 @@ def main():
                             digest_events[-1]["text"] = f"[{ts}] {event_text}"
                             digest_events[-1]["expire"] = time.monotonic() + 8.0
                         else:
-                            digest_events.append({
-                                "time": ts,
-                                "text": f"[{ts}] {event_text}",
-                                "raw": event_text,
-                                "expire": time.monotonic() + 8.0,
-                            })
+                            digest_events.append(
+                                {
+                                    "time": ts,
+                                    "text": f"[{ts}] {event_text}",
+                                    "raw": event_text,
+                                    "expire": time.monotonic() + 8.0,
+                                }
+                            )
                             print(f"  [{ts}] {event_text}")
                         # Prune expired events to prevent unbounded growth
                         now = time.monotonic()
-                        digest_events[:] = [e for e in digest_events if e.get("expire", now + 1) > now - 60]
+                        digest_events[:] = [
+                            e for e in digest_events if e.get("expire", now + 1) > now - 60
+                        ]
 
                 with lock:
                     description = answer
                     # For digest: feed back clean text to avoid garbage feedback loop
                     if digest_mode:
                         event_text_clean = _parse_digest(answer)
-                        prev_description = event_text_clean if event_text_clean else "quiet street, no activity"
+                        prev_description = (
+                            event_text_clean if event_text_clean else "quiet street, no activity"
+                        )
                     else:
                         prev_description = answer
                     metrics_text = (
@@ -621,10 +711,12 @@ def main():
                             triggered_until = time.monotonic() + 2.0
                             ts = datetime.now().strftime("%H:%M:%S")
                             reason = answer[3:].lstrip(".,!: ") if len(answer) > 3 else answer
-                            events.append({
-                                "text": f"[{ts}] {reason[:55]}",
-                                "triggered": True,
-                            })
+                            events.append(
+                                {
+                                    "text": f"[{ts}] {reason[:55]}",
+                                    "triggered": True,
+                                }
+                            )
                             # Only speak on state change (CLEAR -> ALERT)
                             if not was_triggered:
                                 _alert(f"Alert: {args.watch}")
@@ -697,8 +789,11 @@ def main():
                     triggered = False
 
                 display = draw_overlay(
-                    frame, description, metrics_text,
-                    watch_mode=watch_mode, triggered=triggered,
+                    frame,
+                    description,
+                    metrics_text,
+                    watch_mode=watch_mode,
+                    triggered=triggered,
                     events=events if watch_mode else None,
                     watch_text=args.watch or "",
                     counters=total_counts if count_mode else None,
@@ -748,17 +843,17 @@ def main():
             for e in alerts:
                 print(f"  {e['text']}")
         if count_mode and any(total_counts.values()):
-            print(f"\n--- Object Counts ---")
+            print("\n--- Object Counts ---")
             for key, val in total_counts.items():
                 if val > 0:
                     print(f"  {key}: {val}")
         if digest_mode and digest_events:
-            print(f"\n{'='*60}")
+            print(f"\n{'=' * 60}")
             print(f"  ACTIVITY DIGEST — {len(digest_events)} events")
-            print(f"{'='*60}")
+            print(f"{'=' * 60}")
             for evt in digest_events:
                 print(f"  {evt['text']}")
-            print(f"{'='*60}")
+            print(f"{'=' * 60}")
         print("Done.")
 
 

@@ -32,7 +32,6 @@ Requires: pip install httpx  (or use requests)
 import argparse
 import json
 import sys
-import time
 
 import httpx
 
@@ -88,8 +87,7 @@ def watch(server: str, source: str, conditions: list[dict], fps: float = 1.0):
                     latency = data["metrics"]["latency_ms"]
                     tok_s = data["metrics"]["tok_s"]
                     answers = ", ".join(
-                        f"{c['id']}={'YES' if c['triggered'] else 'no'}"
-                        for c in data["conditions"]
+                        f"{c['id']}={'YES' if c['triggered'] else 'no'}" for c in data["conditions"]
                     )
                     print(f"  {ts}  {answers}  ({latency}ms, {tok_s} tok/s)")
 
@@ -119,9 +117,11 @@ def list_watches(server: str):
         return
     for w in watches:
         conds = ", ".join(c["id"] for c in w["conditions"])
-        print(f"  {w['watch_id']}  {w['state']}  {w['source'][:40]}  "
-              f"checks={w['checks']}  alerts={w['alerts']}  "
-              f"uptime={w['uptime_s']}s  [{conds}]")
+        print(
+            f"  {w['watch_id']}  {w['state']}  {w['source'][:40]}  "
+            f"checks={w['checks']}  alerts={w['alerts']}  "
+            f"uptime={w['uptime_s']}s  [{conds}]"
+        )
 
 
 def stop_watch(server: str, watch_id: str):
@@ -143,8 +143,13 @@ if __name__ == "__main__":
     # watch command (default)
     watch_p = sub.add_parser("watch", help="Start watching a camera")
     watch_p.add_argument("--source", "-s", required=True, help="RTSP URL")
-    watch_p.add_argument("--condition", "-c", action="append", required=True,
-                         help="Condition to monitor (can repeat)")
+    watch_p.add_argument(
+        "--condition",
+        "-c",
+        action="append",
+        required=True,
+        help="Condition to monitor (can repeat)",
+    )
     watch_p.add_argument("--fps", type=float, default=1.0)
 
     # list command
@@ -165,8 +170,7 @@ if __name__ == "__main__":
             parser.print_help()
             sys.exit(1)
         conditions = [
-            {"id": c.lower().replace(" ", "_")[:20], "question": c}
-            for c in args.condition
+            {"id": c.lower().replace(" ", "_")[:20], "question": c} for c in args.condition
         ]
         try:
             watch(args.server, args.source, conditions, args.fps)

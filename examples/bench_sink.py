@@ -22,10 +22,8 @@ import argparse
 import time
 
 import mlx.core as mx
-import mlx.nn as nn
 
 from trio_core.streaming_memory import StreamingMemory
-
 
 # ── Fake KV cache (same shape as real mlx_lm KVCache) ───────────────────────
 
@@ -43,8 +41,8 @@ class FakeKVCacheEntry:
         """Simulate appending new frame tokens to the cache."""
         new_k = mx.random.normal((1, n_heads, n_tokens, head_dim))
         new_v = mx.random.normal((1, n_heads, n_tokens, head_dim))
-        self.keys = mx.concatenate([self.keys[:, :, :self.offset, :], new_k], axis=2)
-        self.values = mx.concatenate([self.values[:, :, :self.offset, :], new_v], axis=2)
+        self.keys = mx.concatenate([self.keys[:, :, : self.offset, :], new_k], axis=2)
+        self.values = mx.concatenate([self.values[:, :, : self.offset, :], new_v], axis=2)
         self.offset += n_tokens
         mx.eval(self.keys, self.values)
 
@@ -66,15 +64,17 @@ def measure_kv_coherence(cache: list, text_prefix_len: int, n_vis: int) -> dict:
     """
     metrics = {}
     for layer_idx, c in enumerate(cache):
-        if not hasattr(c, 'keys'):
+        if not hasattr(c, "keys"):
             continue
-        k = c.keys[:, :, text_prefix_len:text_prefix_len + n_vis, :]
-        v = c.values[:, :, text_prefix_len:text_prefix_len + n_vis, :]
+        k = c.keys[:, :, text_prefix_len : text_prefix_len + n_vis, :]
+        v = c.values[:, :, text_prefix_len : text_prefix_len + n_vis, :]
 
         if k.shape[2] < 2:
             metrics[f"layer_{layer_idx}"] = {
-                "k_norm_mean": 0.0, "k_norm_cv": 0.0,
-                "kv_cosine_sim": 0.0, "sink_k_norm": 0.0,
+                "k_norm_mean": 0.0,
+                "k_norm_cv": 0.0,
+                "kv_cosine_sim": 0.0,
+                "sink_k_norm": 0.0,
                 "n_visual_tokens": k.shape[2],
             }
             continue
@@ -151,7 +151,7 @@ def run_one(
         if sm.over_budget:
             saliency = mx.random.normal((sm._total_visual_tokens,))
             mx.eval(saliency)
-            stats = sm.evict_and_merge(cache, saliency)
+            sm.evict_and_merge(cache, saliency)
             n_evictions += 1
 
     elapsed = time.monotonic() - t0
@@ -171,24 +171,33 @@ def run_one(
 
 def main():
     parser = argparse.ArgumentParser(description="Benchmark attention sink in StreamMem")
-    parser.add_argument("--sinks", nargs="+", type=int, default=[0, 4, 8],
-                        help="Sink token counts to compare (default: 0 4 8)")
-    parser.add_argument("--frames", type=int, default=100,
-                        help="Number of frames to simulate (default: 100)")
-    parser.add_argument("--tokens-per-frame", type=int, default=20,
-                        help="Visual tokens per frame (default: 20)")
-    parser.add_argument("--budget", type=int, default=50,
-                        help="StreamMem budget (default: 50)")
-    parser.add_argument("--prototype-ratio", type=float, default=0.1,
-                        help="Prototype ratio (default: 0.1)")
+    parser.add_argument(
+        "--sinks",
+        nargs="+",
+        type=int,
+        default=[0, 4, 8],
+        help="Sink token counts to compare (default: 0 4 8)",
+    )
+    parser.add_argument(
+        "--frames", type=int, default=100, help="Number of frames to simulate (default: 100)"
+    )
+    parser.add_argument(
+        "--tokens-per-frame", type=int, default=20, help="Visual tokens per frame (default: 20)"
+    )
+    parser.add_argument("--budget", type=int, default=50, help="StreamMem budget (default: 50)")
+    parser.add_argument(
+        "--prototype-ratio", type=float, default=0.1, help="Prototype ratio (default: 0.1)"
+    )
     parser.add_argument("--layers", type=int, default=4, help="Number of layers")
     parser.add_argument("--heads", type=int, default=4, help="Number of attention heads")
     parser.add_argument("--head-dim", type=int, default=64, help="Head dimension")
     args = parser.parse_args()
 
-    print(f"StreamMem Attention Sink Benchmark")
-    print(f"  frames={args.frames}, tokens/frame={args.tokens_per_frame}, "
-          f"budget={args.budget}, proto_ratio={args.prototype_ratio}")
+    print("StreamMem Attention Sink Benchmark")
+    print(
+        f"  frames={args.frames}, tokens/frame={args.tokens_per_frame}, "
+        f"budget={args.budget}, proto_ratio={args.prototype_ratio}"
+    )
     print(f"  model: {args.layers}L × {args.heads}H × {args.head_dim}D")
     print()
 
@@ -216,9 +225,11 @@ def main():
         layer_key = next(iter(r["coherence"]), None)
         if layer_key:
             m = r["coherence"][layer_key]
-            print(f"{r['n_sink']:>6} {r['n_evictions']:>10} {r['final_visual_tokens']:>10} "
-                  f"{r['elapsed_s']:>8.3f} {m['k_norm_cv']:>10.4f} "
-                  f"{m['kv_cosine_sim']:>11.4f} {m['sink_k_norm']:>12.4f}")
+            print(
+                f"{r['n_sink']:>6} {r['n_evictions']:>10} {r['final_visual_tokens']:>10} "
+                f"{r['elapsed_s']:>8.3f} {m['k_norm_cv']:>10.4f} "
+                f"{m['kv_cosine_sim']:>11.4f} {m['sink_k_norm']:>12.4f}"
+            )
 
     print()
     print("Metrics:")

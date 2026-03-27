@@ -65,10 +65,10 @@ class InferenceMetrics:
     # Generation stats
     prompt_tokens: int = 0
     completion_tokens: int = 0
-    prompt_tps: float = 0.0        # prefill tokens/sec
-    tokens_per_sec: float = 0.0    # decode tokens/sec
-    prefill_ms: float = 0.0        # prefill latency (derived)
-    decode_ms: float = 0.0         # decode latency (derived)
+    prompt_tps: float = 0.0  # prefill tokens/sec
+    tokens_per_sec: float = 0.0  # decode tokens/sec
+    prefill_ms: float = 0.0  # prefill latency (derived)
+    decode_ms: float = 0.0  # decode latency (derived)
     peak_memory_gb: float = 0.0
 
 
@@ -116,7 +116,11 @@ class TrioCore(CallbackMixin):
         self._loaded = False
         self._lock = threading.Lock()
         self._deduplicator = TemporalDeduplicator(threshold=self.config.dedup_threshold)
-        self._motion_gate = MotionGate(threshold=self.config.motion_threshold) if self.config.motion_enabled else None
+        self._motion_gate = (
+            MotionGate(threshold=self.config.motion_threshold)
+            if self.config.motion_enabled
+            else None
+        )
 
         # Model profile — architecture-aware parameters
         self._profile: ModelProfile = get_profile(self.config.model)
@@ -139,10 +143,7 @@ class TrioCore(CallbackMixin):
             return
 
         # Don't override if user has explicitly configured optimizations
-        user_has_optims = (
-            self.config.compress_enabled
-            or self.config.tome_enabled
-        )
+        user_has_optims = self.config.compress_enabled or self.config.tome_enabled
         if user_has_optims:
             return
 
@@ -152,7 +153,9 @@ class TrioCore(CallbackMixin):
 
         logger.info(
             "Auto-optimize: applied %s for %s %s",
-            profile.recommended_optims, profile.family, profile.param_size,
+            profile.recommended_optims,
+            profile.family,
+            profile.param_size,
         )
 
     def load(self) -> None:
@@ -169,15 +172,17 @@ class TrioCore(CallbackMixin):
         self._backend.load()
 
         # Configure early stopping if enabled
-        if self.config.early_stop and hasattr(self._backend, 'set_early_stop'):
+        if self.config.early_stop and hasattr(self._backend, "set_early_stop"):
             self._backend.set_early_stop(True, self.config.early_stop_threshold)
 
         # Configure visual similarity KV reuse if enabled
-        if self.config.visual_similarity_threshold > 0 and hasattr(self._backend, 'set_visual_similarity'):
+        if self.config.visual_similarity_threshold > 0 and hasattr(
+            self._backend, "set_visual_similarity"
+        ):
             self._backend.set_visual_similarity(self.config.visual_similarity_threshold)
 
         # Configure StreamMem bounded KV cache if enabled
-        if self.config.streaming_memory_enabled and hasattr(self._backend, 'set_streaming_memory'):
+        if self.config.streaming_memory_enabled and hasattr(self._backend, "set_streaming_memory"):
             self._backend.set_streaming_memory(
                 True,
                 self.config.streaming_memory_budget,
@@ -188,8 +193,7 @@ class TrioCore(CallbackMixin):
         self._loaded = True
         self._profile = get_profile(self.config.model)
         logger.info(
-            "Engine ready: backend=%s, device=%s, model=%s, "
-            "merge_factor=%d, max_visual_tokens=%d",
+            "Engine ready: backend=%s, device=%s, model=%s, merge_factor=%d, max_visual_tokens=%d",
             self._backend.backend_name,
             self._backend.device_info.device_name,
             self.config.model,
@@ -258,13 +262,17 @@ class TrioCore(CallbackMixin):
             self.run_callbacks("on_dedup_done")
 
             if self._motion_gate is not None:
-                has_motion = any(self._motion_gate.has_motion(frames[i]) for i in range(frames.shape[0]))
+                has_motion = any(
+                    self._motion_gate.has_motion(frames[i]) for i in range(frames.shape[0])
+                )
                 self.run_callbacks("on_motion_check")
                 if not has_motion:
                     metrics.motion_skipped = True
                     metrics.preprocess_ms = p_pre.dt
                     metrics.latency_ms = (time.monotonic() - t0) * 1000
-                    vr = VideoResult(text="[NO MOTION] Scene is static, skipping analysis.", metrics=metrics)
+                    vr = VideoResult(
+                        text="[NO MOTION] Scene is static, skipping analysis.", metrics=metrics
+                    )
                     self.last_result = vr
                     return vr
             metrics.frames_after_motion = frames.shape[0]
@@ -274,7 +282,8 @@ class TrioCore(CallbackMixin):
             with p_inf:
                 self.run_callbacks("on_vlm_start")
                 gen_result = self._backend.generate(
-                    frames, prompt,
+                    frames,
+                    prompt,
                     max_tokens=max_tokens,
                     temperature=temperature,
                     top_p=self.config.top_p,
@@ -291,7 +300,9 @@ class TrioCore(CallbackMixin):
             if gen_result.prompt_tps > 0:
                 metrics.prefill_ms = (gen_result.prompt_tokens / gen_result.prompt_tps) * 1000
             if gen_result.generation_tps > 0 and gen_result.completion_tokens > 0:
-                metrics.decode_ms = (gen_result.completion_tokens / gen_result.generation_tps) * 1000
+                metrics.decode_ms = (
+                    gen_result.completion_tokens / gen_result.generation_tps
+                ) * 1000
 
         metrics.preprocess_ms = p_pre.dt
         metrics.inference_ms = p_inf.dt
@@ -328,8 +339,11 @@ class TrioCore(CallbackMixin):
         with p_pre:
             p = self._profile
             frames = load_video(
-                video, fps=self.config.video_fps, max_frames=self.config.video_max_frames,
-                image_factor=p.merge_factor, frame_factor=p.temporal_patch,
+                video,
+                fps=self.config.video_fps,
+                max_frames=self.config.video_max_frames,
+                image_factor=p.merge_factor,
+                frame_factor=p.temporal_patch,
                 min_frames=p.min_frames,
                 max_pixels=p.max_visual_tokens * p.merge_factor * p.merge_factor,
             )
@@ -353,7 +367,8 @@ class TrioCore(CallbackMixin):
             try:
                 with self._lock:
                     for chunk in self._backend.stream_generate(
-                        frames, prompt,
+                        frames,
+                        prompt,
                         max_tokens=max_tokens,
                         temperature=temperature,
                         top_p=self.config.top_p,

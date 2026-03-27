@@ -6,9 +6,9 @@ from trio_core.backends import BaseBackend, MLXBackend, TransformersBackend, aut
 from trio_core.callbacks import CallbackMixin
 from trio_core.config import EngineConfig
 from trio_core.device import DeviceInfo, detect_device, recommend_model
-from trio_core.engine import TrioCore, VideoResult, InferenceMetrics
+from trio_core.engine import InferenceMetrics, TrioCore, VideoResult
 from trio_core.profiles import ModelProfile, get_profile
-from trio_core.video import StreamCapture, TemporalDeduplicator, MotionGate
+from trio_core.video import MotionGate, StreamCapture, TemporalDeduplicator
 
 __all__ = [
     "TrioCore",

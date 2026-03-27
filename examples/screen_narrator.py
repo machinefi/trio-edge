@@ -51,7 +51,9 @@ def _cg_image_to_numpy(cg_image) -> np.ndarray | None:
     return arr[:, :, :3].copy()  # drop alpha, BGR
 
 
-def find_and_capture_app(app_name: str, scale: float = 0.5) -> tuple[np.ndarray | None, dict | None]:
+def find_and_capture_app(
+    app_name: str, scale: float = 0.5
+) -> tuple[np.ndarray | None, dict | None]:
     """Find app window and capture its screen region. Returns (frame_bgr, bounds)."""
     import Quartz
 
@@ -60,7 +62,6 @@ def find_and_capture_app(app_name: str, scale: float = 0.5) -> tuple[np.ndarray 
         Quartz.kCGNullWindowID,
     )
 
-    best_id = None
     best_area = 0
     best_bounds = None
     for w in windows:
@@ -71,7 +72,7 @@ def find_and_capture_app(app_name: str, scale: float = 0.5) -> tuple[np.ndarray 
         area = bounds.get("Width", 0) * bounds.get("Height", 0)
         if area > best_area and area > 10000:
             best_area = area
-            best_id = w.get("kCGWindowNumber")
+            w.get("kCGWindowNumber")
             best_bounds = bounds
 
     if best_bounds is None:
@@ -184,24 +185,33 @@ def draw_overlay(frame: np.ndarray, text: str, metrics: str = "") -> np.ndarray:
 
 def main():
     parser = argparse.ArgumentParser(description="Screen Narrator — VLM watches your screen")
-    parser.add_argument("--app", "-a", default="Chrome",
-                        help="App window to capture (default: Chrome). Use 'none' for full screen.")
-    parser.add_argument("--prompt", "-p",
-                        default="Look at this screenshot of a web browser. Describe what the user is doing — what website or page are they on, and what are they reading, writing, or interacting with? Be specific in 1-2 sentences.",
-                        help="Question for the VLM")
+    parser.add_argument(
+        "--app",
+        "-a",
+        default="Chrome",
+        help="App window to capture (default: Chrome). Use 'none' for full screen.",
+    )
+    parser.add_argument(
+        "--prompt",
+        "-p",
+        default="Look at this screenshot of a web browser. Describe what the user is doing — what website or page are they on, and what are they reading, writing, or interacting with? Be specific in 1-2 sentences.",
+        help="Question for the VLM",
+    )
     parser.add_argument("--model", "-m", default=None, help="Model name")
     parser.add_argument("--backend", "-b", default=None, help="Force backend: mlx or transformers")
     parser.add_argument("--max-tokens", type=int, default=150, help="Max generation tokens")
-    parser.add_argument("--interval", type=float, default=3.0,
-                        help="Seconds between analyses (default: 3.0)")
-    parser.add_argument("--scale", type=float, default=0.5,
-                        help="Scale factor for capture (default: 0.5)")
+    parser.add_argument(
+        "--interval", type=float, default=3.0, help="Seconds between analyses (default: 3.0)"
+    )
+    parser.add_argument(
+        "--scale", type=float, default=0.5, help="Scale factor for capture (default: 0.5)"
+    )
     args = parser.parse_args()
 
     use_app = args.app.lower() != "none"
 
     # Initialize engine
-    from trio_core import TrioCore, EngineConfig
+    from trio_core import EngineConfig, TrioCore
 
     config_kwargs = {"max_tokens": args.max_tokens}
     if args.model:
@@ -219,7 +229,9 @@ def main():
     if use_app:
         frame, info = find_and_capture_app(args.app, args.scale)
         if frame is not None:
-            print(f"Found {args.app} window: {info['width']}x{info['height']} at ({info['left']}, {info['top']})")
+            print(
+                f"Found {args.app} window: {info['width']}x{info['height']} at ({info['left']}, {info['top']})"
+            )
             print(f"Captured frame: {frame.shape[1]}x{frame.shape[0]}")
         else:
             print(f"Warning: {args.app} window not found, falling back to full screen")

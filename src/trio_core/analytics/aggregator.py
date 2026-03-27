@@ -10,17 +10,18 @@ Design based on exp3 analysis:
 from __future__ import annotations
 
 import statistics
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Literal
 
 
 @dataclass
 class Sample:
     """A single count measurement from the counter pipeline."""
+
     timestamp: datetime
-    count: int          # corrected person count
-    raw_count: int      # raw YOLO detections
+    count: int  # corrected person count
+    raw_count: int  # raw YOLO detections
     velocity: float = 0.0
     confidence: float = 1.0
     camera_id: str = ""
@@ -29,16 +30,17 @@ class Sample:
 @dataclass
 class Bin:
     """An aggregated time bin (15-min, hourly, or daily)."""
+
     start: datetime
     end: datetime
-    count: int              # median of samples (for 15-min) or sum of sub-bins
+    count: int  # median of samples (for 15-min) or sum of sub-bins
     mean: float = 0.0
     median: float = 0.0
     min_count: int = 0
     max_count: int = 0
-    samples: int = 0        # number of raw measurements in this bin
-    confidence: float = 1.0 # weighted avg confidence
-    velocity: float = 0.0   # avg velocity (trend direction)
+    samples: int = 0  # number of raw measurements in this bin
+    confidence: float = 1.0  # weighted avg confidence
+    velocity: float = 0.0  # avg velocity (trend direction)
     camera_id: str = ""
 
     @property
@@ -99,7 +101,8 @@ class Aggregator:
         # Align to bin boundary
         bin_start = first_ts.replace(
             minute=(first_ts.minute // minutes) * minutes,
-            second=0, microsecond=0,
+            second=0,
+            microsecond=0,
         )
 
         current_bin_samples: list[Sample] = []
@@ -158,7 +161,9 @@ class Aggregator:
         first_start = bins[0].start
         window_start = first_start.replace(
             hour=first_start.hour if minutes < 1440 else 0,
-            minute=0, second=0, microsecond=0,
+            minute=0,
+            second=0,
+            microsecond=0,
         )
         if minutes >= 1440:
             window_start = window_start.replace(hour=0)

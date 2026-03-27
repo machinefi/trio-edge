@@ -95,7 +95,7 @@ def merge_tokens(
     new_size = size[dst_idx]
 
     src_indices = src_dst_map[:, 0]  # (r,)
-    dst_values = src_dst_map[:, 1]   # (r,)
+    dst_values = src_dst_map[:, 1]  # (r,)
 
     # Find position of each dst_value in dst_idx via broadcast argmin
     # dst_values: (r,) → (r, 1), dst_idx: (N-r,) → (1, N-r)
@@ -108,11 +108,11 @@ def merge_tokens(
 
     if not has_duplicates:
         # No conflicts — fully vectorized
-        s_src = size[src_indices]              # (r, 1)
-        s_dst = new_size[dst_positions]        # (r, 1)
-        total = s_src + s_dst                  # (r, 1)
-        src_features = x[src_indices]          # (r, D)
-        dst_features = merged[dst_positions]   # (r, D)
+        s_src = size[src_indices]  # (r, 1)
+        s_dst = new_size[dst_positions]  # (r, 1)
+        total = s_src + s_dst  # (r, 1)
+        src_features = x[src_indices]  # (r, D)
+        dst_features = merged[dst_positions]  # (r, D)
         new_values = (dst_features * s_dst + src_features * s_src) / total
         merged[dst_positions] = new_values
         new_size[dst_positions] = total
@@ -170,7 +170,8 @@ def compute_content_diversity(hidden_states: mx.array, sample_size: int = 128) -
 
 
 def compute_k_metric(
-    hidden_states: mx.array, block,
+    hidden_states: mx.array,
+    block,
     rotary_pos_emb: mx.array | None = None,
 ) -> mx.array:
     """Extract K (key) matrix from a ViT block's attention weights.
@@ -189,9 +190,9 @@ def compute_k_metric(
             If provided, applies RoPE to K for accurate similarity matching.
     """
     # Find the pre-attention norm (use `is not None` — nn.Module can be falsy)
-    norm = getattr(block, 'norm1', None)
+    norm = getattr(block, "norm1", None)
     if norm is None:
-        norm = getattr(block, 'layer_norm1', None)
+        norm = getattr(block, "layer_norm1", None)
     if norm is None:
         return hidden_states
 
@@ -199,27 +200,26 @@ def compute_k_metric(
     seq_len = normed.shape[0]
 
     # Find the attention module
-    attn = getattr(block, 'attn', None)
+    attn = getattr(block, "attn", None)
     if attn is None:
-        attn = getattr(block, 'self_attn', None)
+        attn = getattr(block, "self_attn", None)
     if attn is None:
         return hidden_states
 
     # Extract K based on attention architecture
-    if hasattr(attn, 'qkv'):
+    if hasattr(attn, "qkv"):
         # Combined QKV projection (Qwen ViT, InternViT)
         qkv = attn.qkv(normed)
         num_heads = attn.num_heads
-        head_dim = getattr(attn, 'head_dim', None) or (qkv.shape[-1] // (3 * num_heads))
+        head_dim = getattr(attn, "head_dim", None) or (qkv.shape[-1] // (3 * num_heads))
 
         qkv = qkv.reshape(seq_len, 3, num_heads, head_dim)
         k = qkv[:, 1, :, :]  # (seq_len, num_heads, head_dim)
-    elif hasattr(attn, 'k_proj'):
+    elif hasattr(attn, "k_proj"):
         # Separate projections (SigLIP, standard ViT)
         k_out = attn.k_proj(normed)
-        num_heads = getattr(attn, 'num_heads',
-                   getattr(attn, 'n_heads', 1))
-        head_dim = getattr(attn, 'head_dim', k_out.shape[-1] // num_heads)
+        num_heads = getattr(attn, "num_heads", getattr(attn, "n_heads", 1))
+        head_dim = getattr(attn, "head_dim", k_out.shape[-1] // num_heads)
         k = k_out.reshape(seq_len, num_heads, head_dim)
     else:
         return hidden_states

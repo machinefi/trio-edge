@@ -7,6 +7,7 @@ pytest.importorskip("huggingface_hub")
 
 from PIL import Image
 
+
 # Test with a simple synthetic image
 def make_test_image(h=480, w=640):
     arr = np.random.randint(0, 256, (h, w, 3), dtype=np.uint8)
@@ -22,6 +23,7 @@ class TestQwenVLProcessor:
 
     def test_smart_resize_image_basic(self):
         from trio_core.processors.qwen_vl import smart_resize_image
+
         # 640x480 with factor=28 (Qwen2.5)
         h, w = smart_resize_image(480, 640, factor=28, min_pixels=3136, max_pixels=12845056)
         assert h % 28 == 0
@@ -31,6 +33,7 @@ class TestQwenVLProcessor:
 
     def test_smart_resize_image_qwen35(self):
         from trio_core.processors.qwen_vl import smart_resize_image
+
         # 640x480 with factor=32 (Qwen3.5)
         h, w = smart_resize_image(480, 640, factor=32, min_pixels=65536, max_pixels=16777216)
         assert h % 32 == 0
@@ -38,19 +41,21 @@ class TestQwenVLProcessor:
 
     def test_smart_resize_video(self):
         from trio_core.processors.qwen_vl import smart_resize_video
-        h, w = smart_resize_video(4, 480, 640, temporal_factor=2, factor=32,
-                                   min_pixels=4096, max_pixels=25165824)
+
+        h, w = smart_resize_video(
+            4, 480, 640, temporal_factor=2, factor=32, min_pixels=4096, max_pixels=25165824
+        )
         assert h % 32 == 0
         assert w % 32 == 0
 
     def test_image_processing_shapes(self):
-        from trio_core.processors.qwen_vl import load_processor
-        import huggingface_hub
         from pathlib import Path
 
-        model_path = Path(huggingface_hub.snapshot_download(
-            "mlx-community/Qwen3.5-2B-MLX-4bit"
-        ))
+        import huggingface_hub
+
+        from trio_core.processors.qwen_vl import load_processor
+
+        model_path = Path(huggingface_hub.snapshot_download("mlx-community/Qwen3.5-2B-MLX-4bit"))
         processor = load_processor(model_path)
 
         img = make_test_image(480, 640)
@@ -69,13 +74,13 @@ class TestQwenVLProcessor:
         assert result["pixel_values"].shape[1] == embed_dim
 
     def test_video_processing_shapes(self):
-        from trio_core.processors.qwen_vl import load_processor
-        import huggingface_hub
         from pathlib import Path
 
-        model_path = Path(huggingface_hub.snapshot_download(
-            "mlx-community/Qwen3.5-2B-MLX-4bit"
-        ))
+        import huggingface_hub
+
+        from trio_core.processors.qwen_vl import load_processor
+
+        model_path = Path(huggingface_hub.snapshot_download("mlx-community/Qwen3.5-2B-MLX-4bit"))
         processor = load_processor(model_path)
 
         frames = make_test_frames(4, 480, 640)
@@ -93,13 +98,13 @@ class TestQwenVLProcessor:
 
     def test_token_count_matches_grid(self):
         """Verify the number of pad tokens in input_ids matches grid_thw."""
-        from trio_core.processors.qwen_vl import load_processor
-        import huggingface_hub
         from pathlib import Path
 
-        model_path = Path(huggingface_hub.snapshot_download(
-            "mlx-community/Qwen3.5-2B-MLX-4bit"
-        ))
+        import huggingface_hub
+
+        from trio_core.processors.qwen_vl import load_processor
+
+        model_path = Path(huggingface_hub.snapshot_download("mlx-community/Qwen3.5-2B-MLX-4bit"))
         processor = load_processor(model_path)
 
         img = make_test_image(480, 640)
@@ -113,7 +118,7 @@ class TestQwenVLProcessor:
 
         # Expected from grid
         grid = result["image_grid_thw"][0]
-        expected = int(np.prod(grid)) // (processor.image_merge_size ** 2)
+        expected = int(np.prod(grid)) // (processor.image_merge_size**2)
 
         assert n_pads == expected, f"Token count {n_pads} != expected {expected} from grid {grid}"
 
@@ -124,21 +129,21 @@ class TestProcessorComparison:
 
     def test_pixel_values_match(self):
         """Verify pixel values are numerically close to transformers output."""
-        from transformers import AutoProcessor
-        from trio_core.processors.qwen_vl import load_processor
-        import huggingface_hub
         from pathlib import Path
 
-        model_path = Path(huggingface_hub.snapshot_download(
-            "mlx-community/Qwen3.5-2B-MLX-4bit"
-        ))
+        import huggingface_hub
+        from transformers import AutoProcessor
+
+        from trio_core.processors.qwen_vl import load_processor
+
+        model_path = Path(huggingface_hub.snapshot_download("mlx-community/Qwen3.5-2B-MLX-4bit"))
 
         # Load both processors
         custom = load_processor(model_path)
         reference = AutoProcessor.from_pretrained(str(model_path))
 
         img = make_test_image(480, 640)
-        frames = make_test_frames(4, 480, 640)
+        make_test_frames(4, 480, 640)
 
         # Compare image processing
         text = "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Describe.<|im_end|>\n<|im_start|>assistant\n"
@@ -146,9 +151,12 @@ class TestProcessorComparison:
         custom_out = custom(text=[text], images=[img], padding=True)
         ref_out = reference(text=[text], images=[img], padding=True, return_tensors="np")
 
-        assert custom_out["pixel_values"].shape == ref_out["pixel_values"].shape, \
+        assert custom_out["pixel_values"].shape == ref_out["pixel_values"].shape, (
             f"Shape mismatch: {custom_out['pixel_values'].shape} vs {ref_out['pixel_values'].shape}"
+        )
         np.testing.assert_allclose(
-            custom_out["pixel_values"], ref_out["pixel_values"],
-            rtol=1e-5, atol=1e-5,
+            custom_out["pixel_values"],
+            ref_out["pixel_values"],
+            rtol=1e-5,
+            atol=1e-5,
         )

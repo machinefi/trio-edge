@@ -33,8 +33,7 @@ from typing import Any
 
 import numpy as np
 
-from trio_core.engine import TrioCore, InferenceMetrics
-
+from trio_core.engine import InferenceMetrics, TrioCore
 
 # ── Test Case Generation ────────────────────────────────────────────────────
 
@@ -71,7 +70,9 @@ def generate_test_frames(
         for i in range(8):
             for j in range(8):
                 color = rng.rand(3).astype(np.float32)
-                frame[:, i*block_h:(i+1)*block_h, j*block_w:(j+1)*block_w] = color[:, None, None]
+                frame[:, i * block_h : (i + 1) * block_h, j * block_w : (j + 1) * block_w] = color[
+                    :, None, None
+                ]
         frames = np.stack([frame] * n_frames, axis=0)
 
     elif complexity == "high":
@@ -82,17 +83,18 @@ def generate_test_frames(
         # Simulated indoor scene — realistic token distribution
         frame = np.full((3, height, width), 0.9, dtype=np.float32)  # white wall
         # Floor
-        frame[:, int(height*0.7):, :] = np.array([0.4, 0.35, 0.3])[:, None, None]
+        frame[:, int(height * 0.7) :, :] = np.array([0.4, 0.35, 0.3])[:, None, None]
         # Window
-        frame[:, int(height*0.1):int(height*0.5), int(width*0.6):int(width*0.9)] = \
+        frame[:, int(height * 0.1) : int(height * 0.5), int(width * 0.6) : int(width * 0.9)] = (
             np.array([0.6, 0.8, 1.0])[:, None, None]
+        )
         # Objects (colored rectangles)
         for _ in range(5):
-            y1 = rng.randint(int(height*0.3), int(height*0.7))
-            x1 = rng.randint(0, int(width*0.7))
+            y1 = rng.randint(int(height * 0.3), int(height * 0.7))
+            x1 = rng.randint(0, int(width * 0.7))
             h, w = rng.randint(30, 80), rng.randint(30, 80)
             color = rng.rand(3).astype(np.float32)
-            frame[:, y1:y1+h, x1:x1+w] = color[:, None, None]
+            frame[:, y1 : y1 + h, x1 : x1 + w] = color[:, None, None]
         frames = np.stack([frame] * n_frames, axis=0)
 
     else:
@@ -107,15 +109,17 @@ def generate_test_frames(
 @dataclass
 class EvalCase:
     """A single evaluation test case."""
+
     name: str
-    frames: np.ndarray      # (T, C, H, W) float32
+    frames: np.ndarray  # (T, C, H, W) float32
     prompt: str
-    complexity: str = ""     # metadata: what kind of input
+    complexity: str = ""  # metadata: what kind of input
 
 
 @dataclass
 class RunMetrics:
     """Metrics from a single inference run."""
+
     # Token counts
     prompt_tokens: int = 0
     completion_tokens: int = 0
@@ -127,8 +131,8 @@ class RunMetrics:
     latency_ms: float = 0.0
 
     # Throughput
-    prompt_tps: float = 0.0       # prefill tokens/sec
-    generation_tps: float = 0.0   # decode tokens/sec
+    prompt_tps: float = 0.0  # prefill tokens/sec
+    generation_tps: float = 0.0  # decode tokens/sec
 
     # Memory
     peak_memory_gb: float = 0.0
@@ -155,6 +159,7 @@ class RunMetrics:
 @dataclass
 class CaseResult:
     """Aggregated results for one test case across multiple runs."""
+
     name: str
     complexity: str
     prompt: str
@@ -168,9 +173,15 @@ class CaseResult:
         """Compute mean/std/min/max for key metrics."""
         metrics = {}
         for attr in [
-            "prompt_tokens", "completion_tokens",
-            "prefill_ms", "decode_ms", "inference_ms", "latency_ms",
-            "prompt_tps", "generation_tps", "peak_memory_gb",
+            "prompt_tokens",
+            "completion_tokens",
+            "prefill_ms",
+            "decode_ms",
+            "inference_ms",
+            "latency_ms",
+            "prompt_tps",
+            "generation_tps",
+            "peak_memory_gb",
         ]:
             vals = self._values(attr)
             if not vals:
@@ -190,6 +201,7 @@ class CaseResult:
 @dataclass
 class EvalReport:
     """Full evaluation report with comparison support."""
+
     model: str
     device: str
     timestamp: str
@@ -197,10 +209,10 @@ class EvalReport:
 
     def print(self) -> None:
         """Print human-readable report."""
-        print(f"\n{'='*70}")
+        print(f"\n{'=' * 70}")
         print(f"  EVAL REPORT — {self.model}")
         print(f"  Device: {self.device}  |  {self.timestamp}")
-        print(f"{'='*70}")
+        print(f"{'=' * 70}")
 
         for case in self.cases:
             s = case.summary()
@@ -210,15 +222,15 @@ class EvalReport:
             # Key metrics table
             fmt = "    {:<20s} {:>10s} {:>10s}"
             print(fmt.format("Metric", "Mean", "Std"))
-            print(f"    {'-'*42}")
+            print(f"    {'-' * 42}")
 
             rows = [
-                ("prompt_tokens",  "{:.0f}", "{:.0f}"),
-                ("prefill_ms",     "{:.1f}", "{:.1f}"),
-                ("decode_ms",      "{:.1f}", "{:.1f}"),
-                ("inference_ms",   "{:.1f}", "{:.1f}"),
-                ("latency_ms",     "{:.1f}", "{:.1f}"),
-                ("prompt_tps",     "{:.0f}", "{:.0f}"),
+                ("prompt_tokens", "{:.0f}", "{:.0f}"),
+                ("prefill_ms", "{:.1f}", "{:.1f}"),
+                ("decode_ms", "{:.1f}", "{:.1f}"),
+                ("inference_ms", "{:.1f}", "{:.1f}"),
+                ("latency_ms", "{:.1f}", "{:.1f}"),
+                ("prompt_tps", "{:.0f}", "{:.0f}"),
                 ("generation_tps", "{:.1f}", "{:.1f}"),
                 ("peak_memory_gb", "{:.2f}", "{:.3f}"),
             ]
@@ -227,17 +239,19 @@ class EvalReport:
                 if attr not in s:
                     continue
                 v = s[attr]
-                print(fmt.format(
-                    attr,
-                    mfmt.format(v["mean"]),
-                    sfmt.format(v["std"]),
-                ))
+                print(
+                    fmt.format(
+                        attr,
+                        mfmt.format(v["mean"]),
+                        sfmt.format(v["std"]),
+                    )
+                )
 
             if "output_text" in s:
                 text = s["output_text"][:80]
                 print(f"    Output: {text}...")
 
-        print(f"\n{'='*70}\n")
+        print(f"\n{'=' * 70}\n")
 
     def save(self, path: str) -> None:
         """Save report as JSON for later comparison."""
@@ -248,13 +262,15 @@ class EvalReport:
             "cases": [],
         }
         for case in self.cases:
-            data["cases"].append({
-                "name": case.name,
-                "complexity": case.complexity,
-                "prompt": case.prompt,
-                "n_runs": case.n_runs,
-                "summary": case.summary(),
-            })
+            data["cases"].append(
+                {
+                    "name": case.name,
+                    "complexity": case.complexity,
+                    "prompt": case.prompt,
+                    "n_runs": case.n_runs,
+                    "summary": case.summary(),
+                }
+            )
         Path(path).write_text(json.dumps(data, indent=2))
         print(f"Report saved to {path}")
 
@@ -264,11 +280,11 @@ class EvalReport:
         a = json.loads(Path(path_a).read_text())
         b = json.loads(Path(path_b).read_text())
 
-        print(f"\n{'='*70}")
+        print(f"\n{'=' * 70}")
         print("  COMPARISON")
         print(f"  A: {a['model']} ({a['timestamp']})")
         print(f"  B: {b['model']} ({b['timestamp']})")
-        print(f"{'='*70}")
+        print(f"{'=' * 70}")
 
         cases_b = {c["name"]: c for c in b["cases"]}
 
@@ -280,11 +296,15 @@ class EvalReport:
             print(f"\n  [{ca['name']}]")
             fmt = "    {:<20s} {:>10s} {:>10s} {:>10s}"
             print(fmt.format("Metric", "A", "B", "Delta"))
-            print(f"    {'-'*52}")
+            print(f"    {'-' * 52}")
 
             for attr in [
-                "prompt_tokens", "prefill_ms", "decode_ms",
-                "inference_ms", "latency_ms", "peak_memory_gb",
+                "prompt_tokens",
+                "prefill_ms",
+                "decode_ms",
+                "inference_ms",
+                "latency_ms",
+                "peak_memory_gb",
             ]:
                 sa = ca["summary"].get(attr, {})
                 sb = cb["summary"].get(attr, {})
@@ -294,12 +314,14 @@ class EvalReport:
                 if ma > 0:
                     delta = ((mb - ma) / ma) * 100
                     sign = "+" if delta > 0 else ""
-                    print(fmt.format(
-                        attr,
-                        f"{ma:.1f}",
-                        f"{mb:.1f}",
-                        f"{sign}{delta:.1f}%",
-                    ))
+                    print(
+                        fmt.format(
+                            attr,
+                            f"{ma:.1f}",
+                            f"{mb:.1f}",
+                            f"{sign}{delta:.1f}%",
+                        )
+                    )
 
             # Compare output text
             text_a = ca["summary"].get("output_text", "")
@@ -308,7 +330,7 @@ class EvalReport:
                 print(f"    A output: {text_a[:70]}...")
                 print(f"    B output: {text_b[:70]}...")
 
-        print(f"\n{'='*70}\n")
+        print(f"\n{'=' * 70}\n")
 
 
 # ── Eval Suite ──────────────────────────────────────────────────────────────
@@ -317,11 +339,11 @@ class EvalReport:
 DEFAULT_PROMPT = "Describe what you see in detail."
 
 DEFAULT_CASES = [
-    ("solid",    "solid",    "Minimal visual complexity — uniform color"),
+    ("solid", "solid", "Minimal visual complexity — uniform color"),
     ("gradient", "gradient", "Low complexity — smooth gradient"),
-    ("scene",    "scene",    "Simulated indoor scene with objects"),
-    ("medium",   "medium",   "Medium complexity — color blocks"),
-    ("high",     "high",     "Maximum complexity — random noise"),
+    ("scene", "scene", "Simulated indoor scene with objects"),
+    ("medium", "medium", "Medium complexity — color blocks"),
+    ("high", "high", "Maximum complexity — random noise"),
 ]
 
 
@@ -356,12 +378,14 @@ class EvalSuite:
                 n_frames=2,  # minimum for mlx_vlm
                 seed=42,
             )
-            cases.append(EvalCase(
-                name=name,
-                frames=frames,
-                prompt=self.prompt,
-                complexity=complexity,
-            ))
+            cases.append(
+                EvalCase(
+                    name=name,
+                    frames=frames,
+                    prompt=self.prompt,
+                    complexity=complexity,
+                )
+            )
         return cases
 
     def run(self, cases: list[EvalCase] | None = None) -> EvalReport:

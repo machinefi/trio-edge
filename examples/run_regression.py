@@ -57,10 +57,13 @@ def build_config_key(args) -> str:
 
 def run_benchmarks(args) -> dict:
     """Run all regression benchmarks, return results dict."""
-    from trio_core import TrioCore, EngineConfig
+    from trio_core import EngineConfig, TrioCore
     from trio_core.eval_benchmarks import (
-        POPEBenchmark, TextVQABenchmark, GQABenchmark, MMBenchBenchmark,
         BenchmarkRunner,
+        GQABenchmark,
+        MMBenchBenchmark,
+        POPEBenchmark,
+        TextVQABenchmark,
     )
 
     # Setup engine
@@ -229,7 +232,9 @@ def check_regression(results: dict, threshold: float) -> bool:
 
         print(f"  {bench_name}:")
         print(f"    Accuracy: {acc_baseline:.1%} -> {acc_current:.1%} ({delta:+.1%}) [{status}]")
-        print(f"    Latency:  {latency_baseline:.0f}ms -> {latency_current:.0f}ms ({lat_delta:+.1f}%)")
+        print(
+            f"    Latency:  {latency_baseline:.0f}ms -> {latency_current:.0f}ms ({lat_delta:+.1f}%)"
+        )
 
         if not passed:
             all_passed = False
@@ -245,24 +250,44 @@ def check_regression(results: dict, threshold: float) -> bool:
 
 def main():
     parser = argparse.ArgumentParser(description="Accuracy regression test")
-    parser.add_argument("--save-baseline", action="store_true",
-                        help="Save current results as baseline")
-    parser.add_argument("--model", "-m", default=None,
-                        help="Model name (default: auto)")
-    parser.add_argument("--tome", type=int, default=None, metavar="R",
-                        help="Enable ToMe with r tokens merged per layer")
-    parser.add_argument("--tome-adaptive", action="store_true",
-                        help="Use adaptive r (linear ramp from 0 to r_max)")
-    parser.add_argument("--visual-similarity", type=float, default=None, metavar="THRESHOLD",
-                        help="Visual similarity threshold for KV reuse (e.g., 0.95)")
-    parser.add_argument("--samples", "-n", type=int, default=DEFAULT_SAMPLES,
-                        help=f"Samples per benchmark (default: {DEFAULT_SAMPLES})")
-    parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD,
-                        help=f"Max accuracy drop allowed (default: {DEFAULT_THRESHOLD})")
-    parser.add_argument("--skip-gqa", action="store_true",
-                        help="Skip GQA benchmark (large dataset download)")
-    parser.add_argument("--skip-mmbench", action="store_true",
-                        help="Skip MMBench benchmark")
+    parser.add_argument(
+        "--save-baseline", action="store_true", help="Save current results as baseline"
+    )
+    parser.add_argument("--model", "-m", default=None, help="Model name (default: auto)")
+    parser.add_argument(
+        "--tome",
+        type=int,
+        default=None,
+        metavar="R",
+        help="Enable ToMe with r tokens merged per layer",
+    )
+    parser.add_argument(
+        "--tome-adaptive", action="store_true", help="Use adaptive r (linear ramp from 0 to r_max)"
+    )
+    parser.add_argument(
+        "--visual-similarity",
+        type=float,
+        default=None,
+        metavar="THRESHOLD",
+        help="Visual similarity threshold for KV reuse (e.g., 0.95)",
+    )
+    parser.add_argument(
+        "--samples",
+        "-n",
+        type=int,
+        default=DEFAULT_SAMPLES,
+        help=f"Samples per benchmark (default: {DEFAULT_SAMPLES})",
+    )
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        default=DEFAULT_THRESHOLD,
+        help=f"Max accuracy drop allowed (default: {DEFAULT_THRESHOLD})",
+    )
+    parser.add_argument(
+        "--skip-gqa", action="store_true", help="Skip GQA benchmark (large dataset download)"
+    )
+    parser.add_argument("--skip-mmbench", action="store_true", help="Skip MMBench benchmark")
     args = parser.parse_args()
 
     results = run_benchmarks(args)

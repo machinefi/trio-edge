@@ -30,18 +30,17 @@ import argparse
 import json
 import re
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 import mlx.core as mx
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-
 # ---------------------------------------------------------------------------
 # Frame generators
 # ---------------------------------------------------------------------------
+
 
 def _make_frame(img: Image.Image) -> np.ndarray:
     """PIL Image → (1, 3, H, W) float32 in [0,1]."""
@@ -56,8 +55,9 @@ def _get_font(size: int = 120):
         return ImageFont.load_default()
 
 
-def _draw_text(text: str, size: int = 336, font_size: int = 120,
-               bg: str = "white", fg: str = "black") -> Image.Image:
+def _draw_text(
+    text: str, size: int = 336, font_size: int = 120, bg: str = "white", fg: str = "black"
+) -> Image.Image:
     img = Image.new("RGB", (size, size), bg)
     draw = ImageDraw.Draw(img)
     font = _get_font(font_size)
@@ -67,8 +67,7 @@ def _draw_text(text: str, size: int = 336, font_size: int = 120,
     return img
 
 
-def _draw_shape(shape: str, color: str, size: int = 336,
-                bg: str = "white") -> Image.Image:
+def _draw_shape(shape: str, color: str, size: int = 336, bg: str = "white") -> Image.Image:
     img = Image.new("RGB", (size, size), bg)
     draw = ImageDraw.Draw(img)
     m = size // 4
@@ -78,8 +77,7 @@ def _draw_shape(shape: str, color: str, size: int = 336,
     elif shape == "square":
         draw.rectangle(box, fill=color)
     elif shape == "triangle":
-        draw.polygon([(size // 2, m), (m, size - m), (size - m, size - m)],
-                     fill=color)
+        draw.polygon([(size // 2, m), (m, size - m), (size - m, size - m)], fill=color)
     elif shape == "star":
         # Simple 5-point star
         cx, cy, r = size // 2, size // 2, size // 3
@@ -101,15 +99,16 @@ LETTERS = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
 # Test case definitions
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class TemporalTest:
     name: str
     frames: list[np.ndarray]
     question: str
-    ground_truth: str           # expected answer content
-    category: str               # positional / ordering / state / counting / change
-    seq_length: int             # number of frames
-    check_fn: str = "substring" # "substring" or "number" or "yesno" or "order"
+    ground_truth: str  # expected answer content
+    category: str  # positional / ordering / state / counting / change
+    seq_length: int  # number of frames
+    check_fn: str = "substring"  # "substring" or "number" or "yesno" or "order"
 
 
 def make_positional_recall(n: int) -> list[TemporalTest]:
@@ -131,26 +130,27 @@ def make_positional_recall(n: int) -> list[TemporalTest]:
         # 1-indexed for human readability
         human_pos = pos + 1
         ordinal = {1: "1st", 2: "2nd", 3: "3rd"}.get(human_pos, f"{human_pos}th")
-        tests.append(TemporalTest(
-            name=f"pos_recall_n{n}_at{human_pos}",
-            frames=frames,
-            question=(
-                f"You have seen {n} images in sequence, each showing a single letter. "
-                f"What letter was shown in the {ordinal} image? "
-                f"Answer with just the letter."
-            ),
-            ground_truth=letters[pos],
-            category="positional",
-            seq_length=n,
-        ))
+        tests.append(
+            TemporalTest(
+                name=f"pos_recall_n{n}_at{human_pos}",
+                frames=frames,
+                question=(
+                    f"You have seen {n} images in sequence, each showing a single letter. "
+                    f"What letter was shown in the {ordinal} image? "
+                    f"Answer with just the letter."
+                ),
+                ground_truth=letters[pos],
+                category="positional",
+                seq_length=n,
+            )
+        )
     return tests
 
 
 def make_ordering_tests(n: int) -> list[TemporalTest]:
     """Show N colored shapes, ask about temporal ordering."""
     tests = []
-    items = list(zip(SHAPES[:min(n, len(SHAPES))],
-                     COLORS[:min(n, len(COLORS))]))
+    items = list(zip(SHAPES[: min(n, len(SHAPES))], COLORS[: min(n, len(COLORS))]))
     # Pad if needed
     while len(items) < n:
         idx = len(items) % len(SHAPES)
@@ -165,34 +165,38 @@ def make_ordering_tests(n: int) -> list[TemporalTest]:
         a_idx, b_idx = 0, n - 1
         a_desc = f"{items[a_idx][1]} {items[a_idx][0]}"
         b_desc = f"{items[b_idx][1]} {items[b_idx][0]}"
-        tests.append(TemporalTest(
-            name=f"order_n{n}_first_vs_last",
-            frames=frames,
-            question=(
-                f"You saw {n} images in sequence, each with a different colored shape. "
-                f"Did the {a_desc} appear before or after the {b_desc}? "
-                f"Answer with just 'before' or 'after'."
-            ),
-            ground_truth="before",
-            category="ordering",
-            seq_length=n,
-        ))
+        tests.append(
+            TemporalTest(
+                name=f"order_n{n}_first_vs_last",
+                frames=frames,
+                question=(
+                    f"You saw {n} images in sequence, each with a different colored shape. "
+                    f"Did the {a_desc} appear before or after the {b_desc}? "
+                    f"Answer with just 'before' or 'after'."
+                ),
+                ground_truth="before",
+                category="ordering",
+                seq_length=n,
+            )
+        )
 
         # Middle vs early
         m_idx = n // 2
         m_desc = f"{items[m_idx][1]} {items[m_idx][0]}"
-        tests.append(TemporalTest(
-            name=f"order_n{n}_mid_vs_first",
-            frames=frames,
-            question=(
-                f"You saw {n} images in sequence, each with a different colored shape. "
-                f"Did the {m_desc} appear before or after the {a_desc}? "
-                f"Answer with just 'before' or 'after'."
-            ),
-            ground_truth="after",
-            category="ordering",
-            seq_length=n,
-        ))
+        tests.append(
+            TemporalTest(
+                name=f"order_n{n}_mid_vs_first",
+                frames=frames,
+                question=(
+                    f"You saw {n} images in sequence, each with a different colored shape. "
+                    f"Did the {m_desc} appear before or after the {a_desc}? "
+                    f"Answer with just 'before' or 'after'."
+                ),
+                ground_truth="after",
+                category="ordering",
+                seq_length=n,
+            )
+        )
 
     return tests
 
@@ -210,34 +214,38 @@ def make_state_tracking(n: int) -> list[TemporalTest]:
         else:
             frames.append(_make_frame(Image.new("RGB", (336, 336), "white")))
 
-    tests.append(TemporalTest(
-        name=f"state_disappear_n{n}",
-        frames=frames,
-        question=(
-            f"You saw {n} images in sequence. Some showed a red circle, "
-            f"and some were blank white. Is the red circle present in the "
-            f"current (last) image? Answer yes or no."
-        ),
-        ground_truth="no",
-        category="state",
-        seq_length=n,
-        check_fn="yesno",
-    ))
+    tests.append(
+        TemporalTest(
+            name=f"state_disappear_n{n}",
+            frames=frames,
+            question=(
+                f"You saw {n} images in sequence. Some showed a red circle, "
+                f"and some were blank white. Is the red circle present in the "
+                f"current (last) image? Answer yes or no."
+            ),
+            ground_truth="no",
+            category="state",
+            seq_length=n,
+            check_fn="yesno",
+        )
+    )
 
     # Was there ever a red circle?
-    tests.append(TemporalTest(
-        name=f"state_ever_present_n{n}",
-        frames=frames,
-        question=(
-            f"You saw {n} images in sequence. The current image is blank. "
-            f"Was there a red circle in any of the earlier images? "
-            f"Answer yes or no."
-        ),
-        ground_truth="yes",
-        category="state",
-        seq_length=n,
-        check_fn="yesno",
-    ))
+    tests.append(
+        TemporalTest(
+            name=f"state_ever_present_n{n}",
+            frames=frames,
+            question=(
+                f"You saw {n} images in sequence. The current image is blank. "
+                f"Was there a red circle in any of the earlier images? "
+                f"Answer yes or no."
+            ),
+            ground_truth="yes",
+            category="state",
+            seq_length=n,
+            check_fn="yesno",
+        )
+    )
 
     # Object appears LATE (absent first, present at end)
     frames_late = []
@@ -248,19 +256,21 @@ def make_state_tracking(n: int) -> list[TemporalTest]:
         else:
             frames_late.append(_make_frame(Image.new("RGB", (336, 336), "white")))
 
-    tests.append(TemporalTest(
-        name=f"state_appear_late_n{n}",
-        frames=frames_late,
-        question=(
-            f"You saw {n} images in sequence. Were the early images blank "
-            f"(showing nothing) before the blue square appeared? "
-            f"Answer yes or no."
-        ),
-        ground_truth="yes",
-        category="state",
-        seq_length=n,
-        check_fn="yesno",
-    ))
+    tests.append(
+        TemporalTest(
+            name=f"state_appear_late_n{n}",
+            frames=frames_late,
+            question=(
+                f"You saw {n} images in sequence. Were the early images blank "
+                f"(showing nothing) before the blue square appeared? "
+                f"Answer yes or no."
+            ),
+            ground_truth="yes",
+            category="state",
+            seq_length=n,
+            check_fn="yesno",
+        )
+    )
 
     return tests
 
@@ -276,19 +286,21 @@ def make_counting_tests(n: int) -> list[TemporalTest]:
         shape = SHAPES[i % len(SHAPES)]
         frames.append(_make_frame(_draw_shape(shape, color)))
 
-    tests.append(TemporalTest(
-        name=f"count_distinct_n{n}",
-        frames=frames,
-        question=(
-            f"You saw {n} images in sequence, each showing a colored shape. "
-            f"How many distinct colors did you see across all images? "
-            f"Answer with just the number."
-        ),
-        ground_truth=str(n_distinct),
-        category="counting",
-        seq_length=n,
-        check_fn="number",
-    ))
+    tests.append(
+        TemporalTest(
+            name=f"count_distinct_n{n}",
+            frames=frames,
+            question=(
+                f"You saw {n} images in sequence, each showing a colored shape. "
+                f"How many distinct colors did you see across all images? "
+                f"Answer with just the number."
+            ),
+            ground_truth=str(n_distinct),
+            category="counting",
+            seq_length=n,
+            check_fn="number",
+        )
+    )
 
     return tests
 
@@ -305,19 +317,21 @@ def make_change_detection(n: int) -> list[TemporalTest]:
         bg = "white" if i < switch_point else "lightgray"
         frames.append(_make_frame(_draw_shape("circle", "red", bg=bg)))
 
-    tests.append(TemporalTest(
-        name=f"change_bg_n{n}",
-        frames=frames,
-        question=(
-            f"You saw {n} images in sequence, each showing a red circle. "
-            f"Did the background color change at some point in the sequence? "
-            f"Answer yes or no."
-        ),
-        ground_truth="yes",
-        category="change",
-        seq_length=n,
-        check_fn="yesno",
-    ))
+    tests.append(
+        TemporalTest(
+            name=f"change_bg_n{n}",
+            frames=frames,
+            question=(
+                f"You saw {n} images in sequence, each showing a red circle. "
+                f"Did the background color change at some point in the sequence? "
+                f"Answer yes or no."
+            ),
+            ground_truth="yes",
+            category="change",
+            seq_length=n,
+            check_fn="yesno",
+        )
+    )
 
     return tests
 
@@ -325,6 +339,7 @@ def make_change_detection(n: int) -> list[TemporalTest]:
 # ---------------------------------------------------------------------------
 # Answer checking
 # ---------------------------------------------------------------------------
+
 
 def check_answer(answer: str, ground_truth: str, check_fn: str = "substring") -> bool:
     answer_lower = answer.lower().strip()
@@ -339,12 +354,20 @@ def check_answer(answer: str, ground_truth: str, check_fn: str = "substring") ->
 
     elif check_fn == "number":
         # Extract first number from answer
-        nums = re.findall(r'\d+', answer_lower)
+        nums = re.findall(r"\d+", answer_lower)
         if nums:
             return nums[0] == gt_lower
         # Also check spelled-out numbers
-        word_to_num = {"one": "1", "two": "2", "three": "3", "four": "4",
-                       "five": "5", "six": "6", "seven": "7", "eight": "8"}
+        word_to_num = {
+            "one": "1",
+            "two": "2",
+            "three": "3",
+            "four": "4",
+            "five": "5",
+            "six": "6",
+            "seven": "7",
+            "eight": "8",
+        }
         for word, num in word_to_num.items():
             if word in answer_lower and num == gt_lower:
                 return True
@@ -365,6 +388,7 @@ def check_answer(answer: str, ground_truth: str, check_fn: str = "substring") ->
 # ---------------------------------------------------------------------------
 # Runners
 # ---------------------------------------------------------------------------
+
 
 def run_independent(engine, test: TemporalTest, max_tokens: int) -> tuple[str, dict]:
     """Only feed the last frame."""
@@ -402,10 +426,14 @@ def run_accumulated(engine, test: TemporalTest, max_tokens: int) -> tuple[str, d
                 kv_offset = pc._kv_cache[0].offset
         except Exception:
             pass
-        mem_snapshots.append({
-            "frame": i, "active_mb": round(active_mb, 1),
-            "kv_offset": kv_offset, "latency_ms": round(elapsed, 1),
-        })
+        mem_snapshots.append(
+            {
+                "frame": i,
+                "active_mb": round(active_mb, 1),
+                "kv_offset": kv_offset,
+                "latency_ms": round(elapsed, 1),
+            }
+        )
 
     # Final frame with the real question
     t0 = time.monotonic()
@@ -427,24 +455,24 @@ def run_accumulated(engine, test: TemporalTest, max_tokens: int) -> tuple[str, d
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="Temporal video understanding benchmark"
-    )
-    parser.add_argument("--model", "-m",
-                        default="mlx-community/Qwen2.5-VL-3B-Instruct-4bit")
+    parser = argparse.ArgumentParser(description="Temporal video understanding benchmark")
+    parser.add_argument("--model", "-m", default="mlx-community/Qwen2.5-VL-3B-Instruct-4bit")
     parser.add_argument("--max-tokens", type=int, default=64)
     parser.add_argument("--output", "-o", default=None)
-    parser.add_argument("--modes", nargs="+",
-                        default=["independent", "multiframe",
-                                 "accumulated", "accumulated_evict"],
-                        choices=["independent", "multiframe",
-                                 "accumulated", "accumulated_evict"])
-    parser.add_argument("--seq-lengths", nargs="+", type=int,
-                        default=[5, 10, 20],
-                        help="Sequence lengths to test")
-    parser.add_argument("--evict-budget", type=int, default=500,
-                        help="StreamMem budget for accumulated_evict mode")
+    parser.add_argument(
+        "--modes",
+        nargs="+",
+        default=["independent", "multiframe", "accumulated", "accumulated_evict"],
+        choices=["independent", "multiframe", "accumulated", "accumulated_evict"],
+    )
+    parser.add_argument(
+        "--seq-lengths", nargs="+", type=int, default=[5, 10, 20], help="Sequence lengths to test"
+    )
+    parser.add_argument(
+        "--evict-budget", type=int, default=500, help="StreamMem budget for accumulated_evict mode"
+    )
     args = parser.parse_args()
 
     from trio_core import EngineConfig, TrioCore
@@ -514,27 +542,30 @@ def main():
             correct += int(passed)
             status = "PASS" if passed else "FAIL"
 
-            print(f"  [{status}] {test.name:<35s} n={test.seq_length:<3d} "
-                  f"{meta.get('time_s', 0):>5.1f}s")
+            print(
+                f"  [{status}] {test.name:<35s} n={test.seq_length:<3d} "
+                f"{meta.get('time_s', 0):>5.1f}s"
+            )
             if not passed:
                 print(f"         GT: {test.ground_truth}")
                 print(f"         Got: {answer[:120]}")
 
-            results.append({
-                "mode": mode,
-                "test": test.name,
-                "category": test.category,
-                "seq_length": test.seq_length,
-                "ground_truth": test.ground_truth,
-                "answer": answer[:200],
-                "passed": passed,
-                **{k: v for k, v in meta.items() if k != "mem_snapshots"},
-            })
+            results.append(
+                {
+                    "mode": mode,
+                    "test": test.name,
+                    "category": test.category,
+                    "seq_length": test.seq_length,
+                    "ground_truth": test.ground_truth,
+                    "answer": answer[:200],
+                    "passed": passed,
+                    **{k: v for k, v in meta.items() if k != "mem_snapshots"},
+                }
+            )
 
         peak_mb = mx.metal.get_peak_memory() / 1e6
         acc = correct / n_tests
-        print(f"\n  {mode}: {correct}/{n_tests} = {acc:.0%}  "
-              f"(peak metal: {peak_mb:.0f}MB)")
+        print(f"\n  {mode}: {correct}/{n_tests} = {acc:.0%}  (peak metal: {peak_mb:.0f}MB)")
         del engine
 
     # ---------------------------------------------------------------------------

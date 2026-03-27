@@ -13,9 +13,7 @@ import mlx.nn as nn
 
 @partial(mx.compile, shapeless=True)
 def compute_g(A_log, a, dt_bias):
-    return mx.exp(-mx.exp(A_log.astype(mx.float32)) * nn.softplus(a + dt_bias)).astype(
-        A_log.dtype
-    )
+    return mx.exp(-mx.exp(A_log.astype(mx.float32)) * nn.softplus(a + dt_bias)).astype(A_log.dtype)
 
 
 def _make_gated_delta_kernel(has_mask=False, vectorized=False):
@@ -217,7 +215,12 @@ def gated_delta_ops(
     ys = []
     for t in range(T):
         y, state = _gated_delta_step_ops(
-            q[:, t], k[:, t], v[:, t], g[:, t], beta[:, t], state,
+            q[:, t],
+            k[:, t],
+            v[:, t],
+            g[:, t],
+            beta[:, t],
+            state,
             None if mask is None else mask[:, t],
         )
         ys.append(y)

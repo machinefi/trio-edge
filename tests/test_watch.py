@@ -1,12 +1,12 @@
 """Tests for /v1/watch API — watch models, SSE helpers, and endpoint routing."""
 
 import json
-from contextlib import asynccontextmanager
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
+from helpers import make_mock_engine, noop_lifespan
 
 from trio_core.api.models import (
     WatchCondition,
@@ -20,45 +20,27 @@ from trio_core.api.server import (
     _parse_resolution,
     _sse_event,
     _strip_think_tags,
-    _WatchState,
     _watches,
+    _WatchState,
 )
 from trio_core.engine import InferenceMetrics, VideoResult
-
-
-@asynccontextmanager
-async def _noop_lifespan(app):
-    yield
 
 
 @pytest.fixture
 def client():
     """Create test client with mocked engine (no model loading)."""
-    from trio_core.api.server import create_app
     import trio_core.api.server as server_mod
+    from trio_core.api.server import create_app
 
     app = create_app()
-    mock_engine = MagicMock()
-    mock_engine._loaded = True
-    mock_engine.config.model = "test-model"
-    mock_engine.config.max_tokens = 512
-    mock_engine.config.temperature = 0.0
-    mock_engine.config.top_p = 1.0
-    mock_engine.config.video_fps = 2.0
-    mock_engine.config.video_max_frames = 128
-    mock_engine.config.dedup_enabled = True
-    mock_engine.config.dedup_threshold = 0.95
-    mock_engine.config.motion_enabled = False
-    mock_engine.health.return_value = {
-        "status": "ok", "model": "test-model", "loaded": True, "config": {},
-    }
+    mock_engine = make_mock_engine()
     mock_engine.analyze_frame.return_value = VideoResult(
         text="No, the area is clear.",
         metrics=InferenceMetrics(latency_ms=100.0, tokens_per_sec=50.0),
     )
 
     server_mod._engine = mock_engine
-    app.router.lifespan_context = _noop_lifespan
+    app.router.lifespan_context = noop_lifespan
 
     with TestClient(app) as c:
         yield c
@@ -197,6 +179,7 @@ class TestWatchEndpoints:
     def test_delete_watch_existing(self, client):
         """Insert a fake watch state and delete it."""
         import asyncio
+
         import trio_core.api.server as server_mod
 
         ws = _WatchState(
@@ -223,6 +206,7 @@ class TestWatchEndpoints:
         """GET /v1/watch lists active watches."""
         import asyncio
         import time
+
         import trio_core.api.server as server_mod
 
         ws = _WatchState(
@@ -256,7 +240,6 @@ class TestWatchEndpoints:
         We mock ensure_rtsp_url + Popen so no real RTSP connection is made.
         The ffmpeg mock returns 2 frames then EOF.
         """
-        import trio_core.api.server as server_mod
 
         frame_w, frame_h = 672, 448
         frame_bytes = frame_w * frame_h * 3
@@ -265,27 +248,33 @@ class TestWatchEndpoints:
         frame2 = np.full(frame_bytes, 128, dtype=np.uint8)
 
         mock_stdout = MagicMock()
-        mock_stdout.read = MagicMock(side_effect=[
-            frame1.tobytes(),
-            frame2.tobytes(),
-            b"",  # EOF
-        ])
+        mock_stdout.read = MagicMock(
+            side_effect=[
+                frame1.tobytes(),
+                frame2.tobytes(),
+                b"",  # EOF
+            ]
+        )
         mock_proc = MagicMock()
         mock_proc.stdout = mock_stdout
         mock_proc.poll.return_value = None
         mock_proc.terminate = MagicMock()
         mock_proc.wait = MagicMock()
 
-        with patch("trio_core._rtsp_proxy.ensure_rtsp_url", return_value="rtsp://test"), \
-             patch("subprocess.Popen", return_value=mock_proc):
-
-            resp = client.post("/v1/watch", json={
-                "source": "rtsp://test:554/stream",
-                "conditions": [
-                    {"id": "person", "question": "Is there a person?"},
-                ],
-                "fps": 1.0,
-            })
+        with (
+            patch("trio_core._rtsp_proxy.ensure_rtsp_url", return_value="rtsp://test"),
+            patch("subprocess.Popen", return_value=mock_proc),
+        ):
+            resp = client.post(
+                "/v1/watch",
+                json={
+                    "source": "rtsp://test:554/stream",
+                    "conditions": [
+                        {"id": "person", "question": "Is there a person?"},
+                    ],
+                    "fps": 1.0,
+                },
+            )
 
         assert resp.status_code == 200
         assert "text/event-stream" in resp.headers["content-type"]
@@ -318,25 +307,31 @@ class TestWatchEndpoints:
         frame1 = np.random.randint(0, 255, frame_bytes, dtype=np.uint8)
 
         mock_stdout = MagicMock()
-        mock_stdout.read = MagicMock(side_effect=[
-            frame1.tobytes(),
-            b"",  # EOF
-        ])
+        mock_stdout.read = MagicMock(
+            side_effect=[
+                frame1.tobytes(),
+                b"",  # EOF
+            ]
+        )
         mock_proc = MagicMock()
         mock_proc.stdout = mock_stdout
         mock_proc.poll.return_value = None
         mock_proc.terminate = MagicMock()
         mock_proc.wait = MagicMock()
 
-        with patch("trio_core._rtsp_proxy.ensure_rtsp_url", return_value="rtsp://test"), \
-             patch("subprocess.Popen", return_value=mock_proc):
-
-            resp = client.post("/v1/watch", json={
-                "source": "rtsp://test:554/stream",
-                "conditions": [
-                    {"id": "person", "question": "Is there a person?"},
-                ],
-            })
+        with (
+            patch("trio_core._rtsp_proxy.ensure_rtsp_url", return_value="rtsp://test"),
+            patch("subprocess.Popen", return_value=mock_proc),
+        ):
+            resp = client.post(
+                "/v1/watch",
+                json={
+                    "source": "rtsp://test:554/stream",
+                    "conditions": [
+                        {"id": "person", "question": "Is there a person?"},
+                    ],
+                },
+            )
 
         events = _parse_sse(resp.text)
 
@@ -370,13 +365,17 @@ class TestWatchEndpoints:
         mock_proc.terminate = MagicMock()
         mock_proc.wait = MagicMock()
 
-        with patch("trio_core._rtsp_proxy.ensure_rtsp_url", return_value="rtsp://test"), \
-             patch("subprocess.Popen", return_value=mock_proc):
-
-            resp = client.post("/v1/watch", json={
-                "source": "rtsp://test",
-                "conditions": [{"id": "person", "question": "Is there a person?"}],
-            })
+        with (
+            patch("trio_core._rtsp_proxy.ensure_rtsp_url", return_value="rtsp://test"),
+            patch("subprocess.Popen", return_value=mock_proc),
+        ):
+            resp = client.post(
+                "/v1/watch",
+                json={
+                    "source": "rtsp://test",
+                    "conditions": [{"id": "person", "question": "Is there a person?"}],
+                },
+            )
 
         events = _parse_sse(resp.text)
         alert_events = [e for e in events if e["type"] == "alert"]
@@ -389,10 +388,18 @@ class TestWatchEndpoints:
         """Multiple conditions per watch — each gets separate inference."""
         import trio_core.api.server as server_mod
 
-        answers = iter([
-            VideoResult(text="Yes, a person.", metrics=InferenceMetrics(latency_ms=100.0, tokens_per_sec=50.0)),
-            VideoResult(text="No, no package.", metrics=InferenceMetrics(latency_ms=100.0, tokens_per_sec=50.0)),
-        ])
+        answers = iter(
+            [
+                VideoResult(
+                    text="Yes, a person.",
+                    metrics=InferenceMetrics(latency_ms=100.0, tokens_per_sec=50.0),
+                ),
+                VideoResult(
+                    text="No, no package.",
+                    metrics=InferenceMetrics(latency_ms=100.0, tokens_per_sec=50.0),
+                ),
+            ]
+        )
         server_mod._engine.analyze_frame.side_effect = lambda *a, **kw: next(answers)
 
         frame_w, frame_h = 672, 448
@@ -407,16 +414,20 @@ class TestWatchEndpoints:
         mock_proc.terminate = MagicMock()
         mock_proc.wait = MagicMock()
 
-        with patch("trio_core._rtsp_proxy.ensure_rtsp_url", return_value="rtsp://test"), \
-             patch("subprocess.Popen", return_value=mock_proc):
-
-            resp = client.post("/v1/watch", json={
-                "source": "rtsp://test",
-                "conditions": [
-                    {"id": "person", "question": "Is there a person?"},
-                    {"id": "package", "question": "Is there a package?"},
-                ],
-            })
+        with (
+            patch("trio_core._rtsp_proxy.ensure_rtsp_url", return_value="rtsp://test"),
+            patch("subprocess.Popen", return_value=mock_proc),
+        ):
+            resp = client.post(
+                "/v1/watch",
+                json={
+                    "source": "rtsp://test",
+                    "conditions": [
+                        {"id": "person", "question": "Is there a person?"},
+                        {"id": "package", "question": "Is there a package?"},
+                    ],
+                },
+            )
 
         events = _parse_sse(resp.text)
         alert_events = [e for e in events if e["type"] == "alert"]
@@ -473,7 +484,6 @@ class TestParseResolution:
 class TestWatchCustomResolution:
     def test_custom_resolution_used_in_ffmpeg(self, client):
         """POST /v1/watch with custom resolution passes it to ffmpeg scale filter."""
-        import trio_core.api.server as server_mod
 
         frame_w, frame_h = 1280, 720
         frame_bytes = frame_w * frame_h * 3
@@ -488,20 +498,23 @@ class TestWatchCustomResolution:
         mock_proc.wait = MagicMock()
 
         popen_calls = []
-        original_start_ffmpeg = None
 
         def capture_start_ffmpeg(url, fps, fw, fh):
             popen_calls.append((fw, fh))
             return mock_proc
 
-        with patch("trio_core._rtsp_proxy.ensure_rtsp_url", return_value="rtsp://test"), \
-             patch("trio_core.api.server._start_ffmpeg", side_effect=capture_start_ffmpeg):
-
-            resp = client.post("/v1/watch", json={
-                "source": "rtsp://test",
-                "conditions": [{"id": "p", "question": "?"}],
-                "resolution": "1280x720",
-            })
+        with (
+            patch("trio_core._rtsp_proxy.ensure_rtsp_url", return_value="rtsp://test"),
+            patch("trio_core.api.server._start_ffmpeg", side_effect=capture_start_ffmpeg),
+        ):
+            resp = client.post(
+                "/v1/watch",
+                json={
+                    "source": "rtsp://test",
+                    "conditions": [{"id": "p", "question": "?"}],
+                    "resolution": "1280x720",
+                },
+            )
 
         assert resp.status_code == 200
         events = _parse_sse(resp.text)
@@ -511,7 +524,9 @@ class TestWatchCustomResolution:
         assert popen_calls[0] == (1280, 720)
 
         # Running status should report custom resolution
-        running = [e for e in events if e["type"] == "status" and e["data"].get("state") == "running"]
+        running = [
+            e for e in events if e["type"] == "status" and e["data"].get("state") == "running"
+        ]
         assert len(running) >= 1
         assert running[0]["data"]["resolution"] == "1280x720"
 
@@ -522,7 +537,6 @@ class TestWatchCustomResolution:
 class TestWatchReconnect:
     def test_reconnect_on_stream_loss(self, client):
         """Watch auto-reconnects when RTSP stream drops."""
-        import trio_core.api.server as server_mod
 
         frame_w, frame_h = 672, 448
         frame_bytes = frame_w * frame_h * 3
@@ -555,26 +569,32 @@ class TestWatchReconnect:
                 return mock_proc1
             return mock_proc2
 
-        with patch("trio_core._rtsp_proxy.ensure_rtsp_url", return_value="rtsp://test"), \
-             patch("trio_core.api.server._start_ffmpeg", side_effect=mock_start_ffmpeg), \
-             patch("trio_core.api.server._WATCH_RECONNECT_DELAY", 0):  # no sleep in test
-
-            resp = client.post("/v1/watch", json={
-                "source": "rtsp://test",
-                "conditions": [{"id": "person", "question": "Is there a person?"}],
-            })
+        with (
+            patch("trio_core._rtsp_proxy.ensure_rtsp_url", return_value="rtsp://test"),
+            patch("trio_core.api.server._start_ffmpeg", side_effect=mock_start_ffmpeg),
+            patch("trio_core.api.server._WATCH_RECONNECT_DELAY", 0),
+        ):  # no sleep in test
+            resp = client.post(
+                "/v1/watch",
+                json={
+                    "source": "rtsp://test",
+                    "conditions": [{"id": "person", "question": "Is there a person?"}],
+                },
+            )
 
         events = _parse_sse(resp.text)
 
         # Should see reconnecting status
-        reconnecting = [e for e in events if e["type"] == "status"
-                        and e["data"].get("state") == "reconnecting"]
+        reconnecting = [
+            e for e in events if e["type"] == "status" and e["data"].get("state") == "reconnecting"
+        ]
         assert len(reconnecting) >= 1
         assert reconnecting[0]["data"]["attempt"] == 1
 
         # Should see running again after reconnect
-        running_events = [e for e in events if e["type"] == "status"
-                         and e["data"].get("state") == "running"]
+        running_events = [
+            e for e in events if e["type"] == "status" and e["data"].get("state") == "running"
+        ]
         assert len(running_events) >= 2  # initial + after reconnect
 
         # Should have processed frames from both connections
@@ -582,7 +602,6 @@ class TestWatchReconnect:
 
     def test_reconnect_exhausted(self, client):
         """Watch emits error after max reconnect attempts."""
-        frame_w, frame_h = 672, 448
 
         # All procs immediately EOF
         def mock_start_ffmpeg(url, fps, fw, fh):
@@ -595,15 +614,19 @@ class TestWatchReconnect:
             mock_proc.wait = MagicMock()
             return mock_proc
 
-        with patch("trio_core._rtsp_proxy.ensure_rtsp_url", return_value="rtsp://test"), \
-             patch("trio_core.api.server._start_ffmpeg", side_effect=mock_start_ffmpeg), \
-             patch("trio_core.api.server._WATCH_RECONNECT_DELAY", 0), \
-             patch("trio_core.api.server._WATCH_MAX_RECONNECTS", 2):
-
-            resp = client.post("/v1/watch", json={
-                "source": "rtsp://test",
-                "conditions": [{"id": "p", "question": "?"}],
-            })
+        with (
+            patch("trio_core._rtsp_proxy.ensure_rtsp_url", return_value="rtsp://test"),
+            patch("trio_core.api.server._start_ffmpeg", side_effect=mock_start_ffmpeg),
+            patch("trio_core.api.server._WATCH_RECONNECT_DELAY", 0),
+            patch("trio_core.api.server._WATCH_MAX_RECONNECTS", 2),
+        ):
+            resp = client.post(
+                "/v1/watch",
+                json={
+                    "source": "rtsp://test",
+                    "conditions": [{"id": "p", "question": "?"}],
+                },
+            )
 
         events = _parse_sse(resp.text)
 
@@ -652,6 +675,7 @@ class TestKillFfmpeg:
     def test_kills_on_timeout(self):
         """_kill_ffmpeg escalates to kill if terminate times out."""
         import subprocess
+
         from trio_core.api.server import _kill_ffmpeg
 
         mock_proc = MagicMock()
@@ -676,8 +700,10 @@ class TestAnalyzeFrameThinkTags:
         """POST /analyze-frame strips <think> tags from answer."""
         import base64
         import io
-        import trio_core.api.server as server_mod
+
         from PIL import Image
+
+        import trio_core.api.server as server_mod
 
         server_mod._engine.analyze_video.return_value = VideoResult(
             text="<think>Let me check if there's a person</think> Yes, there is a person.",
@@ -689,10 +715,13 @@ class TestAnalyzeFrameThinkTags:
         img.save(buf, format="JPEG")
         frame_b64 = base64.b64encode(buf.getvalue()).decode()
 
-        resp = client.post("/analyze-frame", json={
-            "frame_b64": frame_b64,
-            "question": "Is there a person?",
-        })
+        resp = client.post(
+            "/analyze-frame",
+            json={
+                "frame_b64": frame_b64,
+                "question": "Is there a person?",
+            },
+        )
         data = resp.json()
         assert "<think>" not in data["answer"]
         assert data["answer"] == "Yes, there is a person."
@@ -702,8 +731,10 @@ class TestAnalyzeFrameThinkTags:
         """POST /analyze-frame: think tags stripped, negative answer detected."""
         import base64
         import io
-        import trio_core.api.server as server_mod
+
         from PIL import Image
+
+        import trio_core.api.server as server_mod
 
         server_mod._engine.analyze_video.return_value = VideoResult(
             text="<think>Checking the scene...</think> No, the area is empty.",
@@ -715,10 +746,13 @@ class TestAnalyzeFrameThinkTags:
         img.save(buf, format="JPEG")
         frame_b64 = base64.b64encode(buf.getvalue()).decode()
 
-        resp = client.post("/analyze-frame", json={
-            "frame_b64": frame_b64,
-            "question": "Is there a person?",
-        })
+        resp = client.post(
+            "/analyze-frame",
+            json={
+                "frame_b64": frame_b64,
+                "question": "Is there a person?",
+            },
+        )
         data = resp.json()
         assert data["answer"] == "No, the area is empty."
         assert data["triggered"] is False

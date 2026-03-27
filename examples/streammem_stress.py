@@ -93,8 +93,10 @@ class VideoFrameSource:
         duration_s = self.total_src_frames / self.src_fps
         avail = self.total_src_frames // self.step
         print(f"  Video: {path}")
-        print(f"  Duration: {duration_s:.0f}s, src_fps={self.src_fps:.1f}, "
-              f"step={self.step} → ~{avail} frames available (cap={max_frames})")
+        print(
+            f"  Duration: {duration_s:.0f}s, src_fps={self.src_fps:.1f}, "
+            f"step={self.step} → ~{avail} frames available (cap={max_frames})"
+        )
 
     def __iter__(self):
         import cv2
@@ -186,7 +188,7 @@ def run_stress(
         else:
             frame = make_synthetic_frame(i)
         t0 = time.monotonic()
-        out = engine.analyze_video(frame, question, max_tokens=max_tokens)
+        engine.analyze_video(frame, question, max_tokens=max_tokens)
         latency = (time.monotonic() - t0) * 1000
 
         active_mb, peak_mb = get_metal_memory()
@@ -237,9 +239,11 @@ def run_stress(
     mem_growth = last.metal_active_mb - first.metal_active_mb
     kv_growth = last.kv_offset - first.kv_offset
 
-    print(f"\n  Summary:")
-    print(f"    Memory: {first.metal_active_mb:.0f}MB → {last.metal_active_mb:.0f}MB "
-          f"(+{mem_growth:.0f}MB)")
+    print("\n  Summary:")
+    print(
+        f"    Memory: {first.metal_active_mb:.0f}MB → {last.metal_active_mb:.0f}MB "
+        f"(+{mem_growth:.0f}MB)"
+    )
     print(f"    KV offset: {first.kv_offset} → {last.kv_offset} (+{kv_growth})")
     print(f"    Peak metal: {last.metal_peak_mb:.0f}MB")
     print(f"    Latency: {first.latency_ms:.0f}ms → {last.latency_ms:.0f}ms")
@@ -311,22 +315,22 @@ def main():
     parser = argparse.ArgumentParser(
         description="StreamMem stress test — does KV cache memory grow unbounded?"
     )
-    parser.add_argument(
-        "--model", "-m", default="mlx-community/Qwen2.5-VL-3B-Instruct-4bit"
-    )
+    parser.add_argument("--model", "-m", default="mlx-community/Qwen2.5-VL-3B-Instruct-4bit")
     parser.add_argument("--frames", "-n", type=int, default=200)
-    parser.add_argument("--video", type=str, default=None,
-                        help="Path to video file (movie, TV show) for real frames")
-    parser.add_argument("--fps", type=float, default=1.0,
-                        help="Target FPS when sampling from video (default: 1)")
-    parser.add_argument("--streaming-memory", action="store_true",
-                        help="Enable StreamMem")
+    parser.add_argument(
+        "--video",
+        type=str,
+        default=None,
+        help="Path to video file (movie, TV show) for real frames",
+    )
+    parser.add_argument(
+        "--fps", type=float, default=1.0, help="Target FPS when sampling from video (default: 1)"
+    )
+    parser.add_argument("--streaming-memory", action="store_true", help="Enable StreamMem")
     parser.add_argument("--budget", type=int, default=2000)
-    parser.add_argument("--compare", action="store_true",
-                        help="Run baseline + multiple budgets")
+    parser.add_argument("--compare", action="store_true", help="Run baseline + multiple budgets")
     parser.add_argument("--budgets", nargs="+", type=int, default=[2000, 4000, 6000])
-    parser.add_argument("--pope", action="store_true",
-                        help="Also run POPE accuracy after warmup")
+    parser.add_argument("--pope", action="store_true", help="Also run POPE accuracy after warmup")
     parser.add_argument("--pope-samples", type=int, default=20)
     parser.add_argument("--log-every", type=int, default=10)
     parser.add_argument("--output", "-o", default=None)
@@ -336,9 +340,14 @@ def main():
 
     if args.compare:
         # Baseline
-        r = run_stress(args.model, args.frames, streaming_memory=False,
-                       log_every=args.log_every,
-                       video_path=args.video, video_fps=args.fps)
+        r = run_stress(
+            args.model,
+            args.frames,
+            streaming_memory=False,
+            log_every=args.log_every,
+            video_path=args.video,
+            video_fps=args.fps,
+        )
         if args.pope:
             r.pope_accuracy = run_pope_after_streaming(
                 args.model, args.frames, False, None, args.pope_samples
@@ -348,9 +357,15 @@ def main():
 
         # StreamMem with various budgets
         for b in args.budgets:
-            r = run_stress(args.model, args.frames, streaming_memory=True,
-                           budget=b, log_every=args.log_every,
-                           video_path=args.video, video_fps=args.fps)
+            r = run_stress(
+                args.model,
+                args.frames,
+                streaming_memory=True,
+                budget=b,
+                log_every=args.log_every,
+                video_path=args.video,
+                video_fps=args.fps,
+            )
             if args.pope:
                 r.pope_accuracy = run_pope_after_streaming(
                     args.model, args.frames, True, b, args.pope_samples
@@ -359,15 +374,18 @@ def main():
             results.append(r)
     else:
         r = run_stress(
-            args.model, args.frames,
+            args.model,
+            args.frames,
             streaming_memory=args.streaming_memory,
             budget=args.budget if args.streaming_memory else None,
             log_every=args.log_every,
-            video_path=args.video, video_fps=args.fps,
+            video_path=args.video,
+            video_fps=args.fps,
         )
         if args.pope:
             r.pope_accuracy = run_pope_after_streaming(
-                args.model, args.frames,
+                args.model,
+                args.frames,
                 args.streaming_memory,
                 args.budget if args.streaming_memory else None,
                 args.pope_samples,
@@ -379,9 +397,10 @@ def main():
     print(f"\n{'=' * 70}")
     print("  COMPARISON")
     print(f"{'=' * 70}")
-    print(f"{'Config':<22} {'Mem Start':>10} {'Mem End':>10} {'Growth':>8} "
-          f"{'KV Start':>9} {'KV End':>9} {'Evict':>6}"
-          + ("  POPE" if args.pope else ""))
+    print(
+        f"{'Config':<22} {'Mem Start':>10} {'Mem End':>10} {'Growth':>8} "
+        f"{'KV Start':>9} {'KV End':>9} {'Evict':>6}" + ("  POPE" if args.pope else "")
+    )
     print("-" * (78 + (8 if args.pope else 0)))
 
     for r in results:
@@ -396,9 +415,7 @@ def main():
         )
 
     # Save
-    out_path = args.output or (
-        f"research/eval-results/streammem_stress_{args.frames}f.json"
-    )
+    out_path = args.output or (f"research/eval-results/streammem_stress_{args.frames}f.json")
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
 
     # Serialize
