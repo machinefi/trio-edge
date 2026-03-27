@@ -48,7 +48,7 @@ claw = ["websockets>=13.0", "cryptography>=41.0"]
 console = ["google-genai>=1.0"]
 report = ["weasyprint>=60.0"]
 all = ["trio-core[mlx,transformers,webcam,claw,console]"]
-dev = ["pytest", "pytest-asyncio", "httpx"]
+dev = ["pytest", "pytest-asyncio", "pytest-timeout", "pytest-cov", "httpx"]
 
 [project.scripts]
 trio-core = "trio_core.cli:app"
@@ -64,7 +64,15 @@ target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
-ignore = ["E501"]
+ignore = ["E501", "E402", "E702"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+timeout = 30
+
+[tool.coverage.run]
+source = ["trio_core"]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
