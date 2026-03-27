@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Overnight monitoring — loop local videos + RTSP, YOLO-only, store metrics.
+"""Overnight monitoring — loop local videos + RTSP, YOLO-only, log metrics.
 
 Designed to run 8+ hours unattended on Mac Mini.
 No VLM (saves ~5GB RAM). YOLO counting only.
 Loops video files when they end.
 
 Usage:
-    python scripts/overnight_monitor.py
+    python scripts/overnight_monitor.py /path/to/video.mp4
+    python scripts/overnight_monitor.py rtsp://camera:554/stream
 """
 
 from __future__ import annotations
@@ -23,35 +24,27 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from trio_core.api.store import EventStore
-
 from trio_core.counter import PeopleCounter
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
 logger = logging.getLogger("overnight")
 
-# Camera sources loaded dynamically from DB
-CAMERAS = []  # Populated at startup from database
-
-METRIC_INTERVAL = 300  # Store metrics every 5 minutes
-FRAME_INTERVAL = 10.0  # Process frame every 10 seconds (video loops, no need for high freq)
+METRIC_INTERVAL = 300  # Log metrics every 5 minutes
+FRAME_INTERVAL = 10.0  # Process frame every 10 seconds
 LOOP_VIDEOS = True  # Restart video files when they end
 
 
-async def monitor_camera(
-    cam: dict, store: EventStore, counter: PeopleCounter, stop_event: asyncio.Event
-):
-    """Monitor a single camera source."""
-    cam_id = cam["id"]
-    cam_name = cam["name"]
-    source = cam["source"]
+async def monitor_source(source: str, counter: PeopleCounter, stop_event: asyncio.Event):
+    """Monitor a single video source."""
+    is_file = not source.startswith("rtsp")
+    name = Path(source).stem if is_file else source
 
-    logger.info(f"[{cam_name}] Starting — {cam['type']}")
+    logger.info(f"[{name}] Starting — {'file' if is_file else 'rtsp'}")
 
     while not stop_event.is_set():
         cap = cv2.VideoCapture(source)
         if not cap.isOpened():
-            logger.warning(f"[{cam_name}] Cannot open {source}. Retrying in 30s...")
+            logger.warning(f"[{name}] Cannot open {source}. Retrying in 30s...")
             await asyncio.sleep(30)
             continue
 
@@ -63,19 +56,19 @@ async def monitor_camera(
         while not stop_event.is_set():
             ret, frame = cap.read()
             if not ret:
-                if cam["type"] == "file" and LOOP_VIDEOS:
+                if is_file and LOOP_VIDEOS:
                     logger.info(
-                        f"[{cam_name}] Video ended. Looping. Total unique tracks: {len(counter._seen_ids)}"
+                        f"[{name}] Video ended. Looping. "
+                        f"Total unique tracks: {len(counter._seen_ids)}"
                     )
                     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                     prev_gray = None
-                    # Reset tracker on loop — new "day" of observations
                     counter._seen_ids.clear()
                     counter._tracker = None
                     counter._initialized = False
                     continue
                 else:
-                    logger.warning(f"[{cam_name}] Stream ended.")
+                    logger.warning(f"[{name}] Stream ended.")
                     break
 
             frame_count += 1
@@ -93,122 +86,53 @@ async def monitor_camera(
                     continue
             prev_gray = gray
 
-            # Keep tracker alive across frames for real person-counting
-            # Only reset on video loop (handled above when cap resets to frame 0)
             result = counter.process(frame)
 
-            # Store metrics only on motion + interval
+            # Log metrics on interval
             if now - last_metric_time > METRIC_INTERVAL:
-                ts = datetime.now(timezone.utc).isoformat()
-                metrics = [
-                    {
-                        "camera_id": cam_id,
-                        "metric_type": "count_person",
-                        "value": int(result.by_class.get("person", 0)),
-                        "timestamp": ts,
-                    },
-                    {
-                        "camera_id": cam_id,
-                        "metric_type": "people_in",
-                        "value": int(result.total_in),
-                        "timestamp": ts,
-                    },
-                    {
-                        "camera_id": cam_id,
-                        "metric_type": "people_out",
-                        "value": int(result.total_out),
-                        "timestamp": ts,
-                    },
-                    {
-                        "camera_id": cam_id,
-                        "metric_type": "unique_tracks",
-                        "value": int(len(counter._seen_ids)),
-                        "timestamp": ts,
-                    },
-                ]
-                for cls_name, count in result.by_class.items():
-                    if cls_name != "person":
-                        metrics.append(
-                            {
-                                "camera_id": cam_id,
-                                "metric_type": f"count_{cls_name}",
-                                "value": int(count),
-                                "timestamp": ts,
-                            }
-                        )
-
-                for m in metrics:
-                    await store.insert_metric(m)
-
-                last_metric_time = now
-
-                # Log progress
+                ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
                 by_class = (
                     {k: int(v) for k, v in result.by_class.items()} if result.by_class else {}
                 )
-                logger.info(f"[{cam_name}] frame={frame_count} | {by_class}")
-
-                # Save camera thumbnail periodically
-                _, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
-                await store.save_camera_snapshot(cam_id, jpeg.tobytes())
+                logger.info(
+                    f"[{name}] {ts} frame={frame_count} | "
+                    f"in={result.total_in} out={result.total_out} "
+                    f"tracks={len(counter._seen_ids)} | {by_class}"
+                )
+                last_metric_time = now
 
             await asyncio.sleep(FRAME_INTERVAL)
 
         cap.release()
 
-        if cam["type"] != "file":
-            logger.warning(f"[{cam_name}] Disconnected. Reconnecting in 30s...")
+        if not is_file:
+            logger.warning(f"[{name}] Disconnected. Reconnecting in 30s...")
             await asyncio.sleep(30)
 
 
 async def main():
-    store = EventStore()
-    await store.init()
+    if len(sys.argv) < 2:
+        print("Usage: python scripts/overnight_monitor.py <source> [source2] ...")
+        print("  source: path to video file or rtsp:// URL")
+        sys.exit(1)
 
-    # Load cameras from DB dynamically
-    cams = await store.list_cameras()
-    active_cams = []
-    for c in cams:
-        src = c.get("source_url", "")
-        # Skip YouTube URLs (expire) — only local files + RTSP
-        if "youtube.com" in src or "youtu.be" in src:
-            logger.info(f"Skipping YouTube camera: {c['name']}")
-            continue
-        cam_type = "rtsp" if src.startswith("rtsp") else "file"
-        active_cams.append(
-            {
-                "id": c["id"],
-                "name": c["name"],
-                "source": src,
-                "type": cam_type,
-            }
-        )
-    logger.info(f"Monitoring {len(active_cams)} cameras overnight")
+    sources = sys.argv[1:]
+    logger.info(f"Monitoring {len(sources)} source(s) overnight")
 
     counter = PeopleCounter(model_path="models/yolov10n/onnx/model.onnx")
     stop = asyncio.Event()
 
-    # Run all cameras concurrently
-    tasks = [asyncio.create_task(monitor_camera(c, store, counter, stop)) for c in active_cams]
+    tasks = [asyncio.create_task(monitor_source(s, counter, stop)) for s in sources]
 
     try:
-        # Run for 8 hours
-        await asyncio.sleep(8 * 3600)
+        await asyncio.sleep(8 * 3600)  # Run for 8 hours
     except (KeyboardInterrupt, asyncio.CancelledError):
         pass
     finally:
         stop.set()
         for t in tasks:
             t.cancel()
-
-        # Final stats
-        import sqlite3
-
-        conn = sqlite3.connect("data/trio_console.db")
-        events = conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
-        metrics = conn.execute("SELECT COUNT(*) FROM metrics").fetchone()[0]
-        conn.close()
-        logger.info(f"OVERNIGHT COMPLETE — Events: {events}, Metrics: {metrics}")
+        logger.info("OVERNIGHT COMPLETE")
 
 
 if __name__ == "__main__":

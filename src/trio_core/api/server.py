@@ -116,16 +116,6 @@ async def lifespan(app: FastAPI):
         "Engine ready: backend=%s", _engine._backend.backend_name if _engine._backend else "none"
     )
 
-    # Console event store (optional — module removed in OSS cleanup)
-    try:
-        from .store import EventStore
-
-        store = EventStore()
-        await store.init()
-        app.state.event_store = store
-    except ImportError:
-        pass
-
     # SIGHUP → reload model (same as POST /v1/admin/reload)
     import signal
 
@@ -154,9 +144,6 @@ async def lifespan(app: FastAPI):
         await asyncio.sleep(0.1)
     if _active_requests > 0:
         logger.warning("Shutdown with %d request(s) still active", _active_requests)
-    # Close event store
-    if hasattr(app.state, "event_store"):
-        await app.state.event_store.close()
     logger.info("Shutdown complete")
 
 

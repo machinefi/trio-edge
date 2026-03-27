@@ -3,12 +3,11 @@
 
 Simulates a full day of monitoring by sampling frames every ~10 minutes
 across the video. For each frame: YOLO detect + VLM crop-describe.
-Stores high-quality events + metrics into the Event Store.
+Results are logged to stdout (EventStore removed in OSS cleanup).
 """
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import subprocess
 import sys
@@ -19,8 +18,6 @@ import cv2
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
-from trio_core.api.store import EventStore
 
 from trio_core.counter import PeopleCounter
 
@@ -37,7 +34,7 @@ TOTAL_DURATION_SEC = 36000  # 10 hours
 STORE_OPEN_HOUR = 6  # Simulate store opens at 6 AM
 
 
-async def main():
+def main():
     import yt_dlp
 
     # Resolve stream URL
@@ -49,8 +46,6 @@ async def main():
     logger.info("Stream resolved")
 
     # Init
-    store = EventStore()
-    await store.init()
     counter = PeopleCounter(model_path="models/yolov10n/onnx/model.onnx")
 
     # Load VLM
@@ -65,12 +60,13 @@ async def main():
     samples = list(range(0, TOTAL_DURATION_SEC, SAMPLE_INTERVAL_SEC))
     logger.info(f"Scanning {len(samples)} timestamps across {TOTAL_DURATION_SEC / 3600:.0f} hours")
 
+    total_events = 0
+
     for i, offset_sec in enumerate(samples):
         # Simulate timestamp: today at store_open + offset
         sim_time = datetime.now(timezone.utc).replace(
             hour=STORE_OPEN_HOUR, minute=0, second=0, microsecond=0
         ) + timedelta(seconds=offset_sec)
-        sim_ts = sim_time.isoformat()
         sim_hour = sim_time.strftime("%H:%M")
 
         # Capture frame at this offset
@@ -110,38 +106,12 @@ async def main():
         counter._initialized = False
         result = counter.process(frame)
 
-        # Store metrics
-        metrics = [
-            {
-                "camera_id": CAMERA_ID,
-                "metric_type": "people_in",
-                "value": int(result.detections),
-                "timestamp": sim_ts,
-            },
-            {
-                "camera_id": CAMERA_ID,
-                "metric_type": "count_person",
-                "value": int(result.by_class.get("person", 0)),
-                "timestamp": sim_ts,
-            },
-        ]
-        for cls_name, count in result.by_class.items():
-            metrics.append(
-                {
-                    "camera_id": CAMERA_ID,
-                    "metric_type": f"count_{cls_name}",
-                    "value": int(count),
-                    "timestamp": sim_ts,
-                }
-            )
-        for m in metrics:
-            await store.insert_metric(m)
-
         # VLM describe each person crop (max 3 per frame)
         person_crops = [
             c for c in result.new_crops if c.class_name == "person" and c.crop is not None
         ]
 
+        descriptions = []
         for crop_info in person_crops[:3]:
             crop = crop_info.crop
             ch, cw = crop.shape[:2]
@@ -170,29 +140,11 @@ async def main():
                 logger.error(f"VLM error: {e}")
                 desc = ""
 
-            if not desc:
-                continue
+            if desc:
+                descriptions.append(desc)
+                total_events += 1
 
-            event_id = await store.insert(
-                {
-                    "camera_id": CAMERA_ID,
-                    "camera_name": CAMERA_NAME,
-                    "description": desc,
-                    "timestamp": sim_ts,
-                    "metadata": {
-                        "track_id": int(crop_info.track_id),
-                        "confidence": round(float(crop_info.confidence), 3),
-                        "by_class": {k: int(v) for k, v in result.by_class.items()},
-                        "simulated_time": sim_hour,
-                    },
-                }
-            )
-
-            # Save full frame (not crop) for evidence
-            _, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
-            await store.save_frame(event_id, CAMERA_ID, jpeg.tobytes())
-
-        # Also do a scene-level description every 30 minutes
+        # Scene-level description every 30 minutes
         if offset_sec % 1800 == 0:
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
             try:
@@ -200,55 +152,31 @@ async def main():
                     rgb,
                     "You are a retail analyst observing a Starbucks for an investment fund. "
                     "Rate and describe precisely: "
-                    "1) OCCUPANCY: exact number of customers visible + busyness score 1-10 (1=empty, 5=moderate, 10=packed), "
-                    "2) QUEUE: how many in line waiting to order (0 if none), "
+                    "1) OCCUPANCY: exact number of customers visible + busyness score 1-10, "
+                    "2) QUEUE: how many in line waiting to order, "
                     "3) SEATED: how many seated vs standing, "
-                    "4) ORDERS: visible cup sizes (tall/grande/venti) and any food items, "
+                    "4) ORDERS: visible cup sizes and any food items, "
                     "5) STAFF: how many employees visible and what they're doing, "
-                    "6) REVENUE SIGNAL: estimate average ticket from what you see (low $3-5, medium $5-8, high $8+). "
-                    "Be precise with numbers. This data drives investment decisions.",
+                    "6) REVENUE SIGNAL: estimate average ticket. "
+                    "Be precise with numbers.",
                 )
                 scene_desc = scene.text.strip() if scene and scene.text else ""
             except Exception:
                 scene_desc = ""
 
             if scene_desc:
-                event_id = await store.insert(
-                    {
-                        "camera_id": CAMERA_ID,
-                        "camera_name": CAMERA_NAME,
-                        "description": f"[SCENE {sim_hour}] {scene_desc}",
-                        "timestamp": sim_ts,
-                        "metadata": {
-                            "type": "scene_analysis",
-                            "simulated_time": sim_hour,
-                            "by_class": {k: int(v) for k, v in result.by_class.items()},
-                        },
-                    }
-                )
-                _, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
-                await store.save_frame(event_id, CAMERA_ID, jpeg.tobytes())
+                logger.info(f"[SCENE {sim_hour}] {scene_desc}")
 
         people = result.by_class.get("person", 0)
         logger.info(
-            f"[{i + 1}/{len(samples)}] {sim_hour} — {people} people | {len(person_crops)} described | offset={offset_sec}s"
+            f"[{i + 1}/{len(samples)}] {sim_hour} — {people} people | "
+            f"{len(descriptions)} described | offset={offset_sec}s"
         )
+        for desc in descriptions:
+            logger.info(f"  → {desc}")
 
-    # Final summary
-    result = await store.list_events(limit=1)
-    metrics_count = 0
-    try:
-        import sqlite3
-
-        conn = sqlite3.connect("data/trio_console.db")
-        metrics_count = conn.execute("SELECT COUNT(*) FROM metrics").fetchone()[0]
-        conn.close()
-    except Exception:
-        pass
-
-    logger.info(f"DONE — {result['total']} events, {metrics_count} metrics")
-    await store.close()
+    logger.info(f"DONE — {total_events} events across {len(samples)} samples")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

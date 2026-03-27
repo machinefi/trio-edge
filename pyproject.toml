@@ -8,18 +8,16 @@ version = "0.9.0"
 description = "Local VLM inference engine for video — Apple Silicon, NVIDIA, and CPU"
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.10"
-# Note: mlx/torch require Python <3.14; use Python 3.12 or 3.13 for full features
+requires-python = ">=3.12"
 authors = [{name = "Trio Team"}]
 keywords = ["vlm", "video", "inference", "vision-language-model", "apple-silicon", "trioclaw", "openclaw"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
@@ -60,7 +58,7 @@ exclude = ["src/trio_core/eval.py", "src/trio_core/eval_benchmarks.py"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
