@@ -1,6 +1,6 @@
 """TrioCore — Portable video inference engine for VLMs."""
 
-__version__ = "0.8.3"
+__version__ = "0.9.0"
 
 from trio_core.backends import BaseBackend, MLXBackend, TransformersBackend, auto_backend
 from trio_core.callbacks import CallbackMixin

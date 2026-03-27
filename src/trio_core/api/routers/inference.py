@@ -22,6 +22,10 @@ logger = logging.getLogger("trio.inference")
 
 router = APIRouter(prefix="/api/inference", tags=["inference"])
 
+# Semaphore to serialize VLM requests — prevents thread exhaustion under concurrent load
+import asyncio as _asyncio
+_vlm_semaphore = _asyncio.Semaphore(1)
+
 import re as _re
 _THINK_RE = _re.compile(r'<think>.*?</think>', _re.DOTALL)
 
@@ -142,14 +146,19 @@ async def describe(req: DescribeRequest):
     """Run VLM on a single image. Returns natural language description."""
     import asyncio
 
-    frame = _decode_image(req.image_b64)
-    frame_chw = _frame_to_chw(frame)
-    engine = _get_vlm()
+    async with _vlm_semaphore:
+        frame = _decode_image(req.image_b64)
+        frame_chw = _frame_to_chw(frame)
+        engine = _get_vlm()
 
-    t0 = time.time()
-    loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(None, engine.analyze_frame, frame_chw, req.prompt)
-    elapsed = int((time.time() - t0) * 1000)
+        t0 = time.time()
+        loop = asyncio.get_event_loop()
+        try:
+            result = await loop.run_in_executor(None, engine.analyze_frame, frame_chw, req.prompt)
+        except Exception as e:
+            logger.error("VLM describe failed: %s", e)
+            raise HTTPException(status_code=503, detail=f"VLM inference error: {e}")
+        elapsed = int((time.time() - t0) * 1000)
 
     return DescribeResponse(
         description=_strip_thinking(result.text or ""),
@@ -164,6 +173,14 @@ async def crop_describe(req: CropDescribeRequest):
     YOLO detects objects and crops them, then VLM describes each
     entity individually before generating a full scene description.
     """
+    import asyncio
+    import json
+
+    async with _vlm_semaphore:
+        return await _crop_describe_inner(req)
+
+
+async def _crop_describe_inner(req: CropDescribeRequest):
     import asyncio
     import json
 
