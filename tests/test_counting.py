@@ -1,5 +1,6 @@
 """Test counting logic — debounce + cumulative tracking."""
 import pytest
+cv2 = pytest.importorskip("cv2")
 from trio_core._webcam_gui import _parse_counts
 
 
