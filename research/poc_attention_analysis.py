@@ -8,11 +8,10 @@ Method: After prefill, manually compute Q·K^T attention scores at each
 layer using the cached KV states and the hidden states.
 """
 
-import numpy as np
 import mlx.core as mx
-from PIL import Image
-
+import numpy as np
 from mlx_vlm import load
+from PIL import Image
 
 
 def main():
@@ -33,15 +32,21 @@ def main():
 
     prompt = "Describe what you see in this image in detail."
 
-    messages = [{"role": "user", "content": [
-        {"type": "image", "image": img},
-        {"type": "text", "text": prompt},
-    ]}]
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "image", "image": img},
+                {"type": "text", "text": prompt},
+            ],
+        }
+    ]
 
     formatted = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 
     # Use process_vision_info for this PoC (still installed)
     from mlx_vlm.video_generate import process_vision_info
+
     image_inputs, _, _ = process_vision_info(messages, return_video_kwargs=True)
 
     inputs = processor(text=[formatted], images=image_inputs, padding=True, return_tensors="pt")
@@ -58,10 +63,13 @@ def main():
     # Get embeddings
     embedding_output = model.get_input_embeddings(input_ids, pixel_values, mask=mask_arr, **kwargs)
     inputs_embeds = embedding_output.inputs_embeds
-    kwargs.update({
-        k: v for k, v in embedding_output.to_dict().items()
-        if k != "inputs_embeds" and v is not None
-    })
+    kwargs.update(
+        {
+            k: v
+            for k, v in embedding_output.to_dict().items()
+            if k != "inputs_embeds" and v is not None
+        }
+    )
 
     # Identify visual vs text positions
     ids_np = np.array(input_ids[0])
@@ -101,6 +109,7 @@ def main():
 
     # Create attention mask
     from mlx_vlm.models.base import create_attention_mask
+
     from trio_core.generate import make_prompt_cache
 
     prompt_cache = make_prompt_cache(lm)
@@ -117,18 +126,26 @@ def main():
 
         if i in target_layers:
             # Compute Q, K manually
-            residual = h
             h_norm = layer.input_layernorm(h)
 
             B, L, D = h_norm.shape
-            queries = attn.q_proj(h_norm).reshape(B, L, attn.n_heads, attn.head_dim).transpose(0, 2, 1, 3)
-            keys = attn.k_proj(h_norm).reshape(B, L, attn.n_kv_heads, attn.head_dim).transpose(0, 2, 1, 3)
+            queries = (
+                attn.q_proj(h_norm).reshape(B, L, attn.n_heads, attn.head_dim).transpose(0, 2, 1, 3)
+            )
+            keys = (
+                attn.k_proj(h_norm)
+                .reshape(B, L, attn.n_kv_heads, attn.head_dim)
+                .transpose(0, 2, 1, 3)
+            )
 
             # Apply RoPE
             from mlx_vlm.models.qwen2_5_vl.language import apply_multimodal_rotary_pos_emb
+
             values_dummy = keys  # just for shape
             cos, sin = attn.rotary_emb(values_dummy, position_ids)
-            queries_rot, keys_rot = apply_multimodal_rotary_pos_emb(queries, keys, cos, sin, unqueeze_dim=1)
+            queries_rot, keys_rot = apply_multimodal_rotary_pos_emb(
+                queries, keys, cos, sin, unqueeze_dim=1
+            )
 
             # GQA: repeat K to match Q heads
             n_heads = queries_rot.shape[1]
@@ -160,11 +177,18 @@ def main():
     print("=" * 60)
 
     prompt2 = "Is there any text in this image?"
-    messages2 = [{"role": "user", "content": [
-        {"type": "image", "image": img},
-        {"type": "text", "text": prompt2},
-    ]}]
-    formatted2 = processor.apply_chat_template(messages2, tokenize=False, add_generation_prompt=True)
+    messages2 = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "image", "image": img},
+                {"type": "text", "text": prompt2},
+            ],
+        }
+    ]
+    formatted2 = processor.apply_chat_template(
+        messages2, tokenize=False, add_generation_prompt=True
+    )
     image_inputs2, _, _ = process_vision_info(messages2, return_video_kwargs=True)
     inputs2 = processor(text=[formatted2], images=image_inputs2, padding=True, return_tensors="pt")
     inputs2 = {k: v.numpy() if hasattr(v, "numpy") else v for k, v in inputs2.items()}
@@ -177,12 +201,17 @@ def main():
     if "image_grid_thw" in inputs2:
         kwargs2["image_grid_thw"] = mx.array(np.asarray(inputs2["image_grid_thw"]))
 
-    embedding_output2 = model.get_input_embeddings(input_ids2, pixel_values2, mask=mask_arr2, **kwargs2)
+    embedding_output2 = model.get_input_embeddings(
+        input_ids2, pixel_values2, mask=mask_arr2, **kwargs2
+    )
     inputs_embeds2 = embedding_output2.inputs_embeds
-    kwargs2.update({
-        k: v for k, v in embedding_output2.to_dict().items()
-        if k != "inputs_embeds" and v is not None
-    })
+    kwargs2.update(
+        {
+            k: v
+            for k, v in embedding_output2.to_dict().items()
+            if k != "inputs_embeds" and v is not None
+        }
+    )
 
     ids_np2 = np.array(input_ids2[0])
     visual_mask2 = (ids_np2 == image_token_id) | (ids_np2 == video_token_id)
@@ -205,14 +234,21 @@ def main():
         attn = layer.self_attn
 
         if i in [2]:  # Just check layer 2 for comparison
-            residual = h2
             h_norm = layer.input_layernorm(h2)
             B, L, D = h_norm.shape
-            queries = attn.q_proj(h_norm).reshape(B, L, attn.n_heads, attn.head_dim).transpose(0, 2, 1, 3)
-            keys = attn.k_proj(h_norm).reshape(B, L, attn.n_kv_heads, attn.head_dim).transpose(0, 2, 1, 3)
+            queries = (
+                attn.q_proj(h_norm).reshape(B, L, attn.n_heads, attn.head_dim).transpose(0, 2, 1, 3)
+            )
+            keys = (
+                attn.k_proj(h_norm)
+                .reshape(B, L, attn.n_kv_heads, attn.head_dim)
+                .transpose(0, 2, 1, 3)
+            )
             values_dummy = keys
             cos, sin = attn.rotary_emb(values_dummy, position_ids2)
-            queries_rot, keys_rot = apply_multimodal_rotary_pos_emb(queries, keys, cos, sin, unqueeze_dim=1)
+            queries_rot, keys_rot = apply_multimodal_rotary_pos_emb(
+                queries, keys, cos, sin, unqueeze_dim=1
+            )
             n_heads = queries_rot.shape[1]
             n_kv = keys_rot.shape[1]
             if n_kv < n_heads:
@@ -276,14 +312,16 @@ def analyze_distribution(w, vis_idx, txt_idx, layer_idx, n_visual):
     t2v_total = w[:, txt_idx][:, :, vis_idx].mean()
 
     print(f"  Layer {layer_idx}: {n_v} visual tokens")
-    print(f"    Text→Visual ratio:    {t2v_total/(t2v_total+t2t)*100:.1f}% of text attention goes to visual")
+    print(
+        f"    Text→Visual ratio:    {t2v_total / (t2v_total + t2t) * 100:.1f}% of text attention goes to visual"
+    )
     print(f"    Entropy (normalized): {entropy:.3f}  (1.0=uniform, 0.0=concentrated)")
     print(f"    Gini coefficient:     {gini:.3f}  (0.0=equal, 1.0=one token gets all)")
-    print(f"    Top 10% tokens hold:  {top10_pct*100:.1f}% of attention")
-    print(f"    Top 25% tokens hold:  {top25_pct*100:.1f}% of attention")
-    print(f"    Top 50% tokens hold:  {top50_pct*100:.1f}% of attention")
-    print(f"    Tokens for 80% attn:  {pct80}/{n_v} ({pct80/n_v*100:.0f}%)")
-    print(f"    Tokens for 90% attn:  {pct90}/{n_v} ({pct90/n_v*100:.0f}%)")
+    print(f"    Top 10% tokens hold:  {top10_pct * 100:.1f}% of attention")
+    print(f"    Top 25% tokens hold:  {top25_pct * 100:.1f}% of attention")
+    print(f"    Top 50% tokens hold:  {top50_pct * 100:.1f}% of attention")
+    print(f"    Tokens for 80% attn:  {pct80}/{n_v} ({pct80 / n_v * 100:.0f}%)")
+    print(f"    Tokens for 90% attn:  {pct90}/{n_v} ({pct90 / n_v * 100:.0f}%)")
     print()
 
 

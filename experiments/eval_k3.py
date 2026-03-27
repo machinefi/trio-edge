@@ -9,11 +9,12 @@ from __future__ import annotations
 import json
 import re
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # ── Synthetic eval data ──────────────────────────────────────────────────────
+
 
 def generate_eval_events(n: int = 200) -> list[dict]:
     """Generate realistic VLM-style event descriptions for 1 day."""
@@ -72,10 +73,10 @@ def generate_eval_events(n: int = 200) -> list[dict]:
 
     # Hour distribution: morning 6-9, midday 10-14, afternoon 15-18, evening 19-22
     hour_groups = {
-        range(6, 10): ("morning_rush", 8),     # 8 events/hr
-        range(10, 15): ("midday_peak", 15),    # 15 events/hr
+        range(6, 10): ("morning_rush", 8),  # 8 events/hr
+        range(10, 15): ("midday_peak", 15),  # 15 events/hr
         range(15, 19): ("afternoon_slow", 5),  # 5 events/hr
-        range(19, 23): ("evening_close", 3),   # 3 events/hr
+        range(19, 23): ("evening_close", 3),  # 3 events/hr
     }
 
     events = []
@@ -88,16 +89,18 @@ def generate_eval_events(n: int = 200) -> list[dict]:
                     break
                 ts = base + timedelta(hours=h, minutes=int(i * 60 / rate))
                 desc = descs[event_idx % len(descs)]
-                events.append({
-                    "id": f"evt_eval_{event_idx:04d}",
-                    "timestamp": ts.isoformat(),
-                    "camera_id": "cam_eval_01",
-                    "camera_name": "Eval Camera 1",
-                    "description": desc,
-                    "frame_path": None,
-                    "alert_triggered": False,
-                    "metadata": {},
-                })
+                events.append(
+                    {
+                        "id": f"evt_eval_{event_idx:04d}",
+                        "timestamp": ts.isoformat(),
+                        "camera_id": "cam_eval_01",
+                        "camera_name": "Eval Camera 1",
+                        "description": desc,
+                        "frame_path": None,
+                        "alert_triggered": False,
+                        "metadata": {},
+                    }
+                )
                 event_idx += 1
 
     return events[:n]
@@ -124,7 +127,9 @@ GENDER_PATTERNS = {
 AGE_PATTERNS = {
     "young": re.compile(r"\b(young|youth|teen|child|kid|20s|early 20|young adult)\b", re.I),
     "middle_aged": re.compile(r"\b(middle.?aged?|30s|40s|50s|mid-\d0s)\b", re.I),
-    "elderly": re.compile(r"\b(elderly|older|senior|aged|gray hair|grey hair|walking stick)\b", re.I),
+    "elderly": re.compile(
+        r"\b(elderly|older|senior|aged|gray hair|grey hair|walking stick)\b", re.I
+    ),
 }
 
 
@@ -181,15 +186,17 @@ def extract_baseline_insights(events: list[dict]) -> list[str]:
 
 # ── Insight scoring ──────────────────────────────────────────────────────────
 
+
 @dataclass
 class ScoredInsight:
     """An insight with quality scores."""
+
     text: str
     insight_type: str  # anomaly, trend, pattern, correlation, recommendation, comparison
     specificity: float = 0.0  # has concrete numbers/times?
-    evidence: float = 0.0     # grounded in observed data?
+    evidence: float = 0.0  # grounded in observed data?
     actionability: float = 0.0  # implies a decision?
-    novelty: float = 1.0      # not redundant?
+    novelty: float = 1.0  # not redundant?
 
     @property
     def score(self) -> float:
@@ -200,7 +207,9 @@ class ScoredInsight:
         return self.score >= 0.5
 
 
-def score_insight(text: str, insight_type: str = "pattern", all_insights: list[str] | None = None) -> ScoredInsight:
+def score_insight(
+    text: str, insight_type: str = "pattern", all_insights: list[str] | None = None
+) -> ScoredInsight:
     """Auto-score an insight string."""
     s = ScoredInsight(text=text, insight_type=insight_type)
 
@@ -213,14 +222,43 @@ def score_insight(text: str, insight_type: str = "pattern", all_insights: list[s
     s.specificity = min(1.0, specificity_signals * 0.4)
 
     # Evidence: references observed data (mentions "observed", "detected", counts)?
-    evidence_words = ["observ", "detect", "record", "event", "camera", "seen", "count", "total", "average", "median"]
+    evidence_words = [
+        "observ",
+        "detect",
+        "record",
+        "event",
+        "camera",
+        "seen",
+        "count",
+        "total",
+        "average",
+        "median",
+    ]
     evidence_count = sum(1 for w in evidence_words if w in text.lower())
     s.evidence = min(1.0, evidence_count * 0.3 + (0.3 if has_number else 0))
 
     # Actionability: implies something should happen
-    action_words = ["suggest", "recommend", "consider", "risk", "opportunity", "should", "indicates",
-                     "implies", "concern", "bullish", "bearish", "alert", "investigate", "optimize",
-                     "increase", "decrease", "staffing", "capacity", "target"]
+    action_words = [
+        "suggest",
+        "recommend",
+        "consider",
+        "risk",
+        "opportunity",
+        "should",
+        "indicates",
+        "implies",
+        "concern",
+        "bullish",
+        "bearish",
+        "alert",
+        "investigate",
+        "optimize",
+        "increase",
+        "decrease",
+        "staffing",
+        "capacity",
+        "target",
+    ]
     action_count = sum(1 for w in action_words if w in text.lower())
     s.actionability = min(1.0, action_count * 0.35)
 
@@ -241,6 +279,7 @@ def score_insight(text: str, insight_type: str = "pattern", all_insights: list[s
 
 
 # ── Run eval ─────────────────────────────────────────────────────────────────
+
 
 def run_eval(insight_fn, label: str = "baseline") -> dict:
     """Run K3 eval with a given insight extraction function."""
@@ -304,8 +343,10 @@ def print_result(result: dict) -> None:
     for i, ins in enumerate(result["insights"], 1):
         status = "PASS" if ins["passes"] else "FAIL"
         print(f"  {i}. [{status}] (score={ins['score']:.2f}) {ins['text'][:100]}")
-        print(f"     specificity={ins['specificity']:.2f} evidence={ins['evidence']:.2f} "
-              f"actionability={ins['actionability']:.2f} novelty={ins['novelty']:.2f}")
+        print(
+            f"     specificity={ins['specificity']:.2f} evidence={ins['evidence']:.2f} "
+            f"actionability={ins['actionability']:.2f} novelty={ins['novelty']:.2f}"
+        )
 
 
 def save_result(result: dict) -> None:
@@ -343,9 +384,13 @@ def main():
     print("\n" + "=" * 60)
     print("COMPARISON")
     print("=" * 60)
-    print(f"  Baseline:  K3={r1['k3_score']}/5 ({r1['total_insights_generated']} generated, {r1['insights_passing']} passing)")
-    print(f"  V1:        K3={r2['k3_score']}/5 ({r2['total_insights_generated']} generated, {r2['insights_passing']} passing)")
-    delta = r2['k3_score'] - r1['k3_score']
+    print(
+        f"  Baseline:  K3={r1['k3_score']}/5 ({r1['total_insights_generated']} generated, {r1['insights_passing']} passing)"
+    )
+    print(
+        f"  V1:        K3={r2['k3_score']}/5 ({r2['total_insights_generated']} generated, {r2['insights_passing']} passing)"
+    )
+    delta = r2["k3_score"] - r1["k3_score"]
     print(f"  Delta:     {'+' if delta > 0 else ''}{delta}")
 
     return r2

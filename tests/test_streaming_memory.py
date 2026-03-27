@@ -8,8 +8,7 @@ import pytest
 
 mx = pytest.importorskip("mlx.core")
 
-from trio_core.streaming_memory import EvictionStats, StreamingMemory
-
+from trio_core.streaming_memory import StreamingMemory
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -195,10 +194,9 @@ class TestEvictAndMerge:
         # Create simple cache: 4 visual tokens, no text
         cache = [FakeKVCacheEntry(1, 4, 4)]
         # Set known K values
-        cache[0].keys = mx.array([[[[1.0, 0, 0, 0],
-                                     [0, 1.0, 0, 0],
-                                     [0, 0, 1.0, 0],
-                                     [0, 0, 0, 1.0]]]])
+        cache[0].keys = mx.array(
+            [[[[1.0, 0, 0, 0], [0, 1.0, 0, 0], [0, 0, 1.0, 0], [0, 0, 0, 1.0]]]]
+        )
         cache[0].values = cache[0].keys * 1
 
         # All same saliency → uniform weights
@@ -322,9 +320,9 @@ class TestModelAgnosticVisualTokenCount:
         config.video_token_id = None
         config.video_token_index = None
         # Simulate the logic from generate_step
-        img_id = getattr(config, 'image_token_id', None)
+        img_id = getattr(config, "image_token_id", None)
         if img_id is None:
-            img_id = getattr(config, 'image_token_index', None)
+            img_id = getattr(config, "image_token_index", None)
         assert img_id == 151655
 
     def test_image_token_index(self):
@@ -334,7 +332,7 @@ class TestModelAgnosticVisualTokenCount:
         config.image_token_index = 151655
         config.video_token_id = None
         config.video_token_index = None
-        img_id = getattr(config, 'image_token_id', None)
+        img_id = getattr(config, "image_token_id", None)
         if img_id is None:
-            img_id = getattr(config, 'image_token_index', None)
+            img_id = getattr(config, "image_token_index", None)
         assert img_id == 151655

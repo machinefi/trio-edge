@@ -12,7 +12,7 @@ from typing import Generator
 
 import numpy as np
 
-from trio_core.backends import MLXBackend, GenerationResult, StreamChunk
+from trio_core.backends import GenerationResult, MLXBackend
 from trio_core.compressed_backend import CompressedMLXBackend
 from trio_core.native_vision import create_tome_vision
 
@@ -27,9 +27,13 @@ class ToMeMLXBackend(MLXBackend):
     """
 
     def __init__(
-        self, model_name: str, tome_r: int = 8,
-        metric: str = "keys", min_keep_ratio: float = 0.3,
-        adaptive: bool = False, content_aware: bool = False,
+        self,
+        model_name: str,
+        tome_r: int = 8,
+        metric: str = "keys",
+        min_keep_ratio: float = 0.3,
+        adaptive: bool = False,
+        content_aware: bool = False,
         **kwargs,
     ):
         super().__init__(model_name, **kwargs)
@@ -39,9 +43,7 @@ class ToMeMLXBackend(MLXBackend):
         if metric not in ("keys", "hidden"):
             raise ValueError(f"metric must be 'keys' or 'hidden', got {metric!r}")
         if not (0.0 < min_keep_ratio <= 1.0):
-            raise ValueError(
-                f"min_keep_ratio must be in (0.0, 1.0], got {min_keep_ratio}"
-            )
+            raise ValueError(f"min_keep_ratio must be in (0.0, 1.0], got {min_keep_ratio}")
 
         self.tome_r = tome_r
         self.tome_metric = metric
@@ -59,6 +61,7 @@ class ToMeMLXBackend(MLXBackend):
         super().load()
 
         from trio_core.model_adapter import get_adapter
+
         self._adapter = get_adapter(self._model)
 
         if not self._adapter.supports_tome:
@@ -111,7 +114,8 @@ class ToMeMLXBackend(MLXBackend):
 
         logger.info(
             "ToMe compression: %d → %d tokens (%.0f%% reduction, %d layers merged)",
-            original_count, compressed_count,
+            original_count,
+            compressed_count,
             (1 - compressed_count / max(original_count, 1)) * 100,
             len(self._native_vision._merge_log) if self._native_vision else 0,
         )
@@ -148,7 +152,9 @@ class ToMeMLXBackend(MLXBackend):
         # Compute position IDs for compressed sequence (MRoPE models only)
         if adapter.uses_mrope:
             compressed_grid = CompressedMLXBackend._compute_compressed_grid(
-                grid_thw, original_count, compressed_count,
+                grid_thw,
+                original_count,
+                compressed_count,
                 spatial_merge_size=adapter.spatial_merge_size,
             )
 
@@ -157,7 +163,8 @@ class ToMeMLXBackend(MLXBackend):
             if grid_count != compressed_count:
                 logger.debug(
                     "Grid alignment: compressed=%d, grid=%d, adjusting",
-                    compressed_count, grid_count,
+                    compressed_count,
+                    grid_count,
                 )
                 if grid_count > compressed_count:
                     pad = mx.repeat(hidden_states[-1:], grid_count - compressed_count, axis=0)
@@ -180,7 +187,9 @@ class ToMeMLXBackend(MLXBackend):
                 new_mask = mx.ones(new_input_ids.shape, dtype=mx.int32)
 
                 text_embeds = model.language_model.model.embed_tokens(new_input_ids)
-                merge_result = adapter.merge_visual_features(hidden_states, text_embeds, new_input_ids)
+                merge_result = adapter.merge_visual_features(
+                    hidden_states, text_embeds, new_input_ids
+                )
                 final_embeds = merge_result.embeds
                 image_mask = merge_result.image_mask
                 compressed_count = grid_count
@@ -192,7 +201,9 @@ class ToMeMLXBackend(MLXBackend):
                 kw_grid["image_grid_thw"] = compressed_grid
 
             position_ids, rope_deltas = adapter.compute_position_ids(
-                new_input_ids, attention_mask=new_mask, **kw_grid,
+                new_input_ids,
+                attention_mask=new_mask,
+                **kw_grid,
             )
             model.language_model._position_ids = position_ids
             model.language_model._rope_deltas = rope_deltas
@@ -208,8 +219,13 @@ class ToMeMLXBackend(MLXBackend):
         return final_embeds, new_input_ids, extra_kwargs
 
     def generate(
-        self, frames: np.ndarray, prompt: str, *,
-        max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
+        self,
+        frames: np.ndarray,
+        prompt: str,
+        *,
+        max_tokens: int = 512,
+        temperature: float = 0.0,
+        top_p: float = 1.0,
     ) -> GenerationResult:
         """Run inference with ToMe-compressed vision tokens."""
         formatted, kwargs = self._prepare(frames, prompt)
@@ -219,19 +235,31 @@ class ToMeMLXBackend(MLXBackend):
         mask = kwargs.pop("mask")
 
         final_embeds, new_input_ids, extra_kwargs = self._prepare_tome_embeds(
-            input_ids, pixel_values, kwargs,
+            input_ids,
+            pixel_values,
+            kwargs,
         )
         kwargs.update(extra_kwargs)
 
         return self._run_generate(
-            new_input_ids, pixel_values, mask,
-            max_tokens=max_tokens, temperature=temperature, top_p=top_p,
-            inputs_embeds=final_embeds, **kwargs,
+            new_input_ids,
+            pixel_values,
+            mask,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            inputs_embeds=final_embeds,
+            **kwargs,
         )
 
     def stream_generate(
-        self, frames: np.ndarray, prompt: str, *,
-        max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
+        self,
+        frames: np.ndarray,
+        prompt: str,
+        *,
+        max_tokens: int = 512,
+        temperature: float = 0.0,
+        top_p: float = 1.0,
     ) -> Generator:
         formatted, kwargs = self._prepare(frames, prompt)
 
@@ -240,14 +268,21 @@ class ToMeMLXBackend(MLXBackend):
         mask = kwargs.pop("mask")
 
         final_embeds, new_input_ids, extra_kwargs = self._prepare_tome_embeds(
-            input_ids, pixel_values, kwargs,
+            input_ids,
+            pixel_values,
+            kwargs,
         )
         kwargs.update(extra_kwargs)
 
         yield from self._run_stream_generate(
-            new_input_ids, pixel_values, mask,
-            max_tokens=max_tokens, temperature=temperature, top_p=top_p,
-            inputs_embeds=final_embeds, **kwargs,
+            new_input_ids,
+            pixel_values,
+            mask,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            inputs_embeds=final_embeds,
+            **kwargs,
         )
 
     def _original_token_count(self, grid_thw) -> int:

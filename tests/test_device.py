@@ -3,10 +3,15 @@
 import json
 import platform
 import subprocess
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
-from trio_core.device import detect_device, recommend_model, DeviceInfo
-from trio_core.device import _detect_apple_silicon, _detect_nvidia
+from trio_core.device import (
+    DeviceInfo,
+    _detect_apple_silicon,
+    _detect_nvidia,
+    detect_device,
+    recommend_model,
+)
 
 
 class TestDetectDevice:
@@ -214,11 +219,13 @@ class TestDetectAppleSilicon:
 
         mock_run.side_effect = side_effect
 
-        import sys
         # Ensure mlx.core is NOT importable by removing it and patching import
         with patch.dict("sys.modules", {"mlx": None, "mlx.core": None}):
             # Patch builtins.__import__ to raise ImportError for mlx.core
-            original_import = __builtins__.__import__ if hasattr(__builtins__, '__import__') else __import__
+            original_import = (
+                __builtins__.__import__ if hasattr(__builtins__, "__import__") else __import__
+            )
+
             def mock_import(name, *args, **kwargs):
                 if name == "mlx.core" or name == "mlx":
                     raise ImportError("No module named 'mlx'")
@@ -272,10 +279,12 @@ class TestDetectNvidia:
 
         # Also no torch.cuda
         with patch.dict("sys.modules", {"torch": None}):
+
             def mock_import(name, *args, **kwargs):
                 if name == "torch":
                     raise ImportError("No module named 'torch'")
                 return __import__(name, *args, **kwargs)
+
             with patch("builtins.__import__", side_effect=mock_import):
                 info = _detect_nvidia()
 
@@ -287,7 +296,7 @@ class TestDetectNvidia:
         mock_run.side_effect = FileNotFoundError()
 
         mock_props = MagicMock()
-        mock_props.total_memory = 12 * (1024 ** 3)  # 12 GB
+        mock_props.total_memory = 12 * (1024**3)  # 12 GB
 
         mock_torch = MagicMock()
         mock_torch.cuda.is_available.return_value = True
@@ -308,10 +317,12 @@ class TestDetectNvidia:
         mock_run.side_effect = FileNotFoundError()
 
         with patch.dict("sys.modules", {"torch": None}):
+
             def mock_import(name, *args, **kwargs):
                 if name == "torch":
                     raise ImportError("No module named 'torch'")
                 return __import__(name, *args, **kwargs)
+
             with patch("builtins.__import__", side_effect=mock_import):
                 info = _detect_nvidia()
 
@@ -338,9 +349,7 @@ class TestDetectDeviceIntegration:
     @patch("trio_core.device._detect_nvidia")
     def test_nvidia_path(self, mock_nvidia, mock_apple):
         """Lines 51-53: Apple Silicon returns None, NVIDIA detected."""
-        mock_nvidia.return_value = DeviceInfo(
-            "transformers", "RTX 4090", "cuda", 24.0, 0
-        )
+        mock_nvidia.return_value = DeviceInfo("transformers", "RTX 4090", "cuda", 24.0, 0)
         info = detect_device()
         assert info.accelerator == "cuda"
         assert info.device_name == "RTX 4090"
@@ -348,9 +357,7 @@ class TestDetectDeviceIntegration:
     @patch("trio_core.device._detect_apple_silicon")
     def test_apple_silicon_path(self, mock_apple):
         """Lines 46-48: Apple Silicon detected first, skips NVIDIA."""
-        mock_apple.return_value = DeviceInfo(
-            "mlx", "Apple M3", "metal", 36.0, 30
-        )
+        mock_apple.return_value = DeviceInfo("mlx", "Apple M3", "metal", 36.0, 30)
         info = detect_device()
         assert info.backend == "mlx"
         assert info.accelerator == "metal"

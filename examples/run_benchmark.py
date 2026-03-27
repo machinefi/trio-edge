@@ -36,53 +36,88 @@ from pathlib import Path
 
 def main():
     parser = argparse.ArgumentParser(description="VLM benchmark runner")
-    parser.add_argument("--bench", choices=["pope", "textvqa", "gqa", "mmbench", "mvbench", "custom"],
-                        default="pope", help="Benchmark to run")
-    parser.add_argument("--split", default="random",
-                        choices=["random", "popular", "adversarial"],
-                        help="POPE split (default: random)")
-    parser.add_argument("--samples", "-n", type=int, default=None,
-                        help="Max samples (default: all). For mvbench, per-task limit.")
-    parser.add_argument("--output", "-o", default=None,
-                        help="Output JSON path")
-    parser.add_argument("--model", "-m", default=None,
-                        help="Model name (default: auto)")
-    parser.add_argument("--max-tokens", type=int, default=16,
-                        help="Max generation tokens (default: 16)")
-    parser.add_argument("--tome", type=int, default=None, metavar="R",
-                        help="Enable ToMe with r tokens merged per layer")
-    parser.add_argument("--metric", default="keys", choices=["keys", "hidden"],
-                        help="ToMe similarity metric (default: keys)")
-    parser.add_argument("--min-keep", type=float, default=0.3,
-                        help="Min fraction of tokens to keep (default: 0.3)")
-    parser.add_argument("--compress", type=float, default=None,
-                        help="Post-encoder compression ratio")
-    parser.add_argument("--custom-path", default=None,
-                        help="Path to custom benchmark JSON file")
-    parser.add_argument("--compare", nargs=2, metavar=("A", "B"),
-                        help="Compare two saved benchmark results")
+    parser.add_argument(
+        "--bench",
+        choices=["pope", "textvqa", "gqa", "mmbench", "mvbench", "custom"],
+        default="pope",
+        help="Benchmark to run",
+    )
+    parser.add_argument(
+        "--split",
+        default="random",
+        choices=["random", "popular", "adversarial"],
+        help="POPE split (default: random)",
+    )
+    parser.add_argument(
+        "--samples",
+        "-n",
+        type=int,
+        default=None,
+        help="Max samples (default: all). For mvbench, per-task limit.",
+    )
+    parser.add_argument("--output", "-o", default=None, help="Output JSON path")
+    parser.add_argument("--model", "-m", default=None, help="Model name (default: auto)")
+    parser.add_argument(
+        "--max-tokens", type=int, default=16, help="Max generation tokens (default: 16)"
+    )
+    parser.add_argument(
+        "--tome",
+        type=int,
+        default=None,
+        metavar="R",
+        help="Enable ToMe with r tokens merged per layer",
+    )
+    parser.add_argument(
+        "--metric",
+        default="keys",
+        choices=["keys", "hidden"],
+        help="ToMe similarity metric (default: keys)",
+    )
+    parser.add_argument(
+        "--min-keep", type=float, default=0.3, help="Min fraction of tokens to keep (default: 0.3)"
+    )
+    parser.add_argument(
+        "--compress", type=float, default=None, help="Post-encoder compression ratio"
+    )
+    parser.add_argument("--custom-path", default=None, help="Path to custom benchmark JSON file")
+    parser.add_argument(
+        "--compare", nargs=2, metavar=("A", "B"), help="Compare two saved benchmark results"
+    )
     # MVBench-specific
-    parser.add_argument("--mvbench-dir", default="./mvbench_videos",
-                        help="MVBench video directory (default: ./mvbench_videos)")
-    parser.add_argument("--mvbench-tasks", default=None,
-                        help="Comma-separated MVBench tasks (default: all available)")
-    parser.add_argument("--mvbench-download", default=None, metavar="SOURCES",
-                        help="Download MVBench videos and exit. "
-                             "Comma-separated sources: clevrer,star,perception,scene_qa,etc. "
-                             "Use 'all' for everything (~17GB).")
-    parser.add_argument("--max-frames", type=int, default=16,
-                        help="Max frames per video clip (default: 16)")
+    parser.add_argument(
+        "--mvbench-dir",
+        default="./mvbench_videos",
+        help="MVBench video directory (default: ./mvbench_videos)",
+    )
+    parser.add_argument(
+        "--mvbench-tasks",
+        default=None,
+        help="Comma-separated MVBench tasks (default: all available)",
+    )
+    parser.add_argument(
+        "--mvbench-download",
+        default=None,
+        metavar="SOURCES",
+        help="Download MVBench videos and exit. "
+        "Comma-separated sources: clevrer,star,perception,scene_qa,etc. "
+        "Use 'all' for everything (~17GB).",
+    )
+    parser.add_argument(
+        "--max-frames", type=int, default=16, help="Max frames per video clip (default: 16)"
+    )
     args = parser.parse_args()
 
     # Compare mode
     if args.compare:
         from trio_core.eval_benchmarks import BenchmarkResult
+
         BenchmarkResult.compare(args.compare[0], args.compare[1])
         return
 
     # MVBench download mode
     if args.mvbench_download:
         from trio_core.eval_benchmarks import MVBenchBenchmark
+
         sources = None if args.mvbench_download == "all" else args.mvbench_download.split(",")
         print(f"Downloading MVBench videos to {args.mvbench_dir}...")
         if sources:
@@ -101,7 +136,7 @@ def main():
         if args.tome:
             suffix = f"_tome_r{args.tome}"
         elif args.compress:
-            suffix = f"_compressed_{int(args.compress*100)}"
+            suffix = f"_compressed_{int(args.compress * 100)}"
         else:
             suffix = "_baseline"
         n_str = f"_{args.samples}" if args.samples else ""
@@ -109,8 +144,13 @@ def main():
 
     # Setup benchmark
     from trio_core.eval_benchmarks import (
-        POPEBenchmark, TextVQABenchmark, GQABenchmark, MMBenchBenchmark,
-        MVBenchBenchmark, CustomBenchmark, BenchmarkRunner,
+        BenchmarkRunner,
+        CustomBenchmark,
+        GQABenchmark,
+        MMBenchBenchmark,
+        MVBenchBenchmark,
+        POPEBenchmark,
+        TextVQABenchmark,
     )
 
     if args.bench == "pope":
@@ -160,8 +200,9 @@ def main():
         print(f"Loading model: {config.model}")
         engine.load()
     elif args.compress:
-        from trio_core.token_compression import TokenCompressor
         from trio_core.compressed_backend import CompressedMLXBackend
+        from trio_core.token_compression import TokenCompressor
+
         compressor = TokenCompressor(strategy="similarity", ratio=args.compress)
         backend = CompressedMLXBackend(config.model, compressor)
         print(f"Compression: {args.compress}")

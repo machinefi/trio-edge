@@ -79,12 +79,14 @@ def run_window_sweep(frames: list[dict]) -> list[dict]:
 
     # Baseline: per-frame
     baseline_mape = float(np.mean(np.abs(pred_arr - gt_arr) / np.maximum(gt_arr, 1)) * 100)
-    results.append({
-        "window": 1,
-        "bins": len(frames),
-        "mape": round(baseline_mape, 2),
-        "label": "per-frame",
-    })
+    results.append(
+        {
+            "window": 1,
+            "bins": len(frames),
+            "mape": round(baseline_mape, 2),
+            "label": "per-frame",
+        }
+    )
 
     # Aggregation windows
     for window in [5, 10, 20, 30, 50, 100, 200, 500]:
@@ -101,12 +103,14 @@ def run_window_sweep(frames: list[dict]) -> list[dict]:
             bin_gt.append(statistics.median(gt_arr[start:end]))
 
         mape = compute_mape(bin_pred, bin_gt)
-        results.append({
-            "window": window,
-            "bins": n_bins,
-            "mape": round(mape, 2),
-            "label": f"window-{window}",
-        })
+        results.append(
+            {
+                "window": window,
+                "bins": n_bins,
+                "mape": round(mape, 2),
+                "label": f"window-{window}",
+            }
+        )
 
     return results
 
@@ -131,8 +135,7 @@ def run_aggregator_eval(frames: list[dict]) -> dict:
     # Compute GT for each 15-min bin using same aggregation as predicted
     gt_15m = []
     for b in bins_15m:
-        gt_counts = [gt_by_ts[f["timestamp"]] for f in frames
-                     if b.start <= f["timestamp"] < b.end]
+        gt_counts = [gt_by_ts[f["timestamp"]] for f in frames if b.start <= f["timestamp"] < b.end]
         if gt_counts:
             gt_15m.append(round(statistics.mean(gt_counts)))
         else:
@@ -145,10 +148,8 @@ def run_aggregator_eval(frames: list[dict]) -> dict:
     gt_hourly_vals = []
     pred_hourly_vals = []
     for b in bins_hourly:
-        gt_in_bin = [gt_by_ts[f["timestamp"]] for f in frames
-                     if b.start <= f["timestamp"] < b.end]
-        pred_in_bin = [f["predicted"] for f in frames
-                       if b.start <= f["timestamp"] < b.end]
+        gt_in_bin = [gt_by_ts[f["timestamp"]] for f in frames if b.start <= f["timestamp"] < b.end]
+        pred_in_bin = [f["predicted"] for f in frames if b.start <= f["timestamp"] < b.end]
         if gt_in_bin and pred_in_bin:
             gt_hourly_vals.append(round(statistics.mean(gt_in_bin)))
             pred_hourly_vals.append(round(statistics.mean(pred_in_bin)))
@@ -167,18 +168,26 @@ def run_aggregator_eval(frames: list[dict]) -> dict:
         "mape_hourly": round(mape_hourly, 2),
         "anomalies_detected": len(anomalies),
         "anomaly_details": [
-            {"time": a.timestamp.strftime("%H:%M"), "expected": a.expected,
-             "actual": a.actual, "z": a.z_score, "severity": a.severity}
+            {
+                "time": a.timestamp.strftime("%H:%M"),
+                "expected": a.expected,
+                "actual": a.actual,
+                "z": a.z_score,
+                "severity": a.severity,
+            }
             for a in anomalies[:5]
         ],
         "sample_15m_bins": [
-            {"start": b.start.strftime("%H:%M"), "count": b.count,
-             "samples": b.samples, "confidence": b.confidence}
+            {
+                "start": b.start.strftime("%H:%M"),
+                "count": b.count,
+                "samples": b.samples,
+                "confidence": b.confidence,
+            }
             for b in bins_15m[:8]
         ],
         "sample_hourly_bins": [
-            {"start": b.start.strftime("%H:%M"), "count": b.count,
-             "samples": b.samples}
+            {"start": b.start.strftime("%H:%M"), "count": b.count, "samples": b.samples}
             for b in bins_hourly[:6]
         ],
     }
@@ -196,7 +205,9 @@ def main():
     sweep = run_window_sweep(frames)
     for r in sweep:
         indicator = " <-- TARGET" if r["mape"] < 5.0 and r["window"] > 1 else ""
-        print(f"  Window={r['window']:>4d} | Bins={r['bins']:>4d} | MAPE={r['mape']:>6.2f}%{indicator}")
+        print(
+            f"  Window={r['window']:>4d} | Bins={r['bins']:>4d} | MAPE={r['mape']:>6.2f}%{indicator}"
+        )
 
     # Round 2: Full Aggregator pipeline
     print("\n--- AGGREGATOR PIPELINE (15-min bins → hourly → daily) ---")
@@ -212,11 +223,15 @@ def main():
     if agg_result["anomaly_details"]:
         print("  Top anomalies:")
         for a in agg_result["anomaly_details"]:
-            print(f"    {a['time']}: expected={a['expected']}, actual={a['actual']}, z={a['z']}, severity={a['severity']}")
+            print(
+                f"    {a['time']}: expected={a['expected']}, actual={a['actual']}, z={a['z']}, severity={a['severity']}"
+            )
 
     print("\n  Sample 15-min bins:")
     for b in agg_result["sample_15m_bins"]:
-        print(f"    {b['start']}: count={b['count']}, samples={b['samples']}, conf={b['confidence']}")
+        print(
+            f"    {b['start']}: count={b['count']}, samples={b['samples']}, conf={b['confidence']}"
+        )
 
     print("\n  Sample hourly bins:")
     for b in agg_result["sample_hourly_bins"]:

@@ -9,11 +9,12 @@ mx = pytest.importorskip("mlx.core")
 # Factory auto-detection
 # ---------------------------------------------------------------------------
 
-class TestCreateTomeVision:
 
+class TestCreateTomeVision:
     def test_qwen25_detected(self):
         from unittest.mock import MagicMock
-        from trio_core.native_vision import create_tome_vision, NativeToMeQwen25Vision
+
+        from trio_core.native_vision import NativeToMeQwen25Vision, create_tome_vision
 
         vm = MagicMock()
         vm.model_type = "qwen2_5_vl"
@@ -23,7 +24,8 @@ class TestCreateTomeVision:
 
     def test_qwen3_detected(self):
         from unittest.mock import MagicMock
-        from trio_core.native_vision import create_tome_vision, NativeToMeQwen3Vision
+
+        from trio_core.native_vision import NativeToMeQwen3Vision, create_tome_vision
 
         vm = MagicMock()
         vm.model_type = "qwen3_vl"
@@ -33,7 +35,8 @@ class TestCreateTomeVision:
 
     def test_qwen35_detected(self):
         from unittest.mock import MagicMock
-        from trio_core.native_vision import create_tome_vision, NativeToMeQwen3Vision
+
+        from trio_core.native_vision import NativeToMeQwen3Vision, create_tome_vision
 
         vm = MagicMock()
         vm.model_type = "qwen3_5"
@@ -42,7 +45,8 @@ class TestCreateTomeVision:
 
     def test_unknown_defaults_to_qwen25(self):
         from unittest.mock import MagicMock
-        from trio_core.native_vision import create_tome_vision, NativeToMeQwen25Vision
+
+        from trio_core.native_vision import NativeToMeQwen25Vision, create_tome_vision
 
         vm = MagicMock()
         vm.model_type = "unknown"
@@ -54,10 +58,11 @@ class TestCreateTomeVision:
 # ToMe mixin logic
 # ---------------------------------------------------------------------------
 
-class TestToMeMixin:
 
+class TestToMeMixin:
     def _make(self, model_type="qwen2_5_vl", **kwargs):
         from unittest.mock import MagicMock
+
         from trio_core.native_vision import create_tome_vision
 
         vm = MagicMock()
@@ -99,10 +104,11 @@ class TestToMeMixin:
 # Qwen2.5-VL fullatt skip
 # ---------------------------------------------------------------------------
 
-class TestQwen25FullattSkip:
 
+class TestQwen25FullattSkip:
     def test_fullatt_layers_skipped(self):
         from unittest.mock import MagicMock
+
         from trio_core.native_vision import NativeToMeQwen25Vision
 
         vm = MagicMock()
@@ -119,10 +125,11 @@ class TestQwen25FullattSkip:
 # Attribute delegation
 # ---------------------------------------------------------------------------
 
-class TestDelegation:
 
+class TestDelegation:
     def test_delegates_to_original(self):
         from unittest.mock import MagicMock
+
         from trio_core.native_vision import NativeToMeQwen25Vision
 
         vm = MagicMock()
@@ -136,6 +143,7 @@ class TestDelegation:
 
     def test_tome_attrs_not_delegated(self):
         from unittest.mock import MagicMock
+
         from trio_core.native_vision import NativeToMeQwen25Vision
 
         vm = MagicMock()
@@ -147,6 +155,7 @@ class TestDelegation:
 
     def test_qwen3_delegates(self):
         from unittest.mock import MagicMock
+
         from trio_core.native_vision import NativeToMeQwen3Vision
 
         vm = MagicMock()
@@ -159,8 +168,8 @@ class TestDelegation:
 # Content diversity (compute_content_diversity)
 # ---------------------------------------------------------------------------
 
-class TestContentDiversity:
 
+class TestContentDiversity:
     def test_identical_tokens_zero_diversity(self):
         from trio_core.tome import compute_content_diversity
 
@@ -215,10 +224,11 @@ class TestContentDiversity:
 # Content-aware r scaling
 # ---------------------------------------------------------------------------
 
-class TestContentAwareR:
 
+class TestContentAwareR:
     def _make(self, **kwargs):
         from unittest.mock import MagicMock
+
         from trio_core.native_vision import create_tome_vision
 
         vm = MagicMock()
@@ -278,10 +288,12 @@ class TestContentAwareR:
 
     def test_config_content_aware(self):
         from trio_core.config import EngineConfig
+
         config = EngineConfig(tome_content_aware=True)
         assert config.tome_content_aware is True
 
     def test_config_default_off(self):
         from trio_core.config import EngineConfig
+
         config = EngineConfig()
         assert config.tome_content_aware is False

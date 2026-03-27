@@ -26,7 +26,8 @@ def make_random_frames(seed: int, h: int = 480, w: int = 640) -> np.ndarray:
 def main():
     parser = argparse.ArgumentParser(description="Prefix cache A/B benchmark")
     parser.add_argument(
-        "--model", "-m",
+        "--model",
+        "-m",
         default="mlx-community/Qwen2.5-VL-3B-Instruct-4bit",
         help="Model to benchmark",
     )
@@ -66,8 +67,10 @@ def main():
         total_ms = (t1 - t0) * 1000
         prefill_ms = result.prompt_tokens / max(result.prompt_tps, 1e-9) * 1000
         cold_times.append(prefill_ms)
-        print(f"  Run {i+1}: total={total_ms:.0f}ms  prefill={prefill_ms:.0f}ms  "
-              f"tokens={result.prompt_tokens}  output={result.completion_tokens}tok")
+        print(
+            f"  Run {i + 1}: total={total_ms:.0f}ms  prefill={prefill_ms:.0f}ms  "
+            f"tokens={result.prompt_tokens}  output={result.completion_tokens}tok"
+        )
 
     # --- Condition B: Prefix hit (same prompt, different image) ---
     # First call seeds the prefix cache, subsequent calls should hit
@@ -90,24 +93,26 @@ def main():
         total_ms = (t1 - t0) * 1000
         prefill_ms = result.prompt_tokens / max(result.prompt_tps, 1e-9) * 1000
         prefix_times.append(prefill_ms)
-        print(f"  Run {i+1}: total={total_ms:.0f}ms  prefill={prefill_ms:.0f}ms  "
-              f"tokens={result.prompt_tokens}  output={result.completion_tokens}tok")
+        print(
+            f"  Run {i + 1}: total={total_ms:.0f}ms  prefill={prefill_ms:.0f}ms  "
+            f"tokens={result.prompt_tokens}  output={result.completion_tokens}tok"
+        )
 
     # --- Summary ---
     avg_cold = np.mean(cold_times)
     avg_prefix = np.mean(prefix_times)
     speedup = (avg_cold - avg_prefix) / avg_cold * 100
 
-    print(f"\n{'='*50}")
+    print(f"\n{'=' * 50}")
     print(f"  Cold start avg prefill:  {avg_cold:.0f}ms")
     print(f"  Prefix hit avg prefill:  {avg_prefix:.0f}ms")
     print(f"  Savings:                 {speedup:+.1f}%")
-    print(f"{'='*50}")
+    print(f"{'=' * 50}")
 
     if speedup > 0:
         print(f"\nPrefix cache saves ~{speedup:.0f}% prefill time!")
     else:
-        print(f"\nNo savings observed (prefix cache may not be triggering).")
+        print("\nNo savings observed (prefix cache may not be triggering).")
 
 
 if __name__ == "__main__":

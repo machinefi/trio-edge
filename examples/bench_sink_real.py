@@ -22,7 +22,6 @@ import gc
 import logging
 import time
 
-import mlx.core as mx
 import numpy as np
 
 logging.basicConfig(level=logging.WARNING)
@@ -43,7 +42,7 @@ def create_test_frames(n_frames: int, h: int = 224, w: int = 224) -> list[np.nda
         # Add some structure (rectangle at different positions)
         y = int((h - 40) * (i / n_frames))
         x = int((w - 40) * ((i * 7 % n_frames) / n_frames))
-        frame[y:y+40, x:x+40, :] = 255
+        frame[y : y + 40, x : x + 40, :] = 255
         # Add noise
         noise = rng.randint(0, 30, (h, w, 3), dtype=np.uint8)
         frame = np.clip(frame.astype(np.int16) + noise, 0, 255).astype(np.uint8)
@@ -59,8 +58,8 @@ def run_streaming_test(
     prototype_ratio: float,
 ) -> dict:
     """Run streaming inference with given sink config."""
-    from trio_core.config import EngineConfig
     from trio_core import TrioCore
+    from trio_core.config import EngineConfig
 
     config = EngineConfig(
         model=model_id,
@@ -86,21 +85,25 @@ def run_streaming_test(
     for i, frame in enumerate(frames):
         # Convert to NCHW format expected by analyze_frame
         result = engine.analyze_frame(frame, prompt, max_tokens=30)
-        results.append({
-            "frame": i,
-            "text": result.text,
-            "prompt_tokens": result.metrics.prompt_tokens,
-            "latency_ms": result.metrics.latency_ms,
-        })
+        results.append(
+            {
+                "frame": i,
+                "text": result.text,
+                "prompt_tokens": result.metrics.prompt_tokens,
+                "latency_ms": result.metrics.latency_ms,
+            }
+        )
         if (i + 1) % 10 == 0:
             # Check StreamMem state
             backend = engine._backend
-            if hasattr(backend, '_get_prompt_cache'):
+            if hasattr(backend, "_get_prompt_cache"):
                 pc = backend._get_prompt_cache()
                 sm = pc.streaming_memory
                 if sm:
-                    print(f"    frame {i+1}: visual_tokens={sm._total_visual_tokens}, "
-                          f"budget={sm.budget}, over={sm.over_budget}")
+                    print(
+                        f"    frame {i + 1}: visual_tokens={sm._total_visual_tokens}, "
+                        f"budget={sm.budget}, over={sm.over_budget}"
+                    )
 
     total_time = time.monotonic() - t0
 
@@ -145,14 +148,22 @@ def run_streaming_test(
 
 def main():
     parser = argparse.ArgumentParser(description="Real-model attention sink benchmark")
-    parser.add_argument("--model", "-m", default="mlx-community/Qwen2.5-VL-3B-Instruct-4bit",
-                        help="Model to use")
-    parser.add_argument("--sinks", nargs="+", type=int, default=[0, 4],
-                        help="Sink token counts to compare (default: 0 4)")
-    parser.add_argument("--frames", type=int, default=30,
-                        help="Number of frames to stream (default: 30)")
-    parser.add_argument("--budget", type=int, default=200,
-                        help="StreamMem budget in visual tokens (default: 200)")
+    parser.add_argument(
+        "--model", "-m", default="mlx-community/Qwen2.5-VL-3B-Instruct-4bit", help="Model to use"
+    )
+    parser.add_argument(
+        "--sinks",
+        nargs="+",
+        type=int,
+        default=[0, 4],
+        help="Sink token counts to compare (default: 0 4)",
+    )
+    parser.add_argument(
+        "--frames", type=int, default=30, help="Number of frames to stream (default: 30)"
+    )
+    parser.add_argument(
+        "--budget", type=int, default=200, help="StreamMem budget in visual tokens (default: 200)"
+    )
     parser.add_argument("--prototype-ratio", type=float, default=0.1)
     args = parser.parse_args()
 
@@ -184,13 +195,17 @@ def main():
     print("=" * 70)
     print("Results Comparison")
     print("=" * 70)
-    print(f"{'sink':>6} {'time_s':>8} {'final_tok':>10} {'latency_ms':>11} "
-          f"{'degenerate':>11} {'unique_w':>9} {'avg_len':>8}")
+    print(
+        f"{'sink':>6} {'time_s':>8} {'final_tok':>10} {'latency_ms':>11} "
+        f"{'degenerate':>11} {'unique_w':>9} {'avg_len':>8}"
+    )
     print("-" * 70)
     for r in all_results:
-        print(f"{r['n_sink']:>6} {r['total_time_s']:>8.1f} {r['final_tokens']:>10} "
-              f"{r['final_latency_ms']:>11.1f} {str(r['is_degenerate']):>11} "
-              f"{r['last5_unique_words']:>9} {r['last5_avg_len']:>8.1f}")
+        print(
+            f"{r['n_sink']:>6} {r['total_time_s']:>8.1f} {r['final_tokens']:>10} "
+            f"{r['final_latency_ms']:>11.1f} {str(r['is_degenerate']):>11} "
+            f"{r['last5_unique_words']:>9} {r['last5_avg_len']:>8.1f}"
+        )
 
     print()
     print("Final generated text per config:")

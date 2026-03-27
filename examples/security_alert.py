@@ -24,7 +24,6 @@ Requires: pip install trio-core
 import argparse
 import shutil
 import subprocess
-import time
 
 import cv2
 import numpy as np
@@ -45,22 +44,45 @@ def open_source(source):
         raise IOError("ffmpeg not found — install with: brew install ffmpeg")
 
     cmd = [
-        "ffmpeg", "-rtsp_transport", "tcp",
-        "-i", source,
-        "-f", "rawvideo", "-pix_fmt", "bgr24",
-        "-an", "-sn", "-v", "error",
-        "-"
+        "ffmpeg",
+        "-rtsp_transport",
+        "tcp",
+        "-i",
+        source,
+        "-f",
+        "rawvideo",
+        "-pix_fmt",
+        "bgr24",
+        "-an",
+        "-sn",
+        "-v",
+        "error",
+        "-",
     ]
     # First, probe resolution
     probe = subprocess.run(
-        ["ffprobe", "-v", "error", "-rtsp_transport", "tcp",
-         "-select_streams", "v:0",
-         "-show_entries", "stream=width,height",
-         "-of", "csv=p=0", source],
-        capture_output=True, text=True, timeout=10,
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-rtsp_transport",
+            "tcp",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=width,height",
+            "-of",
+            "csv=p=0",
+            source,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
     w, h = [int(x) for x in probe.stdout.strip().split(",")]
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=w*h*3*2)
+    proc = subprocess.Popen(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=w * h * 3 * 2
+    )
     return (w, h, proc), proc
 
 
@@ -87,8 +109,9 @@ def release(cap, proc):
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--source", "-s", default="0",
-                    help="RTSP URL, video file, or camera index (default: 0)")
+parser.add_argument(
+    "--source", "-s", default="0", help="RTSP URL, video file, or camera index (default: 0)"
+)
 parser.add_argument("--condition", "-c", default="Is there a person?")
 parser.add_argument("--interval", type=float, default=2.0, help="Seconds between checks")
 args = parser.parse_args()
@@ -117,8 +140,15 @@ try:
         color = (0, 0, 255) if triggered else (0, 200, 0)
         label = f"ALERT: {answer[:60]}" if triggered else "clear"
         cv2.putText(frame, label, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
-        cv2.putText(frame, f"{result.metrics.latency_ms:.0f}ms", (10, 60),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        cv2.putText(
+            frame,
+            f"{result.metrics.latency_ms:.0f}ms",
+            (10, 60),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (255, 255, 255),
+            1,
+        )
         cv2.imshow("trio-core security", frame)
 
         if triggered:

@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 
 from trio_core.video import (
-    TemporalDeduplicator,
     MotionGate,
+    TemporalDeduplicator,
     load_video,
     smart_nframes,
     smart_resize,
@@ -95,19 +95,18 @@ class TestLoadVideo:
 
 # ── Additional coverage tests ───────────────────────────────────────────────
 
-from unittest.mock import patch, MagicMock, PropertyMock
 import subprocess
 import sys
-import threading
+from unittest.mock import MagicMock, patch
 
 from trio_core.video import (
-    _is_url,
-    _download_video,
     _TEMP_FILES,
-    cleanup_temp_files,
-    _extract_frames,
     DeduplicationResult,
     StreamCapture,
+    _download_video,
+    _extract_frames,
+    _is_url,
+    cleanup_temp_files,
 )
 
 
@@ -224,7 +223,13 @@ def _make_mock_cap(fps=30.0):
 
 def _make_ffmpeg_probe(width=112, height=112, fps=30.0, nb_frames=30, duration=1.0):
     """Create a mock probe result dict for _probe_video."""
-    return {"width": width, "height": height, "fps": fps, "nb_frames": nb_frames, "duration": duration}
+    return {
+        "width": width,
+        "height": height,
+        "fps": fps,
+        "nb_frames": nb_frames,
+        "duration": duration,
+    }
 
 
 def _make_ffmpeg_output(n_frames, width, height):
@@ -276,14 +281,20 @@ class TestDeduplicationResultRatio:
     def test_ratio_property(self):
         frames = np.zeros((3, 3, 64, 64), dtype=np.float32)
         result = DeduplicationResult(
-            frames=frames, kept_indices=[0, 2], original_count=5, removed_count=3,
+            frames=frames,
+            kept_indices=[0, 2],
+            original_count=5,
+            removed_count=3,
         )
         assert result.ratio == pytest.approx(3 / 5)
 
     def test_ratio_zero_original(self):
         frames = np.zeros((0, 3, 64, 64), dtype=np.float32)
         result = DeduplicationResult(
-            frames=frames, kept_indices=[], original_count=0, removed_count=0,
+            frames=frames,
+            kept_indices=[],
+            original_count=0,
+            removed_count=0,
         )
         assert result.ratio == 0.0
 
@@ -332,7 +343,6 @@ class TestStreamCaptureInit:
 
 def _patch_cv2():
     """Patch cv2 in sys.modules so lazy imports get the mock."""
-    import sys
     mock_cv2 = MagicMock()
     mock_cv2.COLOR_BGR2RGB = 4
     return patch.dict(sys.modules, {"cv2": mock_cv2}), mock_cv2
@@ -390,7 +400,6 @@ class TestStreamCaptureIter:
             sc._frames = [frame.copy(), frame.copy()]
 
         # After two reads, stop to end iteration
-        original_read = sc.read
         call_count = [0]
 
         def mock_read():

@@ -21,6 +21,7 @@ class _JSONFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         import json as _json
         import time as _t
+
         entry = {
             "ts": _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime(record.created)),
             "level": record.levelname.lower(),
@@ -34,6 +35,7 @@ class _JSONFormatter(logging.Formatter):
 
 def _setup_logging(verbose: bool = False, json_logs: bool = False) -> None:
     import os
+
     level = logging.DEBUG if verbose else logging.WARNING
 
     if json_logs or os.environ.get("TRIO_LOG_JSON", "").lower() in ("1", "true"):
@@ -60,6 +62,7 @@ def _setup_logging(verbose: bool = False, json_logs: bool = False) -> None:
 def _version_callback(value: bool):
     if value:
         from trio_core import __version__
+
         typer.echo(f"trio-core {__version__}")
         raise typer.Exit()
 
@@ -67,7 +70,11 @@ def _version_callback(value: bool):
 @app.callback()
 def main(
     version: bool = typer.Option(
-        False, "--version", "-V", callback=_version_callback, is_eager=True,
+        False,
+        "--version",
+        "-V",
+        callback=_version_callback,
+        is_eager=True,
         help="Show version and exit",
     ),
 ):
@@ -97,6 +104,7 @@ def doctor():
     if info.backend == "mlx":
         try:
             import mlx.core as mx
+
             typer.echo(f"mlx:       ✓ {mx.__version__}")
         except ImportError:
             typer.echo("mlx:       ✗ not installed → pip install 'trio-core[mlx]'")
@@ -104,12 +112,14 @@ def doctor():
 
         try:
             import mlx_vlm
+
             typer.echo(f"mlx-vlm:   ✓ {mlx_vlm.__version__}")
         except ImportError:
             typer.echo("mlx-vlm:   - not installed (optional, T2 models only)")
     else:
         try:
             import torch
+
             cuda = torch.cuda.is_available()
             typer.echo(f"torch:     ✓ {torch.__version__} (CUDA={cuda})")
         except ImportError:
@@ -119,13 +129,17 @@ def doctor():
     # Optional deps
     try:
         import cv2
+
         typer.echo(f"opencv:    ✓ {cv2.__version__} (webcam support)")
     except ImportError:
-        typer.echo("opencv:    - not installed (optional, for webcam: pip install 'trio-core[webcam]')")
+        typer.echo(
+            "opencv:    - not installed (optional, for webcam: pip install 'trio-core[webcam]')"
+        )
 
     try:
         import PIL
         import PIL.Image  # noqa: F401 — verify PIL.Image is importable
+
         typer.echo(f"pillow:    ✓ {PIL.__version__}")
     except ImportError:
         typer.echo("pillow:    ✗ not installed")
@@ -133,6 +147,7 @@ def doctor():
 
     try:
         import fastapi
+
         typer.echo(f"fastapi:   ✓ {fastapi.__version__}")
     except ImportError:
         typer.echo("fastapi:   ✗ not installed")
@@ -142,8 +157,13 @@ def doctor():
     ffmpeg = shutil.which("ffmpeg")
     if ffmpeg:
         import subprocess
+
         result = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True)
-        ver = result.stdout.split("\n")[0].split("version ")[-1].split(" ")[0] if result.stdout else "unknown"
+        ver = (
+            result.stdout.split("\n")[0].split("version ")[-1].split(" ")[0]
+            if result.stdout
+            else "unknown"
+        )
         typer.echo(f"ffmpeg:    ✓ {ver}")
     else:
         typer.echo("ffmpeg:    ✗ not found → brew install ffmpeg")
@@ -152,10 +172,11 @@ def doctor():
     # Disk space
     typer.echo()
     import os
+
     cache_dir = os.path.expanduser("~/.cache/huggingface/hub")
     try:
         usage = shutil.disk_usage(os.path.dirname(cache_dir))
-        free_gb = usage.free / (1024 ** 3)
+        free_gb = usage.free / (1024**3)
         if free_gb < 5:
             typer.echo(f"Disk:      ✗ {free_gb:.1f}GB free — need ≥5GB for model downloads")
             all_ok = False
@@ -170,7 +191,9 @@ def doctor():
         typer.echo(f"HF cache:  {cache_dir} ({len(models)} models)")
     else:
         typer.echo(f"HF cache:  {cache_dir} (empty)")
-        typer.echo("           First run will download the model (~2-5GB for 4-bit, ~15GB for 7B fp16).")
+        typer.echo(
+            "           First run will download the model (~2-5GB for 4-bit, ~15GB for 7B fp16)."
+        )
         typer.echo("           This may take 5-20 minutes depending on your connection.")
 
     typer.echo()
@@ -186,11 +209,13 @@ def serve(
     host: str = typer.Option("0.0.0.0", "--host", help="Bind host"),
     port: int = typer.Option(8100, "--port", "-p", help="Bind port"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Debug logging"),
-    json_logs: bool = typer.Option(False, "--json-logs", help="Structured JSON logging (or set TRIO_LOG_JSON=1)"),
+    json_logs: bool = typer.Option(
+        False, "--json-logs", help="Structured JSON logging (or set TRIO_LOG_JSON=1)"
+    ),
 ):
     """Start the inference server (YOLO + VLM)."""
     _setup_logging(verbose, json_logs=json_logs)
-    from trio_core.api.inference_server import create_app, main as run_server
+    from trio_core.api.inference_server import main as run_server
 
     uv_level = "debug" if verbose else "info"
     run_server(host=host, port=port, log_level=uv_level)
@@ -201,7 +226,8 @@ def analyze(
     video: str = typer.Argument(..., help="Image or video file path"),
     prompt: str = typer.Option(
         "Describe what you see.",
-        "--prompt", "-q",
+        "--prompt",
+        "-q",
         help="Question or instruction",
     ),
     model: str = typer.Option(None, "--model", "-m", help="Override model"),
@@ -252,7 +278,9 @@ def analyze(
     else:
         typer.echo(f"\n{result.text}")
         m = result.metrics
-        typer.echo(f"\n{m.latency_ms:.0f}ms | {m.tokens_per_sec:.1f} tok/s | {m.prompt_tokens}+{m.completion_tokens} tokens")
+        typer.echo(
+            f"\n{m.latency_ms:.0f}ms | {m.tokens_per_sec:.1f} tok/s | {m.prompt_tokens}+{m.completion_tokens} tokens"
+        )
 
 
 @app.command()
@@ -301,7 +329,9 @@ def bench(
     for i in range(runs):
         result = engine.analyze_video(video=video, prompt=prompt)
         latencies.append(result.metrics.latency_ms)
-        typer.echo(f"  Run {i + 1}/{runs}: {result.metrics.latency_ms:.0f}ms, {result.metrics.tokens_per_sec:.1f} tok/s")
+        typer.echo(
+            f"  Run {i + 1}/{runs}: {result.metrics.latency_ms:.0f}ms, {result.metrics.tokens_per_sec:.1f} tok/s"
+        )
 
     avg = sum(latencies) / len(latencies)
     typer.echo(f"\n{runs} runs, avg {avg:.0f}ms")
@@ -363,8 +393,6 @@ def smoke(
     import asyncio
     import time
 
-    from PIL import Image
-
     from trio_core.config import EngineConfig
     from trio_core.engine import TrioCore
 
@@ -399,6 +427,7 @@ def smoke(
         engine.load()
         be = engine._backend
         return f"{be.backend_name} on {be.device_info.device_name}"
+
     _run("Load model", _load)
 
     if not engine._loaded:
@@ -416,6 +445,7 @@ def smoke(
                 f"{r.metrics.frames_input}→{r.metrics.frames_after_dedup}f, "
                 f"{r.metrics.tokens_per_sec:.0f} tok/s, {len(r.text)} chars"
             )
+
         _run(v["label"], _video_test)
 
     # Phase 3: Streaming with real video
@@ -426,7 +456,9 @@ def smoke(
 
         async def _run_stream():
             async for chunk in engine.stream_analyze(
-                stream_path, "Describe the scene in detail. What do you see?", max_tokens=128,
+                stream_path,
+                "Describe the scene in detail. What do you see?",
+                max_tokens=128,
             ):
                 if chunk.get("text"):
                     chunks.append(chunk["text"])
@@ -435,6 +467,7 @@ def smoke(
         text = "".join(chunks)
         assert len(text.strip()) > 0, "empty streaming response"
         return f"{len(chunks)} chunks, {len(text)} chars"
+
     _run("Streaming (video)", _streaming)
 
     # Phase 4: API endpoints (using FastAPI TestClient, no server needed)
@@ -459,6 +492,7 @@ def smoke(
         assert r.status_code == 200, f"/api/inference/status → {r.status_code}"
 
         return "2 endpoints OK"
+
     _run("API endpoints", _api)
 
     # Summary
@@ -482,13 +516,18 @@ def webcam(
     source: str = typer.Option("0", "--source", "-s", help="Camera index, RTSP URL, or video file"),
     watch: str = typer.Option(
         "a person is holding something in their hand",
-        "--watch", "-w", help="Watch condition in natural language"),
+        "--watch",
+        "-w",
+        help="Watch condition in natural language",
+    ),
     model: str = typer.Option(None, "--model", "-m", help="Override model"),
     backend: str = typer.Option(None, "--backend", "-b", help="Force backend: mlx, transformers"),
     max_tokens: int = typer.Option(10, "--max-tokens", help="Max generation tokens"),
     resolution: int = typer.Option(240, "--resolution", help="Max resolution (lower=faster)"),
     no_sound: bool = typer.Option(False, "--no-sound", help="Disable audio alerts"),
-    count: bool = typer.Option(False, "--count", "-c", help="Count people, cars, dogs, cats (cumulative)"),
+    count: bool = typer.Option(
+        False, "--count", "-c", help="Count people, cars, dogs, cats (cumulative)"
+    ),
 ):
     """Live webcam/camera monitor with VLM analysis and alerts.
 
@@ -525,13 +564,20 @@ def webcam(
     # Build args
     sys.argv = [
         "webcam_gui",
-        "--source", source,
-        "--watch", watch,
-        "--frames", "1",
-        "--max-tokens", str(max_tokens),
-        "--interval", "0",
-        "--resolution", str(resolution),
-        "--model", model,
+        "--source",
+        source,
+        "--watch",
+        watch,
+        "--frames",
+        "1",
+        "--max-tokens",
+        str(max_tokens),
+        "--interval",
+        "0",
+        "--resolution",
+        str(resolution),
+        "--model",
+        model,
     ]
     if backend:
         sys.argv += ["--backend", backend]
@@ -542,6 +588,7 @@ def webcam(
 
     try:
         from trio_core._webcam_gui import main
+
         main()
     except KeyboardInterrupt:
         pass
@@ -554,17 +601,19 @@ def cam(
     user: str = typer.Option("admin", "--user", "-u", help="Camera username"),
     password: str = typer.Option("", "--password", "-p", help="Camera password"),
     rtsp: str = typer.Option(None, "--rtsp", help="Direct RTSP URL (skip discovery + ONVIF)"),
-    watch: str = typer.Option(
-        None,
-        "--watch", "-w", help="Watch condition in natural language"),
+    watch: str = typer.Option(None, "--watch", "-w", help="Watch condition in natural language"),
     model: str = typer.Option(None, "--model", "-m", help="Override model"),
     backend: str = typer.Option(None, "--backend", "-b", help="Force backend: mlx, transformers"),
     max_tokens: int = typer.Option(10, "--max-tokens", help="Max generation tokens"),
     resolution: int = typer.Option(240, "--resolution", help="Max resolution (lower=faster)"),
     discover: bool = typer.Option(False, "--discover", help="Discover cameras and exit"),
     no_sound: bool = typer.Option(False, "--no-sound", help="Disable audio alerts"),
-    count: bool = typer.Option(False, "--count", "-c", help="Count people, cars, dogs, cats (cumulative)"),
-    digest: bool = typer.Option(False, "--digest", "-d", help="Smart event timeline with scene understanding"),
+    count: bool = typer.Option(
+        False, "--count", "-c", help="Count people, cars, dogs, cats (cumulative)"
+    ),
+    digest: bool = typer.Option(
+        False, "--digest", "-d", help="Smart event timeline with scene understanding"
+    ),
     adapter: str = typer.Option(None, "--adapter", "-a", help="LoRA adapter directory path"),
 ):
     """IP camera monitor with ONVIF discovery and AI analysis.
@@ -642,12 +691,18 @@ def cam(
     n_frames = "3" if digest else "1"
     sys.argv = [
         "webcam_gui",
-        "--source", rtsp_url,
-        "--frames", n_frames,
-        "--max-tokens", str(max_tokens),
-        "--interval", "0",
-        "--resolution", str(resolution),
-        "--model", model,
+        "--source",
+        rtsp_url,
+        "--frames",
+        n_frames,
+        "--max-tokens",
+        str(max_tokens),
+        "--interval",
+        "0",
+        "--resolution",
+        str(resolution),
+        "--model",
+        model,
     ]
     if watch:
         sys.argv += ["--watch", watch]
@@ -664,6 +719,7 @@ def cam(
 
     try:
         from trio_core._webcam_gui import main
+
         main()
     except KeyboardInterrupt:
         pass
@@ -675,7 +731,10 @@ def _die_load_error(e: Exception, model: str) -> None:
     typer.echo(f"\n✗ Failed to load model: {model}", err=True)
     if "does not appear to have" in msg or "404" in msg or "not found" in msg.lower():
         typer.echo("  Model not found on HuggingFace. Check the model ID.", err=True)
-        typer.echo("  Example: trio analyze --model mlx-community/Qwen2.5-VL-3B-Instruct-4bit video.mp4", err=True)
+        typer.echo(
+            "  Example: trio analyze --model mlx-community/Qwen2.5-VL-3B-Instruct-4bit video.mp4",
+            err=True,
+        )
     elif "out of memory" in msg.lower() or "oom" in msg.lower() or isinstance(e, MemoryError):
         typer.echo("  Not enough memory. Try a smaller model (e.g. 3B-4bit).", err=True)
     elif "connection" in msg.lower() or "timeout" in msg.lower() or "resolve" in msg.lower():
@@ -690,22 +749,25 @@ def _die_load_error(e: Exception, model: str) -> None:
 
 @app.command()
 def claw(
-    gateway: str = typer.Option("ws://127.0.0.1:18789", "--gateway", "-g",
-                                help="OpenClaw Gateway WebSocket URL"),
+    gateway: str = typer.Option(
+        "ws://127.0.0.1:18789", "--gateway", "-g", help="OpenClaw Gateway WebSocket URL"
+    ),
     pair: bool = typer.Option(False, "--pair", help="Pair with Gateway (first-time setup)"),
     name: str = typer.Option("trio-core", "--name", "-n", help="Display name for this node"),
     model: str = typer.Option(None, "--model", "-m", help="Override model"),
-    camera: list[str] = typer.Option([], "--camera", "-c",
-                                     help="Camera source (RTSP URL or device index). Repeatable."),
+    camera: list[str] = typer.Option(
+        [], "--camera", "-c", help="Camera source (RTSP URL or device index). Repeatable."
+    ),
     adapter: str = typer.Option(None, "--adapter", "-a", help="LoRA adapter directory"),
-    token: str = typer.Option(None, "--token", "-t",
-                              help="Gateway auth token (pre-shared secret)"),
+    token: str = typer.Option(None, "--token", "-t", help="Gateway auth token (pre-shared secret)"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Debug logging"),
     json_logs: bool = typer.Option(False, "--json-logs", help="Structured JSON logging"),
-    health_port: int = typer.Option(0, "--health-port",
-                                    help="Enable health/metrics HTTP server on this port (e.g. 9090)"),
-    config: str = typer.Option(None, "--config",
-                               help="YAML config file (alternative to CLI flags)"),
+    health_port: int = typer.Option(
+        0, "--health-port", help="Enable health/metrics HTTP server on this port (e.g. 9090)"
+    ),
+    config: str = typer.Option(
+        None, "--config", help="YAML config file (alternative to CLI flags)"
+    ),
 ):
     """Connect trio-core as an OpenClaw node (replaces TrioClaw).
 
@@ -750,8 +812,8 @@ def claw(
     logging.getLogger("trio.claw").setLevel(logging.DEBUG if verbose else logging.INFO)
 
     try:
-        from trio_core.claw.node import ClawNode
         from trio_core.claw.commands import CommandHandler
+        from trio_core.claw.node import ClawNode
     except ImportError as e:
         typer.echo(f"Missing dependency: {e}")
         typer.echo("Install with: pip install 'trio-core[claw]'")
@@ -763,8 +825,8 @@ def claw(
         if token:
             node.token = token  # gateway auth token for initial connect
         try:
-            device_token = asyncio.run(node.pair(display_name=name))
-            typer.echo(f"Paired! Token saved to ~/.trio/claw_state.json")
+            asyncio.run(node.pair(display_name=name))
+            typer.echo("Paired! Token saved to ~/.trio/claw_state.json")
         except Exception as e:
             typer.echo(f"Pairing failed: {e}", err=True)
             raise typer.Exit(1)
@@ -775,7 +837,8 @@ def claw(
     if model or not camera:
         # Load VLM engine if model specified or no camera-only mode
         try:
-            from trio_core import TrioCore, EngineConfig
+            from trio_core import EngineConfig, TrioCore
+
             config_kwargs = {}
             if model:
                 config_kwargs["model"] = model
@@ -810,6 +873,7 @@ def claw(
         health_server = None
         if health_port:
             from trio_core.claw.health import HealthServer
+
             health_server = HealthServer(node, port=health_port)
             await health_server.start()
         try:
@@ -833,6 +897,7 @@ def _load_claw_config(path: str) -> dict:
         raise typer.Exit(1)
 
     from pathlib import Path
+
     p = Path(path)
     if not p.exists():
         typer.echo(f"Config file not found: {path}", err=True)

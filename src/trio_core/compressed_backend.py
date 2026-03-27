@@ -16,8 +16,8 @@ from typing import Generator
 
 import numpy as np
 
-from trio_core.backends import MLXBackend, GenerationResult, StreamChunk
-from trio_core.token_compression import TokenCompressor, CompressionResult
+from trio_core.backends import GenerationResult, MLXBackend, StreamChunk
+from trio_core.token_compression import CompressionResult, TokenCompressor
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +41,7 @@ class CompressedMLXBackend(MLXBackend):
     def load(self) -> None:
         super().load()
         from trio_core.model_adapter import get_adapter
+
         self._adapter = get_adapter(self._model)
 
     @property
@@ -48,24 +49,37 @@ class CompressedMLXBackend(MLXBackend):
         return "mlx-compressed"
 
     def generate(
-        self, frames: np.ndarray, prompt: str, *,
-        max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
+        self,
+        frames: np.ndarray,
+        prompt: str,
+        *,
+        max_tokens: int = 512,
+        temperature: float = 0.0,
+        top_p: float = 1.0,
     ) -> GenerationResult:
         tic = time.perf_counter()
         y, prompt_cache, prompt_token_count = self._custom_prefill(
-            frames, prompt, temperature, top_p,
+            frames,
+            prompt,
+            temperature,
+            top_p,
         )
         prompt_tps = prompt_token_count / max(time.perf_counter() - tic, 1e-9)
 
         return self._run_ar_decode(
-            y, prompt_cache,
-            max_tokens=max_tokens, temperature=temperature, top_p=top_p,
-            prompt_token_count=prompt_token_count, prompt_tps=prompt_tps,
+            y,
+            prompt_cache,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            prompt_token_count=prompt_token_count,
+            prompt_tps=prompt_tps,
         )
 
     def _custom_prefill(self, frames, prompt, temperature, top_p):
         """Run compressed prefill, return (first_token, prompt_cache, prompt_token_count)."""
         import mlx.core as mx
+
         from trio_core.generate import make_prompt_cache, make_sampler
 
         formatted, kwargs = self._prepare(frames, prompt)
@@ -91,7 +105,8 @@ class CompressedMLXBackend(MLXBackend):
 
         logger.info(
             "Visual token compression: %d → %d (%.0f%% reduction)",
-            original_count, compressed_count,
+            original_count,
+            compressed_count,
             (1 - comp_result.ratio) * 100,
         )
 
@@ -107,18 +122,23 @@ class CompressedMLXBackend(MLXBackend):
         compressed_grid = None
         if adapter.uses_mrope:
             compressed_grid = self._compute_compressed_grid(
-                grid_thw, original_count, compressed_count,
+                grid_thw,
+                original_count,
+                compressed_count,
                 spatial_merge_size=adapter.spatial_merge_size,
             )
             # Compute actual tokens this grid produces
             grid_token_count = 0
             for i in range(compressed_grid.shape[0]):
                 t_g, h_g, w_g = [x.item() for x in compressed_grid[i]]
-                grid_token_count += t_g * (h_g // adapter.spatial_merge_size) * (w_g // adapter.spatial_merge_size)
+                grid_token_count += (
+                    t_g * (h_g // adapter.spatial_merge_size) * (w_g // adapter.spatial_merge_size)
+                )
             if grid_token_count != compressed_count:
                 logger.debug(
                     "Grid adjustment: compressed_count=%d → grid_token_count=%d",
-                    compressed_count, grid_token_count,
+                    compressed_count,
+                    grid_token_count,
                 )
                 effective_count = grid_token_count
                 # Also trim/pad compressed_hidden to match
@@ -148,7 +168,9 @@ class CompressedMLXBackend(MLXBackend):
 
         text_embeds = model.language_model.model.embed_tokens(new_input_ids)
         merge_result = adapter.merge_visual_features(
-            compressed_hidden, text_embeds, new_input_ids,
+            compressed_hidden,
+            text_embeds,
+            new_input_ids,
         )
         final_embeds = merge_result.embeds
 
@@ -159,14 +181,18 @@ class CompressedMLXBackend(MLXBackend):
             else:
                 kw_grid["image_grid_thw"] = compressed_grid
             position_ids, rope_deltas = adapter.compute_position_ids(
-                new_input_ids, attention_mask=new_mask, **kw_grid,
+                new_input_ids,
+                attention_mask=new_mask,
+                **kw_grid,
             )
             model.language_model._position_ids = position_ids
             model.language_model._rope_deltas = rope_deltas
 
         prompt_cache = make_prompt_cache(model.language_model)
         outputs = model.language_model(
-            new_input_ids, inputs_embeds=final_embeds, cache=prompt_cache,
+            new_input_ids,
+            inputs_embeds=final_embeds,
+            cache=prompt_cache,
         )
         logits = outputs.logits[:, -1, :]
 
@@ -178,22 +204,34 @@ class CompressedMLXBackend(MLXBackend):
         return y, prompt_cache, new_input_ids.size
 
     def stream_generate(
-        self, frames: np.ndarray, prompt: str, *,
-        max_tokens: int = 512, temperature: float = 0.0, top_p: float = 1.0,
+        self,
+        frames: np.ndarray,
+        prompt: str,
+        *,
+        max_tokens: int = 512,
+        temperature: float = 0.0,
+        top_p: float = 1.0,
     ) -> Generator[StreamChunk, None, None]:
         """Real token-by-token streaming with compressed prefill."""
         y, prompt_cache, prompt_token_count = self._custom_prefill(
-            frames, prompt, temperature, top_p,
+            frames,
+            prompt,
+            temperature,
+            top_p,
         )
         yield from self._run_ar_stream_decode(
-            y, prompt_cache,
-            max_tokens=max_tokens, temperature=temperature, top_p=top_p,
+            y,
+            prompt_cache,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
             prompt_token_count=prompt_token_count,
         )
 
     @staticmethod
-    def _compute_compressed_grid(grid_thw, original_count: int, compressed_count: int,
-                                  spatial_merge_size: int = 2):
+    def _compute_compressed_grid(
+        grid_thw, original_count: int, compressed_count: int, spatial_merge_size: int = 2
+    ):
         """Compute grid_thw that produces exactly compressed_count tokens.
 
         grid_thw values are pre-merge (before PatchMerger's NxN spatial merge).

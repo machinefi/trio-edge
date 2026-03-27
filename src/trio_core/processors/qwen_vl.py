@@ -267,18 +267,27 @@ class QwenVLProcessor:
             w, h = img.size
 
             target_h, target_w = smart_resize_image(
-                h, w,
+                h,
+                w,
                 factor=factor,
                 min_pixels=self.image_min_pixels,
                 max_pixels=self.image_max_pixels,
             )
 
             processed = _pil_to_processed(
-                img, target_h, target_w,
-                self.image_mean, self.image_std,
+                img,
+                target_h,
+                target_w,
+                self.image_mean,
+                self.image_std,
             )
             flat, grid = _process_pixels_to_patches(
-                [processed], target_h, target_w, ps, tp, ms,
+                [processed],
+                target_h,
+                target_w,
+                ps,
+                tp,
+                ms,
             )
             all_patches.append(flat)
             all_grids.append(list(grid))
@@ -321,17 +330,24 @@ class QwenVLProcessor:
             ]
 
             flat, grid = _process_pixels_to_patches(
-                processed, target_h, target_w, ps, tp, ms,
+                processed,
+                target_h,
+                target_w,
+                ps,
+                tp,
+                ms,
             )
             all_patches.append(flat)
             all_grids.append(list(grid))
 
             # Metadata for Qwen3 timestamps
-            all_metadata.append({
-                "num_frames": num_frames,
-                "fps": 24.0,  # default assumption for PIL frame lists
-                "frames_indices": list(range(num_frames)),
-            })
+            all_metadata.append(
+                {
+                    "num_frames": num_frames,
+                    "fps": 24.0,  # default assumption for PIL frame lists
+                    "frames_indices": list(range(num_frames)),
+                }
+            )
 
         pixel_values_videos = np.concatenate(all_patches, axis=0).astype(np.float32)
         video_grid_thw = np.array(all_grids, dtype=np.int64)
@@ -346,7 +362,7 @@ class QwenVLProcessor:
 
     def _replace_image_tokens(self, text: str, image_grid_thw: np.ndarray) -> str:
         """Replace <|image_pad|> with correct count based on grid_thw."""
-        merge_length = self.image_merge_size ** 2
+        merge_length = self.image_merge_size**2
         idx = 0
         while self.image_token in text and idx < len(image_grid_thw):
             num_tokens = int(np.prod(image_grid_thw[idx])) // merge_length
@@ -360,10 +376,13 @@ class QwenVLProcessor:
         return text
 
     def _replace_video_tokens(
-        self, text: str, video_grid_thw: np.ndarray, metadata: list[dict],
+        self,
+        text: str,
+        video_grid_thw: np.ndarray,
+        metadata: list[dict],
     ) -> str:
         """Replace <|video_pad|> with correct count, adding timestamps for Qwen3."""
-        merge_length = self.video_merge_size ** 2
+        merge_length = self.video_merge_size**2
         idx = 0
         full_token = f"{self.vision_start_token}{self.video_token}{self.vision_end_token}"
 
@@ -375,7 +394,9 @@ class QwenVLProcessor:
                 # Qwen3 style: per-frame timestamps + vision tokens
                 meta = metadata[idx]
                 timestamps = self._calculate_timestamps(
-                    meta["frames_indices"], meta["fps"], self.video_temporal_patch_size,
+                    meta["frames_indices"],
+                    meta["fps"],
+                    self.video_temporal_patch_size,
                 )
                 frame_seqlen = int(np.prod(grid[1:])) // merge_length
                 video_placeholder = ""
@@ -403,7 +424,9 @@ class QwenVLProcessor:
 
     @staticmethod
     def _calculate_timestamps(
-        indices: list[int], fps: float, temporal_patch_size: int = 2,
+        indices: list[int],
+        fps: float,
+        temporal_patch_size: int = 2,
     ) -> list[float]:
         """Average timestamps within temporal patch groups (Qwen3 style)."""
         indices = list(indices)
@@ -469,12 +492,16 @@ class QwenVLProcessor:
                     text[i] = self._replace_image_tokens(text[i], image_grid_thw)
                 if video_grid_thw is not None:
                     text[i] = self._replace_video_tokens(
-                        text[i], video_grid_thw, video_metadata or [],
+                        text[i],
+                        video_grid_thw,
+                        video_metadata or [],
                     )
 
             # Tokenize
             tok_out = self.tokenizer(
-                text, padding=padding, return_attention_mask=True,
+                text,
+                padding=padding,
+                return_attention_mask=True,
             )
             result["input_ids"] = np.array(tok_out["input_ids"], dtype=np.int64)
             result["attention_mask"] = np.array(tok_out["attention_mask"], dtype=np.int64)

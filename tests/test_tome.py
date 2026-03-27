@@ -5,12 +5,12 @@ import pytest
 mx = pytest.importorskip("mlx.core")
 nn = pytest.importorskip("mlx.nn")
 
-from trio_core.tome import bipartite_soft_matching, merge_tokens, compute_k_metric
-
+from trio_core.tome import bipartite_soft_matching, compute_k_metric, merge_tokens
 
 # ---------------------------------------------------------------------------
 # bipartite_soft_matching
 # ---------------------------------------------------------------------------
+
 
 class TestBipartiteSoftMatching:
     def test_basic_n16_r4(self):
@@ -104,6 +104,7 @@ class TestBipartiteSoftMatching:
 # merge_tokens
 # ---------------------------------------------------------------------------
 
+
 class TestMergeTokens:
     def test_shape_preservation(self):
         """Basic merge: (N,D) → (N-r, D)."""
@@ -177,7 +178,7 @@ class TestMergeTokens:
         merged, _ = merge_tokens(x, dst_idx, src_dst_map)
 
         # dst_idx has the kept indices; those not in src_dst_map should be unchanged
-        src_set = set(src_dst_map[:, 0].tolist())
+        set(src_dst_map[:, 0].tolist())
         dst_set = set(src_dst_map[:, 1].tolist())
         for pos, orig_idx in enumerate(dst_idx.tolist()):
             if orig_idx not in dst_set:
@@ -189,6 +190,7 @@ class TestMergeTokens:
 # ---------------------------------------------------------------------------
 # compute_k_metric
 # ---------------------------------------------------------------------------
+
 
 class _MockAttn:
     """Minimal mock of a ViT block's attention sub-module."""

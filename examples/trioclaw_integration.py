@@ -20,7 +20,6 @@ Then run this:
 
 import argparse
 import base64
-import io
 import json
 import time
 import urllib.request
@@ -50,10 +49,12 @@ def analyze_frame(base_url: str, frame, question: str) -> dict:
     _, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
     b64 = base64.b64encode(jpeg.tobytes()).decode()
 
-    payload = json.dumps({
-        "frame_b64": b64,
-        "question": question,
-    }).encode()
+    payload = json.dumps(
+        {
+            "frame_b64": b64,
+            "question": question,
+        }
+    ).encode()
 
     req = urllib.request.Request(
         f"{base_url}/analyze-frame",
@@ -70,7 +71,9 @@ def main():
     parser.add_argument("--camera", type=int, default=0, help="Camera index")
     parser.add_argument("--question", "-q", default="Is there a person?")
     parser.add_argument("--interval", type=float, default=3.0, help="Seconds between checks")
-    parser.add_argument("--max-checks", type=int, default=0, help="Stop after N checks (0=unlimited)")
+    parser.add_argument(
+        "--max-checks", type=int, default=0, help="Stop after N checks (0=unlimited)"
+    )
     args = parser.parse_args()
 
     # Step 1: Health check

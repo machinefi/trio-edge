@@ -8,8 +8,6 @@ import sys
 import websockets
 
 from trio_core.claw.protocol import (
-    connect_params,
-    load_or_create_identity,
     make_req,
 )
 
@@ -29,7 +27,7 @@ async def main():
     ws = await websockets.connect(GATEWAY)
     try:
         # 1. Challenge
-        frame = json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
+        json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
 
         # 2. Connect as operator (no device identity, just gateway token)
         params = {
@@ -44,7 +42,13 @@ async def main():
                 "mode": "cli",
             },
             "role": "operator",
-            "scopes": ["operator.admin", "operator.write", "operator.read", "operator.approvals", "operator.pairing"],
+            "scopes": [
+                "operator.admin",
+                "operator.write",
+                "operator.read",
+                "operator.approvals",
+                "operator.pairing",
+            ],
             "auth": {"token": TOKEN},
             "caps": [],
             "commands": [],
@@ -61,12 +65,15 @@ async def main():
 
         # 4. Send invoke
         invoke_id = "test-inv-1"
-        invoke_req = make_req("node.invoke", {
-            "nodeId": NODE_ID,
-            "command": COMMAND,
-            "params": PARAMS,
-            "idempotencyKey": f"test-{invoke_id}",
-        })
+        invoke_req = make_req(
+            "node.invoke",
+            {
+                "nodeId": NODE_ID,
+                "command": COMMAND,
+                "params": PARAMS,
+                "idempotencyKey": f"test-{invoke_id}",
+            },
+        )
         invoke_req["id"] = invoke_id
         await ws.send(json.dumps(invoke_req))
         print(f"Sent invoke: {COMMAND} -> node {NODE_ID}")
@@ -82,7 +89,7 @@ async def main():
                 break
             elif msg.get("type") == "event" and msg.get("event") == "node.invoke.result":
                 payload = json.loads(msg.get("payloadJSON", "{}"))
-                print(f"\nResult event:")
+                print("\nResult event:")
                 print(json.dumps(payload, indent=2, ensure_ascii=False)[:2000])
                 break
             # skip other events

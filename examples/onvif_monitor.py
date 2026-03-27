@@ -29,7 +29,6 @@ Requires:
 from __future__ import annotations
 
 import argparse
-import atexit
 import shutil
 import subprocess
 import sys
@@ -37,7 +36,6 @@ import time
 from urllib.parse import quote, urlparse
 
 import numpy as np
-
 
 # ── ONVIF Discovery ─────────────────────────────────────────────────────────
 
@@ -80,13 +78,15 @@ def discover_cameras(timeout: int = 5) -> list[dict]:
                 name = s.split("/hardware/")[-1]
                 break
 
-        cameras.append({
-            "name": name,
-            "ip": parsed.hostname,
-            "port": parsed.port or 80,
-            "onvif_url": addr,
-            "scopes": scopes,
-        })
+        cameras.append(
+            {
+                "name": name,
+                "ip": parsed.hostname,
+                "port": parsed.port or 80,
+                "onvif_url": addr,
+                "scopes": scopes,
+            }
+        )
 
     return cameras
 
@@ -114,10 +114,12 @@ def get_rtsp_uri(host: str, port: int, user: str, password: str) -> str | None:
             "Stream": "RTP-Unicast",
             "Transport": {"Protocol": "RTSP"},
         }
-        uri_obj = media.GetStreamUri({
-            "StreamSetup": stream_setup,
-            "ProfileToken": profile.token,
-        })
+        uri_obj = media.GetStreamUri(
+            {
+                "StreamSetup": stream_setup,
+                "ProfileToken": profile.token,
+            }
+        )
 
         rtsp_uri = uri_obj.Uri
         print(f"  Profile: {profile.Name}")
@@ -181,6 +183,7 @@ class RTSPReader:
         # Try PyAV first
         try:
             import av
+
             self._container = av.open(
                 effective_url,
                 options={"rtsp_transport": "tcp", "stimeout": "10000000"},
@@ -204,15 +207,29 @@ class RTSPReader:
         ffprobe = shutil.which("ffprobe")
         ffmpeg = shutil.which("ffmpeg")
         if not ffprobe or not ffmpeg:
-            raise RuntimeError("Neither PyAV nor ffmpeg available. Install one:\n"
-                               "  pip install av    OR    brew install ffmpeg")
+            raise RuntimeError(
+                "Neither PyAV nor ffmpeg available. Install one:\n"
+                "  pip install av    OR    brew install ffmpeg"
+            )
 
         probe = subprocess.run(
-            [ffprobe, "-v", "error", "-rtsp_transport", "tcp",
-             "-select_streams", "v:0",
-             "-show_entries", "stream=width,height",
-             "-of", "csv=p=0", effective_url],
-            capture_output=True, text=True, timeout=15,
+            [
+                ffprobe,
+                "-v",
+                "error",
+                "-rtsp_transport",
+                "tcp",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=width,height",
+                "-of",
+                "csv=p=0",
+                effective_url,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=15,
         )
         if probe.returncode != 0 or not probe.stdout.strip():
             raise IOError(
@@ -226,14 +243,27 @@ class RTSPReader:
         print(f"  Stream: {self.width}x{self.height} (ffmpeg)")
 
         cmd = [
-            ffmpeg, "-rtsp_transport", "tcp",
-            "-i", effective_url,
-            "-vf", f"fps={self.fps}",
-            "-f", "rawvideo", "-pix_fmt", "rgb24",
-            "-an", "-sn", "-v", "error", "-",
+            ffmpeg,
+            "-rtsp_transport",
+            "tcp",
+            "-i",
+            effective_url,
+            "-vf",
+            f"fps={self.fps}",
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "rgb24",
+            "-an",
+            "-sn",
+            "-v",
+            "error",
+            "-",
         ]
         self._proc = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             bufsize=self.width * self.height * 3 * 2,
         )
         self._backend = "ffmpeg"
@@ -264,9 +294,7 @@ class RTSPReader:
         raw = self._proc.stdout.read(nbytes)
         if len(raw) != nbytes:
             return None
-        return np.frombuffer(raw, dtype=np.uint8).reshape(
-            (self.height, self.width, 3)
-        )
+        return np.frombuffer(raw, dtype=np.uint8).reshape((self.height, self.width, 3))
 
     def stop(self):
         if self._container:
@@ -301,8 +329,8 @@ def monitor(rtsp_url: str, condition: str, interval: float, max_tokens: int):
     prompt = f"Answer YES or NO: {condition}"
 
     with RTSPReader(rtsp_url, fps=1.0) as reader:
-        print(f"\nMonitoring — \"{condition}\"")
-        print(f"Press Ctrl+C to stop.\n")
+        print(f'\nMonitoring — "{condition}"')
+        print("Press Ctrl+C to stop.\n")
 
         alert_count = 0
         check_count = 0
@@ -356,10 +384,15 @@ examples:
     p.add_argument("--user", "-u", default="admin", help="Camera username")
     p.add_argument("--password", "-p", default="", help="Camera password")
     p.add_argument("--rtsp", help="Direct RTSP URL (skip discovery + ONVIF)")
-    p.add_argument("--condition", "-c", default="Is there a person?",
-                    help="What to watch for (yes/no question)")
-    p.add_argument("--interval", type=float, default=3.0,
-                    help="Seconds between checks (default: 3.0)")
+    p.add_argument(
+        "--condition",
+        "-c",
+        default="Is there a person?",
+        help="What to watch for (yes/no question)",
+    )
+    p.add_argument(
+        "--interval", type=float, default=3.0, help="Seconds between checks (default: 3.0)"
+    )
     p.add_argument("--max-tokens", type=int, default=40)
     args = p.parse_args()
 

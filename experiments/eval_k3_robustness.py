@@ -26,16 +26,18 @@ def _make_events(descriptions: list[str], hours_spread: int = 16) -> list[dict]:
     for i, desc in enumerate(descriptions):
         h = (i * hours_spread) // len(descriptions)
         ts = base + timedelta(hours=h, minutes=(i % 4) * 15)
-        events.append({
-            "id": f"evt_{i:04d}",
-            "timestamp": ts.isoformat(),
-            "camera_id": "cam_test",
-            "camera_name": "Test Camera",
-            "description": desc,
-            "frame_path": None,
-            "alert_triggered": False,
-            "metadata": {},
-        })
+        events.append(
+            {
+                "id": f"evt_{i:04d}",
+                "timestamp": ts.isoformat(),
+                "camera_id": "cam_test",
+                "camera_name": "Test Camera",
+                "description": desc,
+                "frame_path": None,
+                "alert_triggered": False,
+                "metadata": {},
+            }
+        )
     return events
 
 
@@ -160,10 +162,7 @@ def run_scenario(name: str, descriptions: list[str]) -> dict:
         "events": len(events),
         "insights_count": len(insights),
         "k3_met": len(insights) >= 5,
-        "insights": [
-            {"type": ins.insight_type, "text": ins.text}
-            for ins in insights
-        ],
+        "insights": [{"type": ins.insight_type, "text": ins.text} for ins in insights],
     }
 
 

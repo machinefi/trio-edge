@@ -10,17 +10,20 @@ Requires: pip install 'trio-core[mlx]' or pip install 'trio-core[transformers]'
 """
 
 import argparse
-import sys
 import time
 
-from trio_core import TrioCore, EngineConfig, get_profile
+from trio_core import EngineConfig, TrioCore, get_profile
 
 
 def main():
     parser = argparse.ArgumentParser(description="Analyze a video file with VLM")
     parser.add_argument("video", help="Path to video file or URL")
-    parser.add_argument("--prompt", "-p", default="Describe what is happening in this video.",
-                        help="Question to ask")
+    parser.add_argument(
+        "--prompt",
+        "-p",
+        default="Describe what is happening in this video.",
+        help="Question to ask",
+    )
     parser.add_argument("--model", "-m", default=None, help="Model name")
     parser.add_argument("--backend", "-b", default=None, help="Force backend: mlx or transformers")
     parser.add_argument("--fps", type=float, default=2.0, help="Target FPS for frame extraction")
@@ -49,8 +52,10 @@ def main():
     engine.load()
 
     profile = get_profile(config.model)
-    print(f"Profile: {profile.family} {profile.param_size} "
-          f"(merge_factor={profile.merge_factor}, max_visual_tokens={profile.max_visual_tokens})")
+    print(
+        f"Profile: {profile.family} {profile.param_size} "
+        f"(merge_factor={profile.merge_factor}, max_visual_tokens={profile.max_visual_tokens})"
+    )
     print(f"Analyzing: {args.video}")
     print(f"Prompt: {args.prompt}")
     print("-" * 60)

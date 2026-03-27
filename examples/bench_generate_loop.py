@@ -32,8 +32,7 @@ def prepare_inputs(backend, frames, prompt):
     return input_ids, pixel_values, mask, kwargs
 
 
-def bench_mlx_vlm(model, processor, input_ids, pixel_values, mask, kwargs,
-                   max_tokens, temperature):
+def bench_mlx_vlm(model, processor, input_ids, pixel_values, mask, kwargs, max_tokens, temperature):
     """Benchmark mlx-vlm's original generate_step."""
     from mlx_vlm.generate import generate_step as mlxvlm_generate_step
 
@@ -48,8 +47,12 @@ def bench_mlx_vlm(model, processor, input_ids, pixel_values, mask, kwargs,
 
     for n, (token, logprobs) in enumerate(
         mlxvlm_generate_step(
-            input_ids, model, pixel_values, mask,
-            max_tokens=max_tokens, temperature=temperature,
+            input_ids,
+            model,
+            pixel_values,
+            mask,
+            max_tokens=max_tokens,
+            temperature=temperature,
             **kwargs,
         )
     ):
@@ -78,10 +81,20 @@ def bench_mlx_vlm(model, processor, input_ids, pixel_values, mask, kwargs,
     }
 
 
-def bench_trio_core(model, processor, input_ids, pixel_values, mask, kwargs,
-                     max_tokens, temperature, use_cache_manager=False):
+def bench_trio_core(
+    model,
+    processor,
+    input_ids,
+    pixel_values,
+    mask,
+    kwargs,
+    max_tokens,
+    temperature,
+    use_cache_manager=False,
+):
     """Benchmark trio-core's generate_step."""
-    from trio_core.generate import generate_step as trio_generate_step, PromptCache
+    from trio_core.generate import PromptCache
+    from trio_core.generate import generate_step as trio_generate_step
 
     tokenizer = processor.tokenizer if hasattr(processor, "tokenizer") else processor
     tokenizer.stopping_criteria.reset(model.config.eos_token_id)
@@ -96,8 +109,12 @@ def bench_trio_core(model, processor, input_ids, pixel_values, mask, kwargs,
 
     for n, (token, logprobs) in enumerate(
         trio_generate_step(
-            input_ids, model, pixel_values, mask,
-            max_tokens=max_tokens, temperature=temperature,
+            input_ids,
+            model,
+            pixel_values,
+            mask,
+            max_tokens=max_tokens,
+            temperature=temperature,
             prompt_cache_manager=cache_mgr,
             **kwargs,
         )
@@ -129,8 +146,7 @@ def bench_trio_core(model, processor, input_ids, pixel_values, mask, kwargs,
 
 def main():
     parser = argparse.ArgumentParser(description="Generate loop A/B benchmark")
-    parser.add_argument("--model", "-m",
-                        default="mlx-community/Qwen2.5-VL-3B-Instruct-4bit")
+    parser.add_argument("--model", "-m", default="mlx-community/Qwen2.5-VL-3B-Instruct-4bit")
     parser.add_argument("--runs", "-n", type=int, default=5)
     parser.add_argument("--max-tokens", type=int, default=64)
     parser.add_argument("--temperature", type=float, default=0.0)
@@ -157,11 +173,13 @@ def main():
     print("Warmup (mlx-vlm)...")
     input_ids, pv, mask, kw = all_inputs[0]
     _ = bench_mlx_vlm(model, processor, input_ids, pv, mask, kw, 8, args.temperature)
-    mx.clear_cache(); gc.collect()
+    mx.clear_cache()
+    gc.collect()
 
     print("Warmup (trio-core)...")
     _ = bench_trio_core(model, processor, input_ids, pv, mask, kw, 8, args.temperature)
-    mx.clear_cache(); gc.collect()
+    mx.clear_cache()
+    gc.collect()
     print()
 
     # --- Benchmark ---
@@ -173,34 +191,44 @@ def main():
 
         # Alternate order to reduce bias
         if i % 2 == 0:
-            r_mlx = bench_mlx_vlm(model, processor, input_ids, pv, mask, kw,
-                                   args.max_tokens, args.temperature)
-            mx.clear_cache(); gc.collect()
-            r_trio = bench_trio_core(model, processor, input_ids, pv, mask, kw,
-                                     args.max_tokens, args.temperature)
-            mx.clear_cache(); gc.collect()
+            r_mlx = bench_mlx_vlm(
+                model, processor, input_ids, pv, mask, kw, args.max_tokens, args.temperature
+            )
+            mx.clear_cache()
+            gc.collect()
+            r_trio = bench_trio_core(
+                model, processor, input_ids, pv, mask, kw, args.max_tokens, args.temperature
+            )
+            mx.clear_cache()
+            gc.collect()
         else:
-            r_trio = bench_trio_core(model, processor, input_ids, pv, mask, kw,
-                                     args.max_tokens, args.temperature)
-            mx.clear_cache(); gc.collect()
-            r_mlx = bench_mlx_vlm(model, processor, input_ids, pv, mask, kw,
-                                   args.max_tokens, args.temperature)
-            mx.clear_cache(); gc.collect()
+            r_trio = bench_trio_core(
+                model, processor, input_ids, pv, mask, kw, args.max_tokens, args.temperature
+            )
+            mx.clear_cache()
+            gc.collect()
+            r_mlx = bench_mlx_vlm(
+                model, processor, input_ids, pv, mask, kw, args.max_tokens, args.temperature
+            )
+            mx.clear_cache()
+            gc.collect()
 
         mlxvlm_results.append(r_mlx)
         trio_results.append(r_trio)
 
-        print(f"Run {i+1}/{args.runs}:  "
-              f"mlx-vlm prefill={r_mlx['prefill_ms']:.0f}ms decode={r_mlx['decode_ms']:.0f}ms  |  "
-              f"trio-core prefill={r_trio['prefill_ms']:.0f}ms decode={r_trio['decode_ms']:.0f}ms")
+        print(
+            f"Run {i + 1}/{args.runs}:  "
+            f"mlx-vlm prefill={r_mlx['prefill_ms']:.0f}ms decode={r_mlx['decode_ms']:.0f}ms  |  "
+            f"trio-core prefill={r_trio['prefill_ms']:.0f}ms decode={r_trio['decode_ms']:.0f}ms"
+        )
 
     # --- Summary ---
     def avg(results, key):
         return np.mean([r[key] for r in results])
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"  {'Metric':<25} {'mlx-vlm':>12} {'trio-core':>12} {'diff':>10}")
-    print(f"  {'-'*25} {'-'*12} {'-'*12} {'-'*10}")
+    print(f"  {'-' * 25} {'-' * 12} {'-' * 12} {'-' * 10}")
 
     for key, label in [
         ("prefill_ms", "Prefill (ms)"),
@@ -219,7 +247,7 @@ def main():
             sign = "+" if diff_pct > 0 else ""
         print(f"  {label:<25} {a:>12.1f} {b:>12.1f} {sign}{diff_pct:>8.1f}%")
 
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     # Correctness check: same temperature=0 should produce same text
     if args.temperature == 0.0:

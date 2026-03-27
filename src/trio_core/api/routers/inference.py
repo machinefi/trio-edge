@@ -9,7 +9,6 @@ Memory savings: 3GB VLM + 0.3GB YOLO loaded once vs per-pipeline.
 from __future__ import annotations
 
 import base64
-import io
 import logging
 import time
 
@@ -24,17 +23,24 @@ router = APIRouter(prefix="/api/inference", tags=["inference"])
 
 # Semaphore to serialize VLM requests — prevents thread exhaustion under concurrent load
 import asyncio as _asyncio
+
 _vlm_semaphore = _asyncio.Semaphore(1)
 
 import re as _re
-_THINK_RE = _re.compile(r'<think>.*?</think>', _re.DOTALL)
+
+_THINK_RE = _re.compile(r"<think>.*?</think>", _re.DOTALL)
+
 
 def _strip_thinking(text: str) -> str:
     """Remove <think>...</think> blocks from VLM output (Qwen3.5 thinking mode)."""
-    text = _THINK_RE.sub('', text).strip()
+    text = _THINK_RE.sub("", text).strip()
     # Also handle unclosed <think> tag
-    if '<think>' in text:
-        text = text.split('</think>')[-1].strip() if '</think>' in text else text.split('<think>')[0].strip()
+    if "<think>" in text:
+        text = (
+            text.split("</think>")[-1].strip()
+            if "</think>" in text
+            else text.split("<think>")[0].strip()
+        )
     return text
 
 
@@ -47,8 +53,9 @@ _yolo_counter = None
 def _get_vlm():
     global _vlm_engine
     if _vlm_engine is None:
-        from trio_core.engine import TrioCore
         from trio_core.config import EngineConfig
+        from trio_core.engine import TrioCore
+
         config = EngineConfig()
         _vlm_engine = TrioCore(config)
         _vlm_engine.load()
@@ -61,7 +68,9 @@ def _get_yolo():
     if _yolo_counter is None:
         import os
         from pathlib import Path
+
         from trio_core.counter import PeopleCounter
+
         # Find model: check TRIO_YOLO_MODEL env, then relative to trio-core package
         model_path = os.environ.get("TRIO_YOLO_MODEL")
         if not model_path:
@@ -69,15 +78,21 @@ def _get_yolo():
             pkg_root = Path(__file__).resolve().parent.parent.parent.parent.parent
             model_path = str(pkg_root / "models" / "yolov10n" / "onnx" / "model.onnx")
         _yolo_counter = PeopleCounter(model_path=model_path)
-        logger.info("YOLO loaded (shared): tiled=%s, confidence=%s",
-                     _yolo_counter._tiled, _yolo_counter.detector.confidence)
+        logger.info(
+            "YOLO loaded (shared): tiled=%s, confidence=%s",
+            _yolo_counter._tiled,
+            _yolo_counter.detector.confidence,
+        )
     return _yolo_counter
 
 
 # ── Request/Response models ──
 
+
 class DescribeRequest(BaseModel):
-    image_b64: str = Field(..., max_length=14_000_000, description="Base64-encoded JPEG image (max ~10MB)")
+    image_b64: str = Field(
+        ..., max_length=14_000_000, description="Base64-encoded JPEG image (max ~10MB)"
+    )
     prompt: str = Field(
         default="Describe everything you see: people (age, gender, clothing), vehicles (color, make, type), animals.",
         max_length=4096,
@@ -91,8 +106,12 @@ class DescribeResponse(BaseModel):
 
 
 class CropDescribeRequest(BaseModel):
-    image_b64: str = Field(..., max_length=14_000_000, description="Base64-encoded JPEG of full frame (max ~10MB)")
-    crops: list[dict] = Field(default_factory=list, max_length=50, description="List of crop bboxes from YOLO detect")
+    image_b64: str = Field(
+        ..., max_length=14_000_000, description="Base64-encoded JPEG of full frame (max ~10MB)"
+    )
+    crops: list[dict] = Field(
+        default_factory=list, max_length=50, description="List of crop bboxes from YOLO detect"
+    )
     max_crops: int = Field(default=3, le=20)
     scene_prompt: str = Field(
         default="",
@@ -109,7 +128,9 @@ class CropDescribeResponse(BaseModel):
 
 
 class DetectRequest(BaseModel):
-    image_b64: str = Field(..., max_length=14_000_000, description="Base64-encoded JPEG image (max ~10MB)")
+    image_b64: str = Field(
+        ..., max_length=14_000_000, description="Base64-encoded JPEG image (max ~10MB)"
+    )
     pad_ratio: float = Field(default=0.15, ge=0.0, le=1.0)
 
 
@@ -122,6 +143,7 @@ class DetectResponse(BaseModel):
 
 
 # ── Helpers ──
+
 
 def _decode_image(b64: str) -> np.ndarray:
     """Decode base64 JPEG to BGR numpy array."""
@@ -140,6 +162,7 @@ def _frame_to_chw(frame_bgr: np.ndarray) -> np.ndarray:
 
 
 # ── Endpoints ──
+
 
 @router.post("/describe", response_model=DescribeResponse)
 async def describe(req: DescribeRequest):
@@ -173,8 +196,6 @@ async def crop_describe(req: CropDescribeRequest):
     YOLO detects objects and crops them, then VLM describes each
     entity individually before generating a full scene description.
     """
-    import asyncio
-    import json
 
     async with _vlm_semaphore:
         return await _crop_describe_inner(req)
@@ -192,7 +213,9 @@ async def _crop_describe_inner(req: CropDescribeRequest):
 
     # Phase 1: Describe individual crops
     crop_descriptions = []
-    crops_to_describe = sorted(req.crops, key=lambda c: c.get("confidence", 0), reverse=True)[:req.max_crops]
+    crops_to_describe = sorted(req.crops, key=lambda c: c.get("confidence", 0), reverse=True)[
+        : req.max_crops
+    ]
 
     for crop_info in crops_to_describe:
         bbox = crop_info.get("bbox", [])
@@ -246,7 +269,12 @@ async def _crop_describe_inner(req: CropDescribeRequest):
     )
 
     if crop_descriptions:
-        scene_prompt = f"Detailed object identification:\n" + "\n".join(f"- {cd}" for cd in crop_descriptions) + "\n\nIncorporate these details.\n\n" + scene_prompt
+        scene_prompt = (
+            "Detailed object identification:\n"
+            + "\n".join(f"- {cd}" for cd in crop_descriptions)
+            + "\n\nIncorporate these details.\n\n"
+            + scene_prompt
+        )
 
     frame_chw = _frame_to_chw(frame)
     result = await loop.run_in_executor(None, engine.analyze_frame, frame_chw, scene_prompt)
@@ -265,14 +293,14 @@ async def _crop_describe_inner(req: CropDescribeRequest):
     if clean.startswith("```"):
         clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
     if clean.endswith("```"):
-        clean = clean[:clean.rfind("```")]
+        clean = clean[: clean.rfind("```")]
     clean = clean.strip()
 
     # Try to extract JSON (from any format)
     s, e = clean.find("{"), clean.rfind("}")
     if s >= 0 and e > s:
         try:
-            entities = json.loads(clean[s:e + 1])
+            entities = json.loads(clean[s : e + 1])
         except json.JSONDecodeError:
             pass
 
@@ -287,11 +315,13 @@ async def _crop_describe_inner(req: CropDescribeRequest):
         else:
             # Build description from entities
             parts = []
-            for p in (entities.get("persons") or []):
+            for p in entities.get("persons") or []:
                 parts.append(p.get("attire", "person"))
-            for v in (entities.get("vehicles") or []):
-                parts.append(f"{v.get('color','')} {v.get('make','')} {v.get('type','')}".strip())
-            desc = f"{entities.get('people_count', 0)} people, {len(entities.get('vehicles',[]))} vehicles"
+            for v in entities.get("vehicles") or []:
+                parts.append(
+                    f"{v.get('color', '')} {v.get('make', '')} {v.get('type', '')}".strip()
+                )
+            desc = f"{entities.get('people_count', 0)} people, {len(entities.get('vehicles', []))} vehicles"
             if parts:
                 desc += ": " + ", ".join(parts[:5])
     else:
@@ -326,7 +356,16 @@ async def detect(req: DetectRequest):
         xyxy, confs, cids = await loop.run_in_executor(None, det.detect, frame)
 
     h, w = frame.shape[:2]
-    COCO = {0: "person", 1: "bicycle", 2: "car", 3: "motorcycle", 5: "bus", 7: "truck", 16: "dog", 17: "cat"}
+    COCO = {
+        0: "person",
+        1: "bicycle",
+        2: "car",
+        3: "motorcycle",
+        5: "bus",
+        7: "truck",
+        16: "dog",
+        17: "cat",
+    }
     by_class = {}
     crops_b64 = []
 
@@ -338,14 +377,16 @@ async def detect(req: DetectRequest):
         x1, y1, x2, y2 = xyxy[i].astype(int)
         pw = int((x2 - x1) * req.pad_ratio)
         ph_pad = int((y2 - y1) * req.pad_ratio)
-        cx1, cy1 = max(0, x1 - pw), max(0, y1 - ph_pad)
-        cx2, cy2 = min(w, x2 + pw), min(h, y2 + ph_pad)
+        _cx1, _cy1 = max(0, x1 - pw), max(0, y1 - ph_pad)
+        _cx2, _cy2 = min(w, x2 + pw), min(h, y2 + ph_pad)
 
-        crops_b64.append({
-            "class": name,
-            "bbox": [int(x1), int(y1), int(x2), int(y2)],
-            "confidence": round(float(confs[i]), 3),
-        })
+        crops_b64.append(
+            {
+                "class": name,
+                "bbox": [int(x1), int(y1), int(x2), int(y2)],
+                "confidence": round(float(confs[i]), 3),
+            }
+        )
 
     people = by_class.get("person", 0)
     vehicles = sum(by_class.get(k, 0) for k in ["car", "bus", "truck", "motorcycle"])

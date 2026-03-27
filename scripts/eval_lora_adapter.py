@@ -9,12 +9,11 @@ Usage:
 import argparse
 import json
 import re
-from pathlib import Path
 
 import mlx.core as mx
-from mlx_vlm import load, generate
+from mlx_vlm import generate, load
 from mlx_vlm.prompt_utils import apply_chat_template
-from mlx_vlm.utils import load_image_processor, load_config
+from mlx_vlm.utils import load_config
 
 
 def normalize(text: str) -> str:
@@ -58,7 +57,9 @@ def main():
     parser.add_argument("--val-jsonl", default="surveillance_vqa/lora_dataset/jsonl/valid.jsonl")
     parser.add_argument("--max-samples", type=int, default=None)
     parser.add_argument("--max-tokens", type=int, default=64)
-    parser.add_argument("--run-baseline", action="store_true", help="Also run without adapter for comparison")
+    parser.add_argument(
+        "--run-baseline", action="store_true", help="Also run without adapter for comparison"
+    )
     args = parser.parse_args()
 
     # Load validation data
@@ -67,7 +68,7 @@ def main():
         for line in f:
             val_data.append(json.loads(line))
     if args.max_samples:
-        val_data = val_data[:args.max_samples]
+        val_data = val_data[: args.max_samples]
     print(f"Loaded {len(val_data)} validation samples")
 
     configs_to_run = [("lora", args.adapter_path)]
@@ -75,9 +76,9 @@ def main():
         configs_to_run.append(("baseline", None))
 
     for config_name, adapter_path in configs_to_run:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Evaluating: {config_name}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         # Load model
         if adapter_path:
@@ -100,7 +101,9 @@ def main():
             # Generate
             prompt = apply_chat_template(processor, config, question, num_images=1)
             output = generate(
-                model, processor, prompt,
+                model,
+                processor,
+                prompt,
                 image=[image_path],
                 max_tokens=args.max_tokens,
                 verbose=False,
@@ -141,10 +144,10 @@ def main():
                 results_by_type[qa_type]["correct"] += 1
 
             if (i + 1) % 10 == 0:
-                print(f"  [{i+1}/{len(val_data)}] acc={correct/total:.1%} empty={empty}")
+                print(f"  [{i + 1}/{len(val_data)}] acc={correct / total:.1%} empty={empty}")
 
         print(f"\n--- {config_name} Results ---")
-        print(f"Overall: {correct}/{total} = {correct/total:.1%} (empty={empty})")
+        print(f"Overall: {correct}/{total} = {correct / total:.1%} (empty={empty})")
         for qt, res in sorted(results_by_type.items()):
             acc = res["correct"] / res["total"] if res["total"] > 0 else 0
             print(f"  {qt}: {res['correct']}/{res['total']} = {acc:.1%}")

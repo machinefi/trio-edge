@@ -14,35 +14,60 @@ from pathlib import Path
 
 def main():
     parser = argparse.ArgumentParser(description="TrioCore eval suite")
-    parser.add_argument("--output", "-o", default="eval_baseline.json",
-                        help="Output JSON path (default: eval_baseline.json)")
-    parser.add_argument("--runs", "-n", type=int, default=3,
-                        help="Number of runs per test case (default: 3)")
-    parser.add_argument("--model", "-m", default=None,
-                        help="Model name (default: auto)")
-    parser.add_argument("--max-tokens", type=int, default=64,
-                        help="Max generation tokens (default: 64)")
-    parser.add_argument("--compress", type=float, default=None,
-                        help="Enable token compression with given ratio (e.g. 0.5 = keep 50%%)")
-    parser.add_argument("--strategy", default="similarity",
-                        choices=["uniform", "similarity", "attention"],
-                        help="Compression strategy (default: similarity)")
-    parser.add_argument("--tome", type=int, default=None, metavar="R",
-                        help="Enable ToMe with r tokens merged per layer (e.g. --tome 8)")
-    parser.add_argument("--metric", default="keys", choices=["keys", "hidden"],
-                        help="ToMe similarity metric (default: keys)")
-    parser.add_argument("--min-keep", type=float, default=0.3,
-                        help="Min fraction of tokens to keep (default: 0.3)")
-    parser.add_argument("--resolution", default="480p",
-                        choices=["480p", "720p", "1080p"],
-                        help="Input resolution (default: 480p)")
-    parser.add_argument("--compare", nargs=2, metavar=("A", "B"),
-                        help="Compare two saved reports")
+    parser.add_argument(
+        "--output",
+        "-o",
+        default="eval_baseline.json",
+        help="Output JSON path (default: eval_baseline.json)",
+    )
+    parser.add_argument(
+        "--runs", "-n", type=int, default=3, help="Number of runs per test case (default: 3)"
+    )
+    parser.add_argument("--model", "-m", default=None, help="Model name (default: auto)")
+    parser.add_argument(
+        "--max-tokens", type=int, default=64, help="Max generation tokens (default: 64)"
+    )
+    parser.add_argument(
+        "--compress",
+        type=float,
+        default=None,
+        help="Enable token compression with given ratio (e.g. 0.5 = keep 50%%)",
+    )
+    parser.add_argument(
+        "--strategy",
+        default="similarity",
+        choices=["uniform", "similarity", "attention"],
+        help="Compression strategy (default: similarity)",
+    )
+    parser.add_argument(
+        "--tome",
+        type=int,
+        default=None,
+        metavar="R",
+        help="Enable ToMe with r tokens merged per layer (e.g. --tome 8)",
+    )
+    parser.add_argument(
+        "--metric",
+        default="keys",
+        choices=["keys", "hidden"],
+        help="ToMe similarity metric (default: keys)",
+    )
+    parser.add_argument(
+        "--min-keep", type=float, default=0.3, help="Min fraction of tokens to keep (default: 0.3)"
+    )
+    parser.add_argument(
+        "--resolution",
+        default="480p",
+        choices=["480p", "720p", "1080p"],
+        help="Input resolution (default: 480p)",
+    )
+    parser.add_argument("--compare", nargs=2, metavar=("A", "B"), help="Compare two saved reports")
     args = parser.parse_args()
 
     # Compare mode
     if args.compare:
         from trio_core.eval import EvalReport
+
         EvalReport.compare(args.compare[0], args.compare[1])
         return
 
@@ -73,8 +98,9 @@ def main():
         engine.load()
     elif args.compress:
         # Use compressed backend — load manually to bypass auto_backend
-        from trio_core.token_compression import TokenCompressor
         from trio_core.compressed_backend import CompressedMLXBackend
+        from trio_core.token_compression import TokenCompressor
+
         compressor = TokenCompressor(strategy=args.strategy, ratio=args.compress)
         backend = CompressedMLXBackend(config.model, compressor)
         print(f"Compression: ratio={args.compress}, strategy={args.strategy}")
@@ -97,8 +123,9 @@ def main():
     res_h, res_w = resolution_map[args.resolution]
     print(f"Resolution: {args.resolution} ({res_w}x{res_h})")
 
-    suite = EvalSuite(engine, n_runs=args.runs, max_tokens=args.max_tokens,
-                      height=res_h, width=res_w)
+    suite = EvalSuite(
+        engine, n_runs=args.runs, max_tokens=args.max_tokens, height=res_h, width=res_w
+    )
     report = suite.run()
     report.print()
 

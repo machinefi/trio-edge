@@ -24,6 +24,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from trio_core.api.store import EventStore
+
 from trio_core.counter import PeopleCounter
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
@@ -37,7 +38,9 @@ FRAME_INTERVAL = 10.0  # Process frame every 10 seconds (video loops, no need fo
 LOOP_VIDEOS = True  # Restart video files when they end
 
 
-async def monitor_camera(cam: dict, store: EventStore, counter: PeopleCounter, stop_event: asyncio.Event):
+async def monitor_camera(
+    cam: dict, store: EventStore, counter: PeopleCounter, stop_event: asyncio.Event
+):
     """Monitor a single camera source."""
     cam_id = cam["id"]
     cam_name = cam["name"]
@@ -61,7 +64,9 @@ async def monitor_camera(cam: dict, store: EventStore, counter: PeopleCounter, s
             ret, frame = cap.read()
             if not ret:
                 if cam["type"] == "file" and LOOP_VIDEOS:
-                    logger.info(f"[{cam_name}] Video ended. Looping. Total unique tracks: {len(counter._seen_ids)}")
+                    logger.info(
+                        f"[{cam_name}] Video ended. Looping. Total unique tracks: {len(counter._seen_ids)}"
+                    )
                     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                     prev_gray = None
                     # Reset tracker on loop — new "day" of observations
@@ -96,14 +101,41 @@ async def monitor_camera(cam: dict, store: EventStore, counter: PeopleCounter, s
             if now - last_metric_time > METRIC_INTERVAL:
                 ts = datetime.now(timezone.utc).isoformat()
                 metrics = [
-                    {"camera_id": cam_id, "metric_type": "count_person", "value": int(result.by_class.get("person", 0)), "timestamp": ts},
-                    {"camera_id": cam_id, "metric_type": "people_in", "value": int(result.total_in), "timestamp": ts},
-                    {"camera_id": cam_id, "metric_type": "people_out", "value": int(result.total_out), "timestamp": ts},
-                    {"camera_id": cam_id, "metric_type": "unique_tracks", "value": int(len(counter._seen_ids)), "timestamp": ts},
+                    {
+                        "camera_id": cam_id,
+                        "metric_type": "count_person",
+                        "value": int(result.by_class.get("person", 0)),
+                        "timestamp": ts,
+                    },
+                    {
+                        "camera_id": cam_id,
+                        "metric_type": "people_in",
+                        "value": int(result.total_in),
+                        "timestamp": ts,
+                    },
+                    {
+                        "camera_id": cam_id,
+                        "metric_type": "people_out",
+                        "value": int(result.total_out),
+                        "timestamp": ts,
+                    },
+                    {
+                        "camera_id": cam_id,
+                        "metric_type": "unique_tracks",
+                        "value": int(len(counter._seen_ids)),
+                        "timestamp": ts,
+                    },
                 ]
                 for cls_name, count in result.by_class.items():
                     if cls_name != "person":
-                        metrics.append({"camera_id": cam_id, "metric_type": f"count_{cls_name}", "value": int(count), "timestamp": ts})
+                        metrics.append(
+                            {
+                                "camera_id": cam_id,
+                                "metric_type": f"count_{cls_name}",
+                                "value": int(count),
+                                "timestamp": ts,
+                            }
+                        )
 
                 for m in metrics:
                     await store.insert_metric(m)
@@ -111,7 +143,9 @@ async def monitor_camera(cam: dict, store: EventStore, counter: PeopleCounter, s
                 last_metric_time = now
 
                 # Log progress
-                by_class = {k: int(v) for k, v in result.by_class.items()} if result.by_class else {}
+                by_class = (
+                    {k: int(v) for k, v in result.by_class.items()} if result.by_class else {}
+                )
                 logger.info(f"[{cam_name}] frame={frame_count} | {by_class}")
 
                 # Save camera thumbnail periodically
@@ -141,12 +175,14 @@ async def main():
             logger.info(f"Skipping YouTube camera: {c['name']}")
             continue
         cam_type = "rtsp" if src.startswith("rtsp") else "file"
-        active_cams.append({
-            "id": c["id"],
-            "name": c["name"],
-            "source": src,
-            "type": cam_type,
-        })
+        active_cams.append(
+            {
+                "id": c["id"],
+                "name": c["name"],
+                "source": src,
+                "type": cam_type,
+            }
+        )
     logger.info(f"Monitoring {len(active_cams)} cameras overnight")
 
     counter = PeopleCounter(model_path="models/yolov10n/onnx/model.onnx")
@@ -167,6 +203,7 @@ async def main():
 
         # Final stats
         import sqlite3
+
         conn = sqlite3.connect("data/trio_console.db")
         events = conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
         metrics = conn.execute("SELECT COUNT(*) FROM metrics").fetchone()[0]

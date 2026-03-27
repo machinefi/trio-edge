@@ -41,7 +41,7 @@ def parse_csv(value: str | None) -> list[str] | None:
 
 
 def cmd_list(args):
-    from trio_core.bench import MODEL_REGISTRY, OPTIM_PRESETS, BENCHMARKS
+    from trio_core.bench import BENCHMARKS, MODEL_REGISTRY, OPTIM_PRESETS
 
     if args.list == "models":
         print(f"\n{'Key':<20} {'Family':<14} {'Tier':<6} {'HF ID'}")
@@ -93,7 +93,8 @@ def cmd_report(args):
 
 def cmd_run(args):
     from pathlib import Path
-    from trio_core.bench import BenchSweep, get_models, OPTIM_PRESETS
+
+    from trio_core.bench import OPTIM_PRESETS, BenchSweep, get_models
 
     # Resolve models
     model_keys = parse_csv(args.models)
@@ -150,9 +151,9 @@ def cmd_run(args):
 
     records = sweep.run()
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"  COMPLETE: {len(records)} runs")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     for r in records:
         flag = " !!!" if r.anomalies else ""
         print(f"  {r.model_key:<20} {r.benchmark:<10} {r.config:<20} acc={r.accuracy:.1%}{flag}")
@@ -165,12 +166,18 @@ def main():
     )
 
     # List mode
-    parser.add_argument("--list", choices=["models", "benchmarks", "configs"],
-                        help="List available models, benchmarks, or configs")
+    parser.add_argument(
+        "--list",
+        choices=["models", "benchmarks", "configs"],
+        help="List available models, benchmarks, or configs",
+    )
 
     # Report mode
-    parser.add_argument("--report", choices=["model_x_config", "model_x_benchmark", "delta"],
-                        help="Generate a comparison report")
+    parser.add_argument(
+        "--report",
+        choices=["model_x_config", "model_x_benchmark", "delta"],
+        help="Generate a comparison report",
+    )
     parser.add_argument("--benchmark", help="Benchmark name (for reports)")
     parser.add_argument("--baseline", help="Baseline config (for delta report)")
     parser.add_argument("--compare", help="Compare config (for delta report)")
@@ -185,11 +192,15 @@ def main():
     parser.add_argument("--benchmarks", help="Comma-separated benchmark names (default: pope)")
     parser.add_argument("--configs", help="Comma-separated config names (default: baseline)")
     parser.add_argument("-n", type=int, default=None, help="Max samples per benchmark")
-    parser.add_argument("--max-tokens", type=int, default=16, help="Max generation tokens (default: 16)")
+    parser.add_argument(
+        "--max-tokens", type=int, default=16, help="Max generation tokens (default: 16)"
+    )
 
     # Run mode — options
     parser.add_argument("--dry-run", action="store_true", help="Preview combos without running")
-    parser.add_argument("--skip-existing", action="store_true", help="Skip combos with existing results")
+    parser.add_argument(
+        "--skip-existing", action="store_true", help="Skip combos with existing results"
+    )
     parser.add_argument("--results-dir", default="research/bench-results", help="Results directory")
     parser.add_argument("--adapter-path", default=None, help="Path to LoRA adapter directory")
 
@@ -198,11 +209,19 @@ def main():
     parser.add_argument("--mvbench-dir", default=None, help="MVBench video directory")
     parser.add_argument("--mvbench-tasks", default=None, help="Comma-separated MVBench tasks")
     parser.add_argument("--surveillance-dir", default=None, help="SurveillanceVQA data directory")
-    parser.add_argument("--surveillance-video-dir", default=None, help="SurveillanceVQA video directory")
-    parser.add_argument("--surveillance-qa-type", default=None,
-                        help="SurveillanceVQA QA type (detection/classification/description/all_abnormal/all)")
-    parser.add_argument("--surveillance-sources", default=None,
-                        help="Comma-separated video sources (UCF/MSAD/MEVA/NWPU_Test)")
+    parser.add_argument(
+        "--surveillance-video-dir", default=None, help="SurveillanceVQA video directory"
+    )
+    parser.add_argument(
+        "--surveillance-qa-type",
+        default=None,
+        help="SurveillanceVQA QA type (detection/classification/description/all_abnormal/all)",
+    )
+    parser.add_argument(
+        "--surveillance-sources",
+        default=None,
+        help="Comma-separated video sources (UCF/MSAD/MEVA/NWPU_Test)",
+    )
 
     args = parser.parse_args()
 

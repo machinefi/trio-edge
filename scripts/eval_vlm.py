@@ -11,8 +11,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
-import os
 import sys
 import time
 from pathlib import Path
@@ -114,14 +112,16 @@ def evaluate_prompt(engine, frames_dir: str, prompt: str, class_filter: str = "p
             total_chars += len(text)
             descriptions.append(text)
 
-            results.append({
-                "frame": fname.name,
-                "track_id": crop_info.track_id,
-                "class": crop_info.class_name,
-                "latency_ms": round(latency),
-                "text_len": len(text),
-                "text": text[:200],
-            })
+            results.append(
+                {
+                    "frame": fname.name,
+                    "track_id": crop_info.track_id,
+                    "class": crop_info.class_name,
+                    "latency_ms": round(latency),
+                    "text_len": len(text),
+                    "text": text[:200],
+                }
+            )
 
     if not results:
         return {"score": 0, "error": "no crops found"}
@@ -134,11 +134,46 @@ def evaluate_prompt(engine, frames_dir: str, prompt: str, class_filter: str = "p
     # Scoring criteria (autoresearch-style single metric)
     # - Specificity: does it mention age/gender/clothing? (check for keywords)
     specificity_keywords = {
-        "person": ["male", "female", "man", "woman", "old", "young", "wearing",
-                    "shirt", "dress", "suit", "jacket", "pants", "bag", "walking",
-                    "standing", "running", "carrying", "~", "yo", "age"],
-        "car": ["sedan", "suv", "truck", "bus", "taxi", "toyota", "ford", "honda",
-                "bmw", "tesla", "white", "black", "red", "blue", "yellow", "model"],
+        "person": [
+            "male",
+            "female",
+            "man",
+            "woman",
+            "old",
+            "young",
+            "wearing",
+            "shirt",
+            "dress",
+            "suit",
+            "jacket",
+            "pants",
+            "bag",
+            "walking",
+            "standing",
+            "running",
+            "carrying",
+            "~",
+            "yo",
+            "age",
+        ],
+        "car": [
+            "sedan",
+            "suv",
+            "truck",
+            "bus",
+            "taxi",
+            "toyota",
+            "ford",
+            "honda",
+            "bmw",
+            "tesla",
+            "white",
+            "black",
+            "red",
+            "blue",
+            "yellow",
+            "model",
+        ],
     }
     keywords = specificity_keywords.get(class_filter, specificity_keywords["person"])
 
@@ -163,8 +198,8 @@ def evaluate_prompt(engine, frames_dir: str, prompt: str, class_filter: str = "p
     # Composite score (0-100)
     score = (
         avg_keyword_hits * 10  # specificity (max ~50)
-        + unique_ratio * 20    # diversity (max 20)
-        + conciseness * 20     # conciseness (max 20)
+        + unique_ratio * 20  # diversity (max 20)
+        + conciseness * 20  # conciseness (max 20)
         + max(0, (5000 - avg_latency) / 500)  # speed bonus (max 10)
     )
     score = min(100, max(0, score))
@@ -189,7 +224,8 @@ def main():
     parser.add_argument("--all", action="store_true", help="Evaluate all built-in prompts")
     args = parser.parse_args()
 
-    from trio_core import TrioCore, EngineConfig
+    from trio_core import EngineConfig, TrioCore
+
     print("Loading VLM...")
     engine = TrioCore(EngineConfig())
     engine.load()
@@ -204,7 +240,7 @@ def main():
         print(f"  Avg chars: {result.get('avg_chars', 0)}")
         print(f"  Keyword hits: {result.get('avg_keyword_hits', 0)}")
         print(f"  Unique ratio: {result.get('unique_ratio', 0)}")
-        print(f"\nSample descriptions:")
+        print("\nSample descriptions:")
         for d in result.get("descriptions", [])[:3]:
             print(f"  - {d[:150]}")
         return
@@ -212,7 +248,9 @@ def main():
     # Evaluate all prompts
     prompts = PERSON_PROMPTS if args.class_filter == "person" else VEHICLE_PROMPTS
     if args.all or not args.prompt:
-        print(f"{'Prompt':<15} {'Score':>6} {'Latency':>8} {'Chars':>6} {'Keywords':>9} {'Unique':>7}")
+        print(
+            f"{'Prompt':<15} {'Score':>6} {'Latency':>8} {'Chars':>6} {'Keywords':>9} {'Unique':>7}"
+        )
         print("-" * 60)
 
         best_name = ""
@@ -221,7 +259,9 @@ def main():
         for name, prompt in prompts.items():
             result = evaluate_prompt(engine, args.frames, prompt, args.class_filter)
             score = result["score"]
-            print(f"{name:<15} {score:>6.1f} {result.get('avg_latency_ms', 0):>7}ms {result.get('avg_chars', 0):>5} {result.get('avg_keyword_hits', 0):>8.1f} {result.get('unique_ratio', 0):>7.2f}")
+            print(
+                f"{name:<15} {score:>6.1f} {result.get('avg_latency_ms', 0):>7}ms {result.get('avg_chars', 0):>5} {result.get('avg_keyword_hits', 0):>8.1f} {result.get('unique_ratio', 0):>7.2f}"
+            )
 
             if score > best_score:
                 best_score = score

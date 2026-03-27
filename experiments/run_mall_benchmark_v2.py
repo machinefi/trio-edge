@@ -32,7 +32,9 @@ def run():
     from trio_core.counter import PeopleCounter
 
     gt_counts = load_ground_truth()
-    print(f"GT: {len(gt_counts)} frames, range [{min(gt_counts)}-{max(gt_counts)}], mean {np.mean(gt_counts):.1f}")
+    print(
+        f"GT: {len(gt_counts)} frames, range [{min(gt_counts)}-{max(gt_counts)}], mean {np.mean(gt_counts):.1f}"
+    )
 
     # New defaults: tiled=True, confidence=0.25, correction_factor=1.6
     counter = PeopleCounter(
@@ -44,7 +46,7 @@ def run():
     )
 
     results = []
-    frame_files = sorted(FRAMES_DIR.glob("seq_*.jpg"))[:len(gt_counts)]
+    frame_files = sorted(FRAMES_DIR.glob("seq_*.jpg"))[: len(gt_counts)]
     print(f"Processing {len(frame_files)} frames (tiled=True, c=0.25, f=1.6)...")
 
     t_start = time.monotonic()
@@ -57,21 +59,25 @@ def run():
         gt = gt_counts[i]
         predicted = result.by_class.get("person", 0)
 
-        results.append({
-            "frame": i + 1,
-            "gt": gt,
-            "predicted": int(predicted),
-            "raw_count": int(result.raw_count),
-            "velocity": round(result.velocity, 3),
-            "kalman_confidence": round(result.kalman_confidence, 3),
-            "error": int(predicted) - gt,
-            "abs_error": abs(int(predicted) - gt),
-        })
+        results.append(
+            {
+                "frame": i + 1,
+                "gt": gt,
+                "predicted": int(predicted),
+                "raw_count": int(result.raw_count),
+                "velocity": round(result.velocity, 3),
+                "kalman_confidence": round(result.kalman_confidence, 3),
+                "error": int(predicted) - gt,
+                "abs_error": abs(int(predicted) - gt),
+            }
+        )
 
         if (i + 1) % 500 == 0:
             elapsed = time.monotonic() - t_start
             mae = np.mean([r["abs_error"] for r in results])
-            print(f"  {i+1}/{len(frame_files)} | MAE={mae:.2f} | last: gt={gt} pred={predicted} raw={result.raw_count} | {elapsed:.0f}s")
+            print(
+                f"  {i + 1}/{len(frame_files)} | MAE={mae:.2f} | last: gt={gt} pred={predicted} raw={result.raw_count} | {elapsed:.0f}s"
+            )
 
     # Compute metrics
     gt_arr = np.array([r["gt"] for r in results])
@@ -86,9 +92,9 @@ def run():
     total_pred = int(pred_arr.sum())
     total_acc = 1.0 - abs(total_gt - total_pred) / max(total_gt, 1)
 
-    print(f"\n{'='*60}")
-    print(f"MALL v2 RESULTS (tiled=True, c=0.25, f=1.6)")
-    print(f"{'='*60}")
+    print(f"\n{'=' * 60}")
+    print("MALL v2 RESULTS (tiled=True, c=0.25, f=1.6)")
+    print(f"{'=' * 60}")
     print(f"Per-frame MAPE: {mape:.1f}%")
     print(f"MAE: {mae:.2f}")
     print(f"Correlation: {correlation:.4f}")
@@ -96,7 +102,7 @@ def run():
     print(f"Total GT: {total_gt} | Predicted: {total_pred}")
     print(f"Avg raw detections: {raw_arr.mean():.1f}")
     print(f"Avg predicted (after Kalman+correction): {pred_arr.mean():.1f}")
-    print(f"Time: {time.monotonic()-t_start:.0f}s")
+    print(f"Time: {time.monotonic() - t_start:.0f}s")
 
     # Save per-frame results
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)

@@ -1,5 +1,7 @@
 """Test counting logic — debounce + cumulative tracking."""
+
 import pytest
+
 cv2 = pytest.importorskip("cv2")
 from trio_core._webcam_gui import _parse_counts
 
@@ -7,23 +9,35 @@ from trio_core._webcam_gui import _parse_counts
 class TestParseCounts:
     def test_basic(self):
         assert _parse_counts("COUNT people:2 cars:1 dogs:0 cats:0") == {
-            "people": 2, "cars": 1, "dogs": 0, "cats": 0,
+            "people": 2,
+            "cars": 1,
+            "dogs": 0,
+            "cats": 0,
         }
 
     def test_case_insensitive(self):
         assert _parse_counts("COUNT People:3 Cars:0 Dogs:1 Cats:0") == {
-            "people": 3, "cars": 0, "dogs": 1, "cats": 0,
+            "people": 3,
+            "cars": 0,
+            "dogs": 1,
+            "cats": 0,
         }
 
     def test_missing_keys(self):
         assert _parse_counts("I see a person walking") == {
-            "people": 0, "cars": 0, "dogs": 0, "cats": 0,
+            "people": 0,
+            "cars": 0,
+            "dogs": 0,
+            "cats": 0,
         }
 
     def test_embedded_in_text(self):
-        assert _parse_counts(
-            "A man walks his dog. COUNT people:1 cars:2 dogs:1 cats:0"
-        ) == {"people": 1, "cars": 2, "dogs": 1, "cats": 0}
+        assert _parse_counts("A man walks his dog. COUNT people:1 cars:2 dogs:1 cats:0") == {
+            "people": 1,
+            "cars": 2,
+            "dogs": 1,
+            "cats": 0,
+        }
 
 
 KEYS = ["people", "cars", "dogs", "cats"]
@@ -71,8 +85,11 @@ class TestCumulativeCounting:
         """Person visible, model flickers to 0 for 1 frame, then back.
         Debounce should prevent double-count."""
         frames = [
-            {"people": 1}, {"people": 1}, {"people": 0},  # flicker
-            {"people": 1}, {"people": 1},
+            {"people": 1},
+            {"people": 1},
+            {"people": 0},  # flicker
+            {"people": 1},
+            {"people": 1},
         ]
         assert _simulate_counting(frames)["people"] == 1
 
@@ -88,8 +105,10 @@ class TestCumulativeCounting:
     def test_two_people_arrive_sequentially(self):
         """1 person, then 2 people. Should count 2 total."""
         frames = [
-            {"people": 1}, {"people": 1},
-            {"people": 2}, {"people": 2},
+            {"people": 1},
+            {"people": 1},
+            {"people": 2},
+            {"people": 2},
         ]
         assert _simulate_counting(frames)["people"] == 2
 
@@ -123,7 +142,10 @@ class TestCumulativeCounting:
     def test_crowd_fluctuation(self):
         """Crowd: 3 → 2 → 4 → 3. Peak was 4, total should be 4."""
         frames = [
-            {"people": 3}, {"people": 2}, {"people": 4}, {"people": 3},
+            {"people": 3},
+            {"people": 2},
+            {"people": 4},
+            {"people": 3},
         ]
         # 0→3 = +3, 3→2 no add, 2→4 = +2, total = 5? No...
         # Actually: prev starts 0, frame1: 3>0 → total+=3, prev=3

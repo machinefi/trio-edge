@@ -69,7 +69,9 @@ class ChatTokenizer:
         self.eos_token = self._config.get("eos_token")
         self.eos_token_id = self._special_token_map.get(self.eos_token) if self.eos_token else None
         pad_token = self._config.get("pad_token")
-        self.pad_token_id = self._special_token_map.get(pad_token) if pad_token else self.eos_token_id
+        self.pad_token_id = (
+            self._special_token_map.get(pad_token) if pad_token else self.eos_token_id
+        )
 
         # Chat template (Jinja2) — fallback to default ChatML for Qwen models
         self._chat_template_str = self._config.get("chat_template") or _DEFAULT_CHATML_TEMPLATE
@@ -78,6 +80,7 @@ class ChatTokenizer:
     def _get_chat_template(self):
         if self._chat_template is None and self._chat_template_str:
             import jinja2
+
             env = jinja2.Environment(
                 undefined=jinja2.StrictUndefined,
                 keep_trailing_newline=True,

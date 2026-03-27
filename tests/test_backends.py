@@ -1,14 +1,13 @@
 """Tests for trio_core.backends — backend abstraction."""
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 
 from trio_core.backends import (
-    auto_backend,
-    BaseBackend,
-    MLXBackend,
-    TransformersBackend,
     GenerationResult,
+    MLXBackend,
     StreamChunk,
+    TransformersBackend,
+    auto_backend,
 )
 from trio_core.device import DeviceInfo
 

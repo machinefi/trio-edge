@@ -12,7 +12,6 @@ from __future__ import annotations
 import base64
 import json
 import sys
-
 import urllib.request
 
 API_BASE = "http://localhost:8100"

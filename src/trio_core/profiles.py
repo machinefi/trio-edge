@@ -25,13 +25,13 @@ class ModelProfile:
     """Architecture parameters for a specific VLM model."""
 
     # Model identity
-    family: str              # "qwen3.5", "qwen2.5-vl"
-    param_size: str          # "0.8B", "3B", "7B"
+    family: str  # "qwen3.5", "qwen2.5-vl"
+    param_size: str  # "0.8B", "3B", "7B"
 
     # Vision encoder
-    spatial_patch: int       # ViT patch size (14 for Qwen2.5-VL, 16 for Qwen3.5)
-    temporal_patch: int      # Conv3d temporal kernel (2 for all Qwen VL)
-    spatial_merge: int       # PatchMerger groups NxN patches into 1 (2 for all)
+    spatial_patch: int  # ViT patch size (14 for Qwen2.5-VL, 16 for Qwen3.5)
+    temporal_patch: int  # Conv3d temporal kernel (2 for all Qwen VL)
+    spatial_merge: int  # PatchMerger groups NxN patches into 1 (2 for all)
 
     # Derived: merge_factor = spatial_patch × spatial_merge
     # This is the IMAGE_FACTOR for smart_resize
@@ -40,23 +40,23 @@ class ModelProfile:
         return self.spatial_patch * self.spatial_merge
 
     # Context & token limits
-    context_window: int      # Max total tokens (text + vision)
-    max_visual_tokens: int   # Hard cap on visual tokens sent to LLM
+    context_window: int  # Max total tokens (text + vision)
+    max_visual_tokens: int  # Hard cap on visual tokens sent to LLM
     default_visual_ratio: float  # Fraction of context to allocate to vision (default)
 
     # Generation defaults
-    recommended_fps: float   # Target FPS for frame extraction
-    min_frames: int          # Minimum frames to extract
-    max_frames: int          # Maximum frames to extract
+    recommended_fps: float  # Target FPS for frame extraction
+    min_frames: int  # Minimum frames to extract
+    max_frames: int  # Maximum frames to extract
 
     # Architecture flags
-    has_deltanet: bool       # True if model uses Gated DeltaNet layers
-    deltanet_layers: int     # Number of DeltaNet layers (0 if none)
-    full_attn_layers: int    # Number of full attention layers
-    kv_heads: int            # Number of KV heads for GQA
+    has_deltanet: bool  # True if model uses Gated DeltaNet layers
+    deltanet_layers: int  # Number of DeltaNet layers (0 if none)
+    full_attn_layers: int  # Number of full attention layers
+    kv_heads: int  # Number of KV heads for GQA
 
     # Memory estimates (4-bit quantization)
-    model_size_gb: float     # Approximate model size on disk (4-bit)
+    model_size_gb: float  # Approximate model size on disk (4-bit)
     inference_memory_gb: float  # Approximate memory during inference
 
     # Optimization support
@@ -149,7 +149,6 @@ PROFILES: dict[str, ModelProfile] = {
         kv_heads=2,
         model_size_gb=0.5,
         inference_memory_gb=0.8,
-
         # Too small to compress: only 1.02x speedup, TextVQA -18%, GQA -6%
         recommended_optims={},
     ),
@@ -171,7 +170,6 @@ PROFILES: dict[str, ModelProfile] = {
         kv_heads=2,
         model_size_gb=1.5,
         inference_memory_gb=2.0,
-
         # POPE: 94% baseline → 93% compressed_50 (-1%, 1.14x speedup)
         recommended_optims={"compress_enabled": True, "compress_ratio": 0.5},
     ),
@@ -193,7 +191,6 @@ PROFILES: dict[str, ModelProfile] = {
         kv_heads=4,
         model_size_gb=2.5,
         inference_memory_gb=3.5,
-
         # POPE: 90%→89% (-1). TextVQA: 52%→64% (+12!). ToMe cleans noisy ViT tokens.
         recommended_optims={"tome_enabled": True, "tome_r": 4, "tome_metric": "hidden"},
     ),
@@ -215,7 +212,6 @@ PROFILES: dict[str, ModelProfile] = {
         kv_heads=4,
         model_size_gb=5.0,
         inference_memory_gb=7.0,
-
         # ToMe gives +6% TextVQA/GQA but 0.95x E2E speed (ViT overhead).
         # Compressed 50% gives 1.21x speedup, +6% GQA, 0% TextVQA — better E2E.
         recommended_optims={"compress_enabled": True, "compress_ratio": 0.5},
@@ -257,7 +253,6 @@ PROFILES: dict[str, ModelProfile] = {
         kv_heads=4,
         model_size_gb=4.5,
         inference_memory_gb=6.0,
-
         # POPE: 90% baseline → 92% compressed_40 (+2%!, 1.36x speedup)
         recommended_optims={"compress_enabled": True, "compress_ratio": 0.4},
     ),
@@ -279,8 +274,7 @@ PROFILES: dict[str, ModelProfile] = {
         kv_heads=2,
         model_size_gb=1.5,
         inference_memory_gb=2.0,
-        supports_tome=False,    # deepstack re-adds visual embeds, breaks after ToMe merge
-
+        supports_tome=False,  # deepstack re-adds visual embeds, breaks after ToMe merge
         # POPE: 92% baseline → 92% compressed_50 (0% drop, 1.23x speedup)
         recommended_optims={"compress_enabled": True, "compress_ratio": 0.5},
     ),
@@ -302,7 +296,7 @@ PROFILES: dict[str, ModelProfile] = {
         kv_heads=4,
         model_size_gb=2.5,
         inference_memory_gb=3.5,
-        supports_tome=False,    # deepstack re-adds visual embeds, breaks after ToMe merge
+        supports_tome=False,  # deepstack re-adds visual embeds, breaks after ToMe merge
         # POPE: 91% baseline → 88% compressed_50 (-3%, 1.24x speedup)
         recommended_optims={"compress_enabled": True, "compress_ratio": 0.5},
     ),
@@ -324,7 +318,7 @@ PROFILES: dict[str, ModelProfile] = {
         kv_heads=4,
         model_size_gb=5.0,
         inference_memory_gb=7.0,
-        supports_tome=False,    # deepstack re-adds visual embeds, breaks after ToMe merge
+        supports_tome=False,  # deepstack re-adds visual embeds, breaks after ToMe merge
         # POPE: 91% baseline → 93% compressed_50 (+2%!, 1.26x speedup)
         recommended_optims={"compress_enabled": True, "compress_ratio": 0.5},
     ),
@@ -332,9 +326,9 @@ PROFILES: dict[str, ModelProfile] = {
     "gemma3n-e2b": ModelProfile(
         family="gemma3n",
         param_size="E2B",
-        spatial_patch=14,       # MobileNet-v5 vision encoder (not standard ViT)
-        temporal_patch=1,       # Image model, no temporal patching
-        spatial_merge=1,        # MLP projector, no PatchMerger
+        spatial_patch=14,  # MobileNet-v5 vision encoder (not standard ViT)
+        temporal_patch=1,  # Image model, no temporal patching
+        spatial_merge=1,  # MLP projector, no PatchMerger
         context_window=32_000,
         max_visual_tokens=256,  # Fixed 256 tokens per image (256x256/512x512/768x768)
         default_visual_ratio=0.008,
@@ -343,11 +337,11 @@ PROFILES: dict[str, ModelProfile] = {
         max_frames=16,
         has_deltanet=False,
         deltanet_layers=0,
-        full_attn_layers=26,    # MatFormer nested layers
+        full_attn_layers=26,  # MatFormer nested layers
         kv_heads=4,
-        model_size_gb=1.5,      # 5B params but 2GB memory footprint
+        model_size_gb=1.5,  # 5B params but 2GB memory footprint
         inference_memory_gb=2.0,
-        supports_tome=False,    # MobileNet-v5, not standard ViT
+        supports_tome=False,  # MobileNet-v5, not standard ViT
     ),
     "gemma3n-e4b": ModelProfile(
         family="gemma3n",
@@ -365,19 +359,19 @@ PROFILES: dict[str, ModelProfile] = {
         deltanet_layers=0,
         full_attn_layers=34,
         kv_heads=8,
-        model_size_gb=2.5,      # 8B params but 4GB memory footprint
+        model_size_gb=2.5,  # 8B params but 4GB memory footprint
         inference_memory_gb=3.0,
-        supports_tome=False,    # MobileNet-v5, not standard ViT
+        supports_tome=False,  # MobileNet-v5, not standard ViT
     ),
     # ── Phi-4 Multimodal ─────────────────────────────────────────────
     "phi4-multimodal": ModelProfile(
         family="phi4",
         param_size="3.8B",
-        spatial_patch=14,       # SigLIP ViT
+        spatial_patch=14,  # SigLIP ViT
         temporal_patch=1,
         spatial_merge=1,
         context_window=131_072,
-        max_visual_tokens=1024, # Dynamic resolution, up to 1024 tokens
+        max_visual_tokens=1024,  # Dynamic resolution, up to 1024 tokens
         default_visual_ratio=0.008,
         recommended_fps=1.0,
         min_frames=1,
@@ -393,13 +387,13 @@ PROFILES: dict[str, ModelProfile] = {
     "gemma3-4b": ModelProfile(
         family="gemma3",
         param_size="4B",
-        spatial_patch=14,       # SigLIP ViT-SO400M: patch=14
-        temporal_patch=1,       # No temporal patching (image model)
-        spatial_merge=1,        # No PatchMerger, uses MLP projector
+        spatial_patch=14,  # SigLIP ViT-SO400M: patch=14
+        temporal_patch=1,  # No temporal patching (image model)
+        spatial_merge=1,  # No PatchMerger, uses MLP projector
         context_window=128_000,
         max_visual_tokens=256,  # Fixed 256 tokens per 896x896 crop
         default_visual_ratio=0.002,
-        recommended_fps=1.0,    # Image-oriented, low FPS for video
+        recommended_fps=1.0,  # Image-oriented, low FPS for video
         min_frames=1,
         max_frames=16,
         has_deltanet=False,
@@ -432,11 +426,11 @@ PROFILES: dict[str, ModelProfile] = {
     "smolvlm-256m": ModelProfile(
         family="smolvlm",
         param_size="256M",
-        spatial_patch=16,       # SigLIP-B/16
+        spatial_patch=16,  # SigLIP-B/16
         temporal_patch=1,
-        spatial_merge=1,        # Pixel shuffle + MLP projection
+        spatial_merge=1,  # Pixel shuffle + MLP projection
         context_window=8_192,
-        max_visual_tokens=64,   # 64 tokens per 512x512 crop
+        max_visual_tokens=64,  # 64 tokens per 512x512 crop
         default_visual_ratio=0.008,
         recommended_fps=1.0,
         min_frames=1,
@@ -447,7 +441,7 @@ PROFILES: dict[str, ModelProfile] = {
         kv_heads=3,
         model_size_gb=0.3,
         inference_memory_gb=0.5,
-        supports_tome=False,    # Pixel shuffle disrupts spatial structure
+        supports_tome=False,  # Pixel shuffle disrupts spatial structure
     ),
     "smolvlm-500m": ModelProfile(
         family="smolvlm",
@@ -467,12 +461,12 @@ PROFILES: dict[str, ModelProfile] = {
         kv_heads=3,
         model_size_gb=0.5,
         inference_memory_gb=0.8,
-        supports_tome=False,    # Pixel shuffle disrupts spatial structure
+        supports_tome=False,  # Pixel shuffle disrupts spatial structure
     ),
     "smolvlm-2.2b": ModelProfile(
         family="smolvlm",
         param_size="2.2B",
-        spatial_patch=14,       # SigLIP-SO400M for 2.2B
+        spatial_patch=14,  # SigLIP-SO400M for 2.2B
         temporal_patch=1,
         spatial_merge=1,
         context_window=16_384,
@@ -487,27 +481,26 @@ PROFILES: dict[str, ModelProfile] = {
         kv_heads=4,
         model_size_gb=1.5,
         inference_memory_gb=2.0,
-        supports_tome=False,    # Pixel shuffle disrupts spatial structure
+        supports_tome=False,  # Pixel shuffle disrupts spatial structure
     ),
     # ── InternVL3 (LLaVA-style: InternViT-300M + MLP + Qwen2.5 LLM) ──
     "internvl3-1b": ModelProfile(
         family="internvl",
         param_size="1B",
-        spatial_patch=14,       # InternViT-300M, patch_size=14
-        temporal_patch=1,       # Image model
-        spatial_merge=1,        # Pixel unshuffle + MLP (not PatchMerger)
+        spatial_patch=14,  # InternViT-300M, patch_size=14
+        temporal_patch=1,  # Image model
+        spatial_merge=1,  # Pixel unshuffle + MLP (not PatchMerger)
         context_window=32_000,
-        max_visual_tokens=1024, # Dynamic tiling, 256 tokens per 448x448 tile
+        max_visual_tokens=1024,  # Dynamic tiling, 256 tokens per 448x448 tile
         default_visual_ratio=0.032,
         recommended_fps=1.0,
         min_frames=1,
         max_frames=16,
         has_deltanet=False,
         deltanet_layers=0,
-        full_attn_layers=24,    # Qwen2.5-0.5B LLM
+        full_attn_layers=24,  # Qwen2.5-0.5B LLM
         kv_heads=2,
-        supports_tome=False,    # pixel_shuffle disrupts spatial structure
-
+        supports_tome=False,  # pixel_shuffle disrupts spatial structure
         model_size_gb=0.6,
         inference_memory_gb=1.0,
         # Only 1.06x speedup, +21% memory overhead — not worth it for 1B model
@@ -527,10 +520,9 @@ PROFILES: dict[str, ModelProfile] = {
         max_frames=16,
         has_deltanet=False,
         deltanet_layers=0,
-        full_attn_layers=28,    # Qwen2.5-1.5B LLM
+        full_attn_layers=28,  # Qwen2.5-1.5B LLM
         kv_heads=2,
-        supports_tome=False,    # pixel_shuffle disrupts spatial structure
-
+        supports_tome=False,  # pixel_shuffle disrupts spatial structure
         model_size_gb=1.0,
         inference_memory_gb=1.6,
         # POPE: 95% baseline → 96% compressed_40 (+1%!, 1.31x speedup)
@@ -540,9 +532,9 @@ PROFILES: dict[str, ModelProfile] = {
     "fastvlm-0.5b": ModelProfile(
         family="fastvlm",
         param_size="0.5B",
-        spatial_patch=16,       # FastViTHD (hybrid CNN+ViT)
+        spatial_patch=16,  # FastViTHD (hybrid CNN+ViT)
         temporal_patch=1,
-        spatial_merge=1,        # MLP projector
+        spatial_merge=1,  # MLP projector
         context_window=32_000,
         max_visual_tokens=576,  # Fewer tokens than standard ViT
         default_visual_ratio=0.018,
@@ -551,9 +543,9 @@ PROFILES: dict[str, ModelProfile] = {
         max_frames=16,
         has_deltanet=False,
         deltanet_layers=0,
-        full_attn_layers=24,    # Qwen2-0.5B LLM
+        full_attn_layers=24,  # Qwen2-0.5B LLM
         kv_heads=2,
-        supports_tome=False,    # CNN encoder, not ViT
+        supports_tome=False,  # CNN encoder, not ViT
         model_size_gb=0.1,
         inference_memory_gb=0.5,
     ),
@@ -571,9 +563,9 @@ PROFILES: dict[str, ModelProfile] = {
         max_frames=16,
         has_deltanet=False,
         deltanet_layers=0,
-        full_attn_layers=28,    # Qwen2-1.5B LLM
+        full_attn_layers=28,  # Qwen2-1.5B LLM
         kv_heads=2,
-        supports_tome=False,    # CNN encoder, not ViT
+        supports_tome=False,  # CNN encoder, not ViT
         model_size_gb=0.3,
         inference_memory_gb=1.0,
     ),
@@ -581,9 +573,9 @@ PROFILES: dict[str, ModelProfile] = {
     "nanollava-1.5": ModelProfile(
         family="nanollava",
         param_size="1B",
-        spatial_patch=14,       # SigLIP so400m/14-384
+        spatial_patch=14,  # SigLIP so400m/14-384
         temporal_patch=1,
-        spatial_merge=1,        # MLP projector
+        spatial_merge=1,  # MLP projector
         context_window=32_000,
         max_visual_tokens=729,  # 27x27 = 729 SigLIP tokens (384/14 = 27)
         default_visual_ratio=0.023,
@@ -592,7 +584,7 @@ PROFILES: dict[str, ModelProfile] = {
         max_frames=16,
         has_deltanet=False,
         deltanet_layers=0,
-        full_attn_layers=24,    # Qwen1.5-0.5B LLM
+        full_attn_layers=24,  # Qwen1.5-0.5B LLM
         kv_heads=2,
         model_size_gb=0.6,
         inference_memory_gb=1.0,

@@ -9,14 +9,15 @@ from __future__ import annotations
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 
 
 @dataclass
 class Insight:
     """A single actionable insight extracted from event data."""
-    insight_type: str   # anomaly, trend, pattern, correlation, recommendation, comparison
-    text: str           # human-readable insight
+
+    insight_type: str  # anomaly, trend, pattern, correlation, recommendation, comparison
+    text: str  # human-readable insight
     evidence: list[str] = field(default_factory=list)  # supporting data points
     hour: int | None = None  # relevant hour if time-specific
     confidence: float = 1.0
@@ -31,15 +32,22 @@ class InsightExtractor:
         "standing": re.compile(r"\b(stand(?:ing|s)?|waiting|stationary|idling)\b", re.I),
         "running": re.compile(r"\b(run(?:ning|s)?|jogging|sprinting)\b", re.I),
         "sitting": re.compile(r"\b(sit(?:ting|s)?|seated)\b", re.I),
-        "carrying_bag": re.compile(r"\b(bag|backpack|tote|suitcase|carrying.*bag|laptop bag)\b", re.I),
+        "carrying_bag": re.compile(
+            r"\b(bag|backpack|tote|suitcase|carrying.*bag|laptop bag)\b", re.I
+        ),
         "carrying_briefcase": re.compile(r"\b(briefcase|attache)\b", re.I),
         "driving": re.compile(r"\b(driv(?:ing|es?)|pulling in)\b", re.I),
         "parking": re.compile(r"\b(park(?:ed|ing)|parked)\b", re.I),
         "on_phone": re.compile(r"\b(phone|calling|talking on)\b", re.I),
         "with_laptop": re.compile(r"\blaptop\b", re.I),
         "group": re.compile(r"\b(group|together|couple|pair|two|three|four|family)\b", re.I),
-        "ordering": re.compile(r"\b(order(?:ing|s|ed)?|buying|purchasing|paying|mobile order|queue|in line|waiting in)\b", re.I),
-        "browsing": re.compile(r"\b(brows(?:ing|es)?|looking at|checking out|display|menu)\b", re.I),
+        "ordering": re.compile(
+            r"\b(order(?:ing|s|ed)?|buying|purchasing|paying|mobile order|queue|in line|waiting in)\b",
+            re.I,
+        ),
+        "browsing": re.compile(
+            r"\b(brows(?:ing|es)?|looking at|checking out|display|menu)\b", re.I
+        ),
     }
 
     GENDER_PATTERNS = {
@@ -56,7 +64,9 @@ class InsightExtractor:
     ATTIRE_PATTERNS = {
         "business": re.compile(r"\b(suit|business|blazer|tie|professional|attire|polo)\b", re.I),
         "casual": re.compile(r"\b(hoodie|jeans|t-shirt|casual|sneakers|athletic)\b", re.I),
-        "uniform": re.compile(r"\b(uniform|vest|scrubs|chef|guard|security|construction|maintenance|hard hat)\b", re.I),
+        "uniform": re.compile(
+            r"\b(uniform|vest|scrubs|chef|guard|security|construction|maintenance|hard hat)\b", re.I
+        ),
     }
 
     VEHICLE_PATTERNS = {
@@ -75,10 +85,18 @@ class InsightExtractor:
 
     SECURITY_PATTERNS = {
         "badge": re.compile(r"\b(badge|lanyard|id card|credential|badged)\b", re.I),
-        "suspicious": re.compile(r"\b(suspicious|looking around|loitering|dark clothing|perimeter|lingering|unidentified|unknown)\b", re.I),
+        "suspicious": re.compile(
+            r"\b(suspicious|looking around|loitering|dark clothing|perimeter|lingering|unidentified|unknown)\b",
+            re.I,
+        ),
         "locked": re.compile(r"\b(lock(?:ing|ed)|securing|checking.*door)\b", re.I),
-        "unauthorized": re.compile(r"\b(unauthorized|tailgat|piggyback|propped|without badge|no badge|expired|unaccompanied|unescorted)\b", re.I),
-        "after_hours": re.compile(r"\b(after.?hours?|night|02:|03:|04:|05:|01:|00:|late night)\b", re.I),
+        "unauthorized": re.compile(
+            r"\b(unauthorized|tailgat|piggyback|propped|without badge|no badge|expired|unaccompanied|unescorted)\b",
+            re.I,
+        ),
+        "after_hours": re.compile(
+            r"\b(after.?hours?|night|02:|03:|04:|05:|01:|00:|late night)\b", re.I
+        ),
         "patrol": re.compile(r"\b(patrol|rounds|guard station|shift change|escort)\b", re.I),
         "alarm": re.compile(r"\b(alarm|emergency|triggered|blind spot|unattended)\b", re.I),
     }
@@ -203,8 +221,19 @@ class InsightExtractor:
         """Auto-detect scene type from parsed data to avoid cross-contamination."""
         sec = p["security"]
         drinks = p["drinks"]
-        security_signals = sec.get("badge", 0) + sec.get("patrol", 0) + sec.get("unauthorized", 0) + sec.get("alarm", 0)
-        retail_signals = drinks.get("coffee", 0) + drinks.get("tall", 0) + drinks.get("grande", 0) + drinks.get("venti", 0) + p["activities"].get("ordering", 0)
+        security_signals = (
+            sec.get("badge", 0)
+            + sec.get("patrol", 0)
+            + sec.get("unauthorized", 0)
+            + sec.get("alarm", 0)
+        )
+        retail_signals = (
+            drinks.get("coffee", 0)
+            + drinks.get("tall", 0)
+            + drinks.get("grande", 0)
+            + drinks.get("venti", 0)
+            + p["activities"].get("ordering", 0)
+        )
 
         if retail_signals > security_signals * 2:
             return "retail"
@@ -229,23 +258,27 @@ class InsightExtractor:
         avg_hourly = total / max(len(by_hour), 1)
 
         if peak_count > avg_hourly * 1.5:
-            insights.append(Insight(
-                insight_type="pattern",
-                text=f"Peak traffic at {peak_h:02d}:00 ({peak_count} events) is {peak_count/avg_hourly:.1f}x the hourly average — consider increasing staffing during this window",
-                evidence=[f"peak={peak_count}", f"avg={avg_hourly:.0f}"],
-                hour=peak_h,
-            ))
+            insights.append(
+                Insight(
+                    insight_type="pattern",
+                    text=f"Peak traffic at {peak_h:02d}:00 ({peak_count} events) is {peak_count / avg_hourly:.1f}x the hourly average — consider increasing staffing during this window",
+                    evidence=[f"peak={peak_count}", f"avg={avg_hourly:.0f}"],
+                    hour=peak_h,
+                )
+            )
 
         # Quiet hours
         min_h = min(by_hour, key=by_hour.get)
         min_count = by_hour[min_h]
         if min_count < avg_hourly * 0.3 and len(by_hour) > 3:
-            insights.append(Insight(
-                insight_type="recommendation",
-                text=f"Low activity at {min_h:02d}:00 ({min_count} events, {min_count/avg_hourly:.0%} of average) — opportunity to reduce staffing or schedule maintenance",
-                evidence=[f"min={min_count}", f"avg={avg_hourly:.0f}"],
-                hour=min_h,
-            ))
+            insights.append(
+                Insight(
+                    insight_type="recommendation",
+                    text=f"Low activity at {min_h:02d}:00 ({min_count} events, {min_count / avg_hourly:.0%} of average) — opportunity to reduce staffing or schedule maintenance",
+                    evidence=[f"min={min_count}", f"avg={avg_hourly:.0f}"],
+                    hour=min_h,
+                )
+            )
 
         # Morning vs afternoon split
         morning = sum(by_hour.get(h, 0) for h in range(6, 12))
@@ -253,17 +286,21 @@ class InsightExtractor:
         if morning > 0 and afternoon > 0:
             ratio = morning / afternoon
             if ratio > 1.5:
-                insights.append(Insight(
-                    insight_type="pattern",
-                    text=f"Morning traffic ({morning} events) is {ratio:.1f}x afternoon ({afternoon} events) — suggests business/commuter-dominant location",
-                    evidence=[f"morning={morning}", f"afternoon={afternoon}"],
-                ))
+                insights.append(
+                    Insight(
+                        insight_type="pattern",
+                        text=f"Morning traffic ({morning} events) is {ratio:.1f}x afternoon ({afternoon} events) — suggests business/commuter-dominant location",
+                        evidence=[f"morning={morning}", f"afternoon={afternoon}"],
+                    )
+                )
             elif ratio < 0.67:
-                insights.append(Insight(
-                    insight_type="pattern",
-                    text=f"Afternoon traffic ({afternoon} events) is {1/ratio:.1f}x morning ({morning} events) — suggests retail/leisure-dominant location",
-                    evidence=[f"morning={morning}", f"afternoon={afternoon}"],
-                ))
+                insights.append(
+                    Insight(
+                        insight_type="pattern",
+                        text=f"Afternoon traffic ({afternoon} events) is {1 / ratio:.1f}x morning ({morning} events) — suggests retail/leisure-dominant location",
+                        evidence=[f"morning={morning}", f"afternoon={afternoon}"],
+                    )
+                )
 
         return insights
 
@@ -279,11 +316,13 @@ class InsightExtractor:
             dominant = "male" if male > female else "female"
             pct = max(male, female) / (male + female) * 100
             if pct > 65:
-                insights.append(Insight(
-                    insight_type="pattern",
-                    text=f"{pct:.0f}% {dominant} visitors ({max(male,female)}/{male+female}) — indicates {dominant}-skewed customer base, consider targeted marketing",
-                    evidence=[f"male={male}", f"female={female}"],
-                ))
+                insights.append(
+                    Insight(
+                        insight_type="pattern",
+                        text=f"{pct:.0f}% {dominant} visitors ({max(male, female)}/{male + female}) — indicates {dominant}-skewed customer base, consider targeted marketing",
+                        evidence=[f"male={male}", f"female={female}"],
+                    )
+                )
 
         # Age distribution
         young = p["age"].get("young", 0)
@@ -291,14 +330,19 @@ class InsightExtractor:
         elderly = p["age"].get("elderly", 0)
         total_age = young + middle + elderly
         if total_age > 3:
-            dominant_age = max([(young, "young"), (middle, "middle-aged"), (elderly, "elderly")], key=lambda x: x[0])
+            dominant_age = max(
+                [(young, "young"), (middle, "middle-aged"), (elderly, "elderly")],
+                key=lambda x: x[0],
+            )
             pct = dominant_age[0] / total_age * 100
             if pct > 50:
-                insights.append(Insight(
-                    insight_type="pattern",
-                    text=f"Dominant age group: {dominant_age[1]} ({pct:.0f}% of identified visitors) — suggests tailoring product mix and pricing to this demographic",
-                    evidence=[f"young={young}", f"middle_aged={middle}", f"elderly={elderly}"],
-                ))
+                insights.append(
+                    Insight(
+                        insight_type="pattern",
+                        text=f"Dominant age group: {dominant_age[1]} ({pct:.0f}% of identified visitors) — suggests tailoring product mix and pricing to this demographic",
+                        evidence=[f"young={young}", f"middle_aged={middle}", f"elderly={elderly}"],
+                    )
+                )
 
         # Attire signals (affluence/purpose)
         business = p["attire"].get("business", 0)
@@ -308,27 +352,33 @@ class InsightExtractor:
         if total_attire > 3:
             if business > casual and business > uniform:
                 pct = business / total_attire * 100
-                insights.append(Insight(
-                    insight_type="pattern",
-                    text=f"{pct:.0f}% business attire ({business}/{total_attire} identified) indicates professional/high-income visitor profile — opportunity for premium offerings",
-                    evidence=[f"business={business}", f"casual={casual}", f"uniform={uniform}"],
-                ))
+                insights.append(
+                    Insight(
+                        insight_type="pattern",
+                        text=f"{pct:.0f}% business attire ({business}/{total_attire} identified) indicates professional/high-income visitor profile — opportunity for premium offerings",
+                        evidence=[f"business={business}", f"casual={casual}", f"uniform={uniform}"],
+                    )
+                )
             elif uniform > 3:
                 pct = uniform / total_attire * 100
-                insights.append(Insight(
-                    insight_type="pattern",
-                    text=f"{pct:.0f}% in work uniforms ({uniform}/{total_attire}) — indicates service/construction worker traffic, consider value-oriented offerings",
-                    evidence=[f"uniform={uniform}"],
-                ))
+                insights.append(
+                    Insight(
+                        insight_type="pattern",
+                        text=f"{pct:.0f}% in work uniforms ({uniform}/{total_attire}) — indicates service/construction worker traffic, consider value-oriented offerings",
+                        evidence=[f"uniform={uniform}"],
+                    )
+                )
 
         # Group behavior
         group_pct = p["group_events"] / total_people * 100 if total_people > 0 else 0
         if p["group_events"] > 2 and group_pct > 15:
-            insights.append(Insight(
-                insight_type="pattern",
-                text=f"{group_pct:.0f}% of visitors arrive in groups ({p['group_events']} group events) — indicates social destination; optimize for group seating and multi-item orders",
-                evidence=[f"groups={p['group_events']}"],
-            ))
+            insights.append(
+                Insight(
+                    insight_type="pattern",
+                    text=f"{group_pct:.0f}% of visitors arrive in groups ({p['group_events']} group events) — indicates social destination; optimize for group seating and multi-item orders",
+                    evidence=[f"groups={p['group_events']}"],
+                )
+            )
 
         return insights
 
@@ -347,41 +397,61 @@ class InsightExtractor:
         if walking + stationary > 4:
             motion_ratio = walking / (walking + stationary) * 100
             if motion_ratio > 75:
-                action = "verify all are authorized and badged" if is_security else "consider grab-and-go format"
-                insights.append(Insight(
-                    insight_type="pattern",
-                    text=f"{motion_ratio:.0f}% of people are in transit ({walking} walking vs {stationary} stationary) — {action}",
-                    evidence=[f"walking={walking}", f"stationary={stationary}"],
-                ))
+                action = (
+                    "verify all are authorized and badged"
+                    if is_security
+                    else "consider grab-and-go format"
+                )
+                insights.append(
+                    Insight(
+                        insight_type="pattern",
+                        text=f"{motion_ratio:.0f}% of people are in transit ({walking} walking vs {stationary} stationary) — {action}",
+                        evidence=[f"walking={walking}", f"stationary={stationary}"],
+                    )
+                )
             elif motion_ratio < 40:
-                action = "verify loitering is authorized activity" if is_security else "optimize for dwell time and upselling"
-                insights.append(Insight(
-                    insight_type="pattern",
-                    text=f"{100-motion_ratio:.0f}% stationary ({stationary} standing/sitting vs {walking} walking) — {action}",
-                    evidence=[f"walking={walking}", f"stationary={stationary}"],
-                ))
+                action = (
+                    "verify loitering is authorized activity"
+                    if is_security
+                    else "optimize for dwell time and upselling"
+                )
+                insights.append(
+                    Insight(
+                        insight_type="pattern",
+                        text=f"{100 - motion_ratio:.0f}% stationary ({stationary} standing/sitting vs {walking} walking) — {action}",
+                        evidence=[f"walking={walking}", f"stationary={stationary}"],
+                    )
+                )
 
         # Bag carrying
         bags = p["activities"].get("carrying_bag", 0)
         if bags > 1:
             pct = bags / total * 100
-            bag_action = "verify items against asset removal policy" if is_security else "suggests shopping activity or commuter traffic"
-            insights.append(Insight(
-                insight_type="pattern",
-                text=f"{pct:.0f}% carrying bags/backpacks ({bags}/{total} events) — {bag_action}",
-                evidence=[f"bags={bags}"],
-            ))
+            bag_action = (
+                "verify items against asset removal policy"
+                if is_security
+                else "suggests shopping activity or commuter traffic"
+            )
+            insights.append(
+                Insight(
+                    insight_type="pattern",
+                    text=f"{pct:.0f}% carrying bags/backpacks ({bags}/{total} events) — {bag_action}",
+                    evidence=[f"bags={bags}"],
+                )
+            )
 
         # Phone usage — skip for security (not relevant)
         if not is_security:
             phone = p["activities"].get("on_phone", 0)
             if phone > 1:
                 pct = phone / total * 100
-                insights.append(Insight(
-                    insight_type="pattern",
-                    text=f"{pct:.0f}% using phones ({phone} observations) — high mobile engagement, consider mobile ordering/app promotions",
-                    evidence=[f"phone={phone}"],
-                ))
+                insights.append(
+                    Insight(
+                        insight_type="pattern",
+                        text=f"{pct:.0f}% using phones ({phone} observations) — high mobile engagement, consider mobile ordering/app promotions",
+                        evidence=[f"phone={phone}"],
+                    )
+                )
 
         return insights
 
@@ -399,57 +469,69 @@ class InsightExtractor:
 
         # Suspicious activity
         if suspicious > 0:
-            insights.append(Insight(
-                insight_type="anomaly",
-                text=f"{suspicious} suspicious activity event(s) detected — recommend reviewing footage and increasing patrol frequency during affected hours",
-                evidence=[f"suspicious={suspicious}"],
-                confidence=0.7,
-            ))
+            insights.append(
+                Insight(
+                    insight_type="anomaly",
+                    text=f"{suspicious} suspicious activity event(s) detected — recommend reviewing footage and increasing patrol frequency during affected hours",
+                    evidence=[f"suspicious={suspicious}"],
+                    confidence=0.7,
+                )
+            )
 
         # Unauthorized access
         if unauthorized > 0:
-            insights.append(Insight(
-                insight_type="anomaly",
-                text=f"{unauthorized} unauthorized access event(s) (tailgating, propped doors, expired badges, unescorted visitors) — immediate security review recommended",
-                evidence=[f"unauthorized={unauthorized}"],
-                confidence=0.9,
-            ))
+            insights.append(
+                Insight(
+                    insight_type="anomaly",
+                    text=f"{unauthorized} unauthorized access event(s) (tailgating, propped doors, expired badges, unescorted visitors) — immediate security review recommended",
+                    evidence=[f"unauthorized={unauthorized}"],
+                    confidence=0.9,
+                )
+            )
 
         # Badge compliance
         if badge_count > 0 and p["person_events"] > 0:
             badge_rate = badge_count / p["person_events"] * 100
             if badge_rate < 80:
-                insights.append(Insight(
-                    insight_type="recommendation",
-                    text=f"Badge compliance rate {badge_rate:.0f}% ({badge_count}/{p['person_events']} people) — below 80% target, recommend enforcing badge-visible policy",
-                    evidence=[f"badge={badge_count}", f"people={p['person_events']}"],
-                ))
+                insights.append(
+                    Insight(
+                        insight_type="recommendation",
+                        text=f"Badge compliance rate {badge_rate:.0f}% ({badge_count}/{p['person_events']} people) — below 80% target, recommend enforcing badge-visible policy",
+                        evidence=[f"badge={badge_count}", f"people={p['person_events']}"],
+                    )
+                )
 
         # Alarm/emergency events
         if alarm > 0:
-            insights.append(Insight(
-                insight_type="anomaly",
-                text=f"{alarm} alarm/emergency event(s) detected (triggered alarms, unattended stations, blind spots) — investigate and address security gaps",
-                evidence=[f"alarms={alarm}"],
-                confidence=0.8,
-            ))
+            insights.append(
+                Insight(
+                    insight_type="anomaly",
+                    text=f"{alarm} alarm/emergency event(s) detected (triggered alarms, unattended stations, blind spots) — investigate and address security gaps",
+                    evidence=[f"alarms={alarm}"],
+                    confidence=0.8,
+                )
+            )
 
         # Patrol coverage
         if patrol > 0:
-            insights.append(Insight(
-                insight_type="pattern",
-                text=f"{patrol} patrol/escort event(s) recorded — indicates active security operations; verify patrol schedule adherence and coverage gaps",
-                evidence=[f"patrols={patrol}"],
-            ))
+            insights.append(
+                Insight(
+                    insight_type="pattern",
+                    text=f"{patrol} patrol/escort event(s) recorded — indicates active security operations; verify patrol schedule adherence and coverage gaps",
+                    evidence=[f"patrols={patrol}"],
+                )
+            )
 
         # After-hours activity
         if after_hours > 0:
-            insights.append(Insight(
-                insight_type="anomaly",
-                text=f"{after_hours} after-hours access event(s) — review against authorized after-hours personnel list for compliance",
-                evidence=[f"after_hours={after_hours}"],
-                confidence=0.7,
-            ))
+            insights.append(
+                Insight(
+                    insight_type="anomaly",
+                    text=f"{after_hours} after-hours access event(s) — review against authorized after-hours personnel list for compliance",
+                    evidence=[f"after_hours={after_hours}"],
+                    confidence=0.7,
+                )
+            )
 
         return insights
 
@@ -465,29 +547,35 @@ class InsightExtractor:
 
         # Vehicle traffic share
         if p["vehicle_events"] >= 3 and vehicle_pct > 15:
-            insights.append(Insight(
-                insight_type="pattern",
-                text=f"{vehicle_pct:.0f}% vehicle traffic ({p['vehicle_events']}/{total} events) — consider optimizing parking layout and traffic flow for this volume",
-                evidence=[f"vehicles={p['vehicle_events']}", f"total={total}"],
-            ))
+            insights.append(
+                Insight(
+                    insight_type="pattern",
+                    text=f"{vehicle_pct:.0f}% vehicle traffic ({p['vehicle_events']}/{total} events) — consider optimizing parking layout and traffic flow for this volume",
+                    evidence=[f"vehicles={p['vehicle_events']}", f"total={total}"],
+                )
+            )
 
         delivery = p["vehicles"].get("delivery", 0)
         if delivery > 0:
-            insights.append(Insight(
-                insight_type="pattern",
-                text=f"{delivery} delivery vehicle event(s) observed — consider designating delivery windows to reduce congestion during peak hours",
-                evidence=[f"delivery={delivery}"],
-            ))
+            insights.append(
+                Insight(
+                    insight_type="pattern",
+                    text=f"{delivery} delivery vehicle event(s) observed — consider designating delivery windows to reduce congestion during peak hours",
+                    evidence=[f"delivery={delivery}"],
+                )
+            )
 
         # Vehicle mix
         cars = p["vehicles"].get("car", 0) + p["vehicles"].get("suv", 0)
         trucks = p["vehicles"].get("truck", 0)
         if cars + trucks > 5 and trucks > cars:
-            insights.append(Insight(
-                insight_type="pattern",
-                text=f"Truck-dominant vehicle mix ({trucks} trucks vs {cars} cars) — suggests service/construction area rather than retail",
-                evidence=[f"trucks={trucks}", f"cars={cars}"],
-            ))
+            insights.append(
+                Insight(
+                    insight_type="pattern",
+                    text=f"Truck-dominant vehicle mix ({trucks} trucks vs {cars} cars) — suggests service/construction area rather than retail",
+                    evidence=[f"trucks={trucks}", f"cars={cars}"],
+                )
+            )
 
         return insights
 
@@ -508,22 +596,28 @@ class InsightExtractor:
                     gap_start = h
             else:
                 if gap_start is not None and h - gap_start >= 2:
-                    insights.append(Insight(
-                        insight_type="anomaly",
-                        text=f"No activity detected {gap_start:02d}:00-{h:02d}:00 ({h-gap_start} hours) during business hours — investigate if camera issue or genuine low traffic",
-                        evidence=[f"gap_hours={h-gap_start}"],
-                        hour=gap_start,
-                    ))
+                    insights.append(
+                        Insight(
+                            insight_type="anomaly",
+                            text=f"No activity detected {gap_start:02d}:00-{h:02d}:00 ({h - gap_start} hours) during business hours — investigate if camera issue or genuine low traffic",
+                            evidence=[f"gap_hours={h - gap_start}"],
+                            hour=gap_start,
+                        )
+                    )
                 gap_start = None
 
         # Late-night activity
-        late_events = sum(by_hour.get(h, 0) for h in range(22, 24)) + sum(by_hour.get(h, 0) for h in range(0, 6))
+        late_events = sum(by_hour.get(h, 0) for h in range(22, 24)) + sum(
+            by_hour.get(h, 0) for h in range(0, 6)
+        )
         if late_events > 3:
-            insights.append(Insight(
-                insight_type="anomaly",
-                text=f"{late_events} events detected during off-hours (22:00-06:00) — review for security concerns or after-hours operations",
-                evidence=[f"late_events={late_events}"],
-            ))
+            insights.append(
+                Insight(
+                    insight_type="anomaly",
+                    text=f"{late_events} events detected during off-hours (22:00-06:00) — review for security concerns or after-hours operations",
+                    evidence=[f"late_events={late_events}"],
+                )
+            )
 
         return insights
 
@@ -540,19 +634,28 @@ class InsightExtractor:
 
         if total_sized > 3:
             asp = (tall * 4.25 + grande * 5.45 + venti * 6.25) / total_sized
-            insights.append(Insight(
-                insight_type="comparison",
-                text=f"Observed drink ASP ${asp:.2f} (tall={tall}, grande={grande}, venti={venti}) vs SBUX reported ~$5.50 — {'bullish' if asp > 5.50 else 'bearish'} signal for average ticket",
-                evidence=[f"tall={tall}", f"grande={grande}", f"venti={venti}", f"asp=${asp:.2f}"],
-            ))
+            insights.append(
+                Insight(
+                    insight_type="comparison",
+                    text=f"Observed drink ASP ${asp:.2f} (tall={tall}, grande={grande}, venti={venti}) vs SBUX reported ~$5.50 — {'bullish' if asp > 5.50 else 'bearish'} signal for average ticket",
+                    evidence=[
+                        f"tall={tall}",
+                        f"grande={grande}",
+                        f"venti={venti}",
+                        f"asp=${asp:.2f}",
+                    ],
+                )
+            )
 
         if coffee > 3 and p["activities"].get("with_laptop", 0) > 0:
             laptop = p["activities"]["with_laptop"]
-            insights.append(Insight(
-                insight_type="correlation",
-                text=f"{laptop} laptop users observed among {coffee} coffee drinkers — indicates work-from-cafe segment with longer dwell time and higher spend potential",
-                evidence=[f"laptops={laptop}", f"coffee={coffee}"],
-            ))
+            insights.append(
+                Insight(
+                    insight_type="correlation",
+                    text=f"{laptop} laptop users observed among {coffee} coffee drinkers — indicates work-from-cafe segment with longer dwell time and higher spend potential",
+                    evidence=[f"laptops={laptop}", f"coffee={coffee}"],
+                )
+            )
 
         # Queue / ordering behavior
         ordering = p["activities"].get("ordering", 0)
@@ -560,19 +663,23 @@ class InsightExtractor:
         if ordering > 2:
             total = p["total"] or 1
             order_rate = ordering / total * 100
-            insights.append(Insight(
-                insight_type="pattern",
-                text=f"{order_rate:.0f}% actively ordering ({ordering}/{total} events) — high conversion rate indicates strong purchase intent at this location",
-                evidence=[f"ordering={ordering}", f"total={total}"],
-            ))
+            insights.append(
+                Insight(
+                    insight_type="pattern",
+                    text=f"{order_rate:.0f}% actively ordering ({ordering}/{total} events) — high conversion rate indicates strong purchase intent at this location",
+                    evidence=[f"ordering={ordering}", f"total={total}"],
+                )
+            )
 
         if browsing > 2 and ordering > 0 and browsing >= ordering:
             browse_to_order = min(100, ordering / browsing * 100)
-            insights.append(Insight(
-                insight_type="correlation",
-                text=f"{browsing} browsing events → {ordering} orders ({browse_to_order:.0f}% conversion) — optimize display placement to increase browse-to-purchase conversion",
-                evidence=[f"browsing={browsing}", f"ordering={ordering}"],
-            ))
+            insights.append(
+                Insight(
+                    insight_type="correlation",
+                    text=f"{browsing} browsing events → {ordering} orders ({browse_to_order:.0f}% conversion) — optimize display placement to increase browse-to-purchase conversion",
+                    evidence=[f"browsing={browsing}", f"ordering={ordering}"],
+                )
+            )
 
         return insights
 

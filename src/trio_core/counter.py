@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from pathlib import Path
 
 import cv2
 import numpy as np
@@ -42,6 +41,7 @@ CONFIDENCE_THRESHOLD = 0.25
 @dataclass
 class CropInfo:
     """A cropped detection for VLM description."""
+
     track_id: int
     class_name: str
     bbox: tuple[int, int, int, int]  # x1, y1, x2, y2
@@ -52,6 +52,7 @@ class CropInfo:
 @dataclass
 class CountResult:
     """Result from processing a single frame."""
+
     people_in: int = 0
     people_out: int = 0
     total_in: int = 0  # cumulative
@@ -84,7 +85,9 @@ class YOLOv10Detector:
         self.input_w = self.input_shape[3]
         logger.info("YOLOv10 loaded: %s (%dx%d)", model_path, self.input_w, self.input_h)
 
-    def detect(self, frame: np.ndarray, class_filter: set[int] | None = None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def detect(
+        self, frame: np.ndarray, class_filter: set[int] | None = None
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Detect objects in a frame.
 
         Args:
@@ -109,7 +112,9 @@ class YOLOv10Detector:
 
         # Filter: tracked classes + confidence
         ids_to_keep = class_filter or TRACKED_CLASS_IDS
-        mask = (preds[:, 4] >= self.confidence) & np.isin(preds[:, 5].astype(int), list(ids_to_keep))
+        mask = (preds[:, 4] >= self.confidence) & np.isin(
+            preds[:, 5].astype(int), list(ids_to_keep)
+        )
         preds = preds[mask]
 
         if len(preds) == 0:
@@ -240,7 +245,9 @@ class PeopleCounter:
         self._line_zone = None
         self._initialized = False
         self._calibrating = False
-        self._calibration_positions: list[tuple[float, float, float, float]] = []  # (cx, cy, track_id, frame_idx)
+        self._calibration_positions: list[
+            tuple[float, float, float, float]
+        ] = []  # (cx, cy, track_id, frame_idx)
         self._cal_frame_count = 0
         self._seen_ids: set[int] = set()
 
@@ -268,7 +275,9 @@ class PeopleCounter:
             end = sv.Point(w, h // 2)
             self._line_zone = sv.LineZone(start=start, end=end)
             self._initialized = True
-            logger.info("Auto-calibrating: observing movement for %d frames...", self._calibration_frames)
+            logger.info(
+                "Auto-calibrating: observing movement for %d frames...", self._calibration_frames
+            )
         else:
             if self._line_start is None or self._line_end is None:
                 self._line_start = (0, h // 2)
@@ -277,8 +286,13 @@ class PeopleCounter:
             end = sv.Point(*self._line_end)
             self._line_zone = sv.LineZone(start=start, end=end)
             self._initialized = True
-            logger.info("Counter initialized: line from %s to %s, frame %dx%d",
-                         self._line_start, self._line_end, w, h)
+            logger.info(
+                "Counter initialized: line from %s to %s, frame %dx%d",
+                self._line_start,
+                self._line_end,
+                w,
+                h,
+            )
 
     def _finish_calibration(self) -> None:
         """Analyze collected positions and place the counting line optimally."""
@@ -291,10 +305,13 @@ class PeopleCounter:
             # Not enough data — use center horizontal line
             self._line_start = (0, h // 2)
             self._line_end = (w, h // 2)
-            logger.info("Auto-calibration: insufficient movement data. Using center horizontal line.")
+            logger.info(
+                "Auto-calibration: insufficient movement data. Using center horizontal line."
+            )
         else:
             # Group positions by track_id and compute movement vectors
             from collections import defaultdict
+
             tracks: dict[int, list[tuple[float, float]]] = defaultdict(list)
             for cx, cy, tid, _ in self._calibration_positions:
                 tracks[int(tid)].append((cx, cy))
@@ -315,7 +332,9 @@ class PeopleCounter:
                 # No clear direction — use center horizontal
                 self._line_start = (0, h // 2)
                 self._line_end = (w, h // 2)
-                logger.info("Auto-calibration: no dominant direction. Using center horizontal line.")
+                logger.info(
+                    "Auto-calibration: no dominant direction. Using center horizontal line."
+                )
             else:
                 # Place line perpendicular to dominant movement, through center
                 # If movement is mostly horizontal (left-right): place vertical line
@@ -331,10 +350,16 @@ class PeopleCounter:
                     self._line_end = (w, h // 2)
                     direction = "up-down"
 
-                logger.info("Auto-calibration complete: dominant flow is %s (dx=%.0f, dy=%.0f, %d tracks). "
-                            "Line: %s to %s",
-                            direction, dx_total, dy_total, vectors,
-                            self._line_start, self._line_end)
+                logger.info(
+                    "Auto-calibration complete: dominant flow is %s (dx=%.0f, dy=%.0f, %d tracks). "
+                    "Line: %s to %s",
+                    direction,
+                    dx_total,
+                    dy_total,
+                    vectors,
+                    self._line_start,
+                    self._line_end,
+                )
 
         # Replace the line zone
         start = sv.Point(*self._line_start)
@@ -369,13 +394,17 @@ class PeopleCounter:
                 for i, tid in enumerate(tracked.tracker_id):
                     cx = float((tracked.xyxy[i][0] + tracked.xyxy[i][2]) / 2)
                     cy = float((tracked.xyxy[i][1] + tracked.xyxy[i][3]) / 2)
-                    self._calibration_positions.append((cx, cy, float(tid), float(self._cal_frame_count)))
+                    self._calibration_positions.append(
+                        (cx, cy, float(tid), float(self._cal_frame_count))
+                    )
             if self._cal_frame_count >= self._calibration_frames:
                 self._finish_calibration()
 
         # Count line crossings (people only)
         people_mask = tracked.class_id == 0 if tracked.class_id is not None else np.array([])
-        people_dets = tracked[people_mask] if len(people_mask) > 0 and people_mask.any() else tracked
+        people_dets = (
+            tracked[people_mask] if len(people_mask) > 0 and people_mask.any() else tracked
+        )
         self._line_zone.trigger(people_dets)
 
         # Per-class breakdown (from tracked detections — used for non-person classes)
@@ -411,13 +440,17 @@ class PeopleCounter:
                     y2 = min(h, y2 + pad_y)
                     crop = frame[y1:y2, x1:x2].copy()
                     cid = int(tracked.class_id[i]) if tracked.class_id is not None else 0
-                    new_crops.append(CropInfo(
-                        track_id=int(tid),
-                        class_name=COCO_CLASSES.get(cid, f"class_{cid}"),
-                        bbox=(x1, y1, x2, y2),
-                        confidence=float(tracked.confidence[i]) if tracked.confidence is not None else 0.0,
-                        crop=crop,
-                    ))
+                    new_crops.append(
+                        CropInfo(
+                            track_id=int(tid),
+                            class_name=COCO_CLASSES.get(cid, f"class_{cid}"),
+                            bbox=(x1, y1, x2, y2),
+                            confidence=float(tracked.confidence[i])
+                            if tracked.confidence is not None
+                            else 0.0,
+                            crop=crop,
+                        )
+                    )
 
         # Temporal smoothing before applying correction factor.
         if self._use_kalman:
@@ -426,22 +459,23 @@ class PeopleCounter:
             # Adapts gain per frame: uncertain frames weighted less.
             if self._kalman is None:
                 from filterpy.kalman import KalmanFilter as KF
+
                 kf = KF(dim_x=2, dim_z=1)
-                kf.F = np.array([[1., 1.], [0., 1.]])  # count + velocity model
-                kf.H = np.array([[1., 0.]])              # observe count only
-                kf.R = np.array([[9.]])                   # measurement noise σ²≈3²
-                kf.Q = np.array([[0.5, 0.], [0., 0.1]])  # process noise
-                kf.P *= 50.
-                kf.x = np.array([[float(raw_person_detections)], [0.]])
+                kf.F = np.array([[1.0, 1.0], [0.0, 1.0]])  # count + velocity model
+                kf.H = np.array([[1.0, 0.0]])  # observe count only
+                kf.R = np.array([[9.0]])  # measurement noise σ²≈3²
+                kf.Q = np.array([[0.5, 0.0], [0.0, 0.1]])  # process noise
+                kf.P *= 50.0
+                kf.x = np.array([[float(raw_person_detections)], [0.0]])
                 self._kalman = kf
             self._kalman.predict()
             self._kalman.update(np.array([[float(raw_person_detections)]]))
-            smoothed_raw = max(0., self._kalman.x[0, 0])
+            smoothed_raw = max(0.0, self._kalman.x[0, 0])
         else:
             # Fallback: simple moving average
             self._recent_raw_counts.append(raw_person_detections)
             if len(self._recent_raw_counts) > self._smoothing_window:
-                self._recent_raw_counts = self._recent_raw_counts[-self._smoothing_window:]
+                self._recent_raw_counts = self._recent_raw_counts[-self._smoothing_window :]
             smoothed_raw = sum(self._recent_raw_counts) / len(self._recent_raw_counts)
 
         # Apply correction factor to smoothed raw person detections
@@ -457,7 +491,7 @@ class PeopleCounter:
             # Confidence from Kalman covariance: lower P[0,0] = higher confidence
             count_var = float(self._kalman.P[0, 0])
             if smoothed_raw > 0:
-                cv = (count_var ** 0.5) / max(smoothed_raw, 1)  # coefficient of variation
+                cv = (count_var**0.5) / max(smoothed_raw, 1)  # coefficient of variation
                 kalman_confidence = max(0.0, min(1.0, 1.0 - cv))
 
         return CountResult(
@@ -492,8 +526,11 @@ class PeopleCounter:
                 ratios.sort()
                 mid = len(ratios) // 2
                 self.correction_factor = ratios[mid]  # median
-                logger.info("Correction factor updated: %.2fx (%d samples)",
-                            self.correction_factor, len(self._correction_samples))
+                logger.info(
+                    "Correction factor updated: %.2fx (%d samples)",
+                    self.correction_factor,
+                    len(self._correction_samples),
+                )
 
     def corrected_count(self, raw_count: int) -> int:
         """Apply correction factor to a raw YOLO count."""
@@ -537,17 +574,31 @@ class PeopleCounter:
         # Annotate using raw detections (no tracker IDs — those come from process())
         annotated = frame.copy()
         box_annotator = sv.BoxAnnotator(thickness=2)
-        label_annotator = sv.LabelAnnotator(text_scale=0.5, text_thickness=1)
+        sv.LabelAnnotator(text_scale=0.5, text_thickness=1)
         line_annotator = sv.LineZoneAnnotator(thickness=2)
 
         annotated = box_annotator.annotate(annotated, detections)
         annotated = line_annotator.annotate(annotated, self._line_zone)
 
         # Draw counts
-        cv2.putText(annotated, f"IN: {self._line_zone.in_count}",
-                     (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-        cv2.putText(annotated, f"OUT: {self._line_zone.out_count}",
-                     (10, 65), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+        cv2.putText(
+            annotated,
+            f"IN: {self._line_zone.in_count}",
+            (10, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            (0, 255, 0),
+            2,
+        )
+        cv2.putText(
+            annotated,
+            f"OUT: {self._line_zone.out_count}",
+            (10, 65),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            (0, 0, 255),
+            2,
+        )
 
         return annotated
 

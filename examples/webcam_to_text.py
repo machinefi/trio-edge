@@ -13,16 +13,24 @@ import argparse
 import sys
 import time
 
-from trio_core import TrioCore, StreamCapture
+from trio_core import StreamCapture, TrioCore
 
 
 def main():
     parser = argparse.ArgumentParser(description="Webcam to text via VLM")
     parser.add_argument("--camera", type=int, default=0, help="Camera index (default: 0)")
-    parser.add_argument("--prompt", "-p", default="Describe what you see in one sentence.",
-                        help="Question to ask the VLM")
-    parser.add_argument("--stride", type=int, default=30,
-                        help="Process every N-th frame (default: 30, ~1 per second at 30fps)")
+    parser.add_argument(
+        "--prompt",
+        "-p",
+        default="Describe what you see in one sentence.",
+        help="Question to ask the VLM",
+    )
+    parser.add_argument(
+        "--stride",
+        type=int,
+        default=30,
+        help="Process every N-th frame (default: 30, ~1 per second at 30fps)",
+    )
     parser.add_argument("--model", "-m", default=None, help="Model name (auto-detected if omitted)")
     parser.add_argument("--backend", "-b", default=None, help="Force backend: mlx or transformers")
     parser.add_argument("--max-tokens", type=int, default=256, help="Max generation tokens")
@@ -30,6 +38,7 @@ def main():
 
     # Initialize engine
     from trio_core import EngineConfig
+
     config_kwargs = {"max_tokens": args.max_tokens}
     if args.model:
         config_kwargs["model"] = args.model
@@ -59,14 +68,19 @@ def main():
 
                 print(f"\n[Frame {frame_num}] ({elapsed:.0f}ms)")
                 print(f"  {result.text}")
-                print(f"  Preprocess: {result.metrics.preprocess_ms:.0f}ms | "
-                      f"Inference: {result.metrics.inference_ms:.0f}ms | "
-                      f"Tokens/s: {result.metrics.tokens_per_sec:.1f}")
+                print(
+                    f"  Preprocess: {result.metrics.preprocess_ms:.0f}ms | "
+                    f"Inference: {result.metrics.inference_ms:.0f}ms | "
+                    f"Tokens/s: {result.metrics.tokens_per_sec:.1f}"
+                )
     except KeyboardInterrupt:
         print(f"\nStopped after {frame_num} frames.")
     except IOError as e:
         print(f"Camera error: {e}", file=sys.stderr)
-        print("Tip: Make sure a camera is connected (Mac Studio needs an external webcam).", file=sys.stderr)
+        print(
+            "Tip: Make sure a camera is connected (Mac Studio needs an external webcam).",
+            file=sys.stderr,
+        )
         print("     You can also use video_analyze.py for file-based analysis.", file=sys.stderr)
         sys.exit(1)
 

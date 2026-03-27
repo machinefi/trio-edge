@@ -1,6 +1,6 @@
 """Tests for trio_core.callbacks."""
 
-from trio_core.callbacks import CallbackMixin, get_default_callbacks, EVENTS
+from trio_core.callbacks import EVENTS, CallbackMixin, get_default_callbacks
 
 
 class DummyEngine(CallbackMixin):
@@ -53,6 +53,7 @@ class TestCallbackMixin:
 
     def test_unknown_event_warns(self, caplog):
         import logging
+
         engine = DummyEngine()
         with caplog.at_level(logging.WARNING):
             engine.add_callback("on_fake_event", lambda e: None)

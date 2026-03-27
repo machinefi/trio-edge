@@ -59,9 +59,15 @@ def _wrap_text(text, font, font_scale, thickness, max_width):
     return lines
 
 
-def draw_overlay(frame: np.ndarray, description: str, metrics: str = "",
-                 watch_mode: bool = False, triggered: bool = False,
-                 events: list | None = None, watch_text: str = "") -> np.ndarray:
+def draw_overlay(
+    frame: np.ndarray,
+    description: str,
+    metrics: str = "",
+    watch_mode: bool = False,
+    triggered: bool = False,
+    events: list | None = None,
+    watch_text: str = "",
+) -> np.ndarray:
     """Draw status bar (top) + description box (bottom) + event log."""
     h, w = frame.shape[:2]
     overlay = frame.copy()
@@ -79,18 +85,18 @@ def draw_overlay(frame: np.ndarray, description: str, metrics: str = "",
 
         status = "!! ALERT !!" if triggered else "CLEAR"
         ts = datetime.now().strftime("%H:%M:%S")
-        cv2.putText(frame, f"{status}", (margin, 42),
-                    font, 1.2, (255, 255, 255), 3, cv2.LINE_AA)
-        cv2.putText(frame, ts, (w - 150, 42),
-                    font, 0.8, (255, 255, 255), 2, cv2.LINE_AA)
+        cv2.putText(frame, f"{status}", (margin, 42), font, 1.2, (255, 255, 255), 3, cv2.LINE_AA)
+        cv2.putText(frame, ts, (w - 150, 42), font, 0.8, (255, 255, 255), 2, cv2.LINE_AA)
 
     # --- Watch condition (left side, below status bar) ---
     if watch_mode and watch_text:
         cond_y = 90
-        cv2.putText(frame, "Watching for:", (margin, cond_y),
-                    font, 0.6, (0, 255, 255), 2, cv2.LINE_AA)  # bright cyan
-        cv2.putText(frame, watch_text, (margin, cond_y + 25),
-                    font, 0.6, (0, 255, 0), 2, cv2.LINE_AA)  # bright green
+        cv2.putText(
+            frame, "Watching for:", (margin, cond_y), font, 0.6, (0, 255, 255), 2, cv2.LINE_AA
+        )  # bright cyan
+        cv2.putText(
+            frame, watch_text, (margin, cond_y + 25), font, 0.6, (0, 255, 0), 2, cv2.LINE_AA
+        )  # bright green
 
     # --- Event log (top-right, watch mode only) — all triggered events ---
     if events:
@@ -103,8 +109,9 @@ def draw_overlay(frame: np.ndarray, description: str, metrics: str = "",
             log_y_start = 85 if watch_mode else 10
             for i, evt in enumerate(show_alerts):
                 y = log_y_start + i * log_line_h
-                cv2.putText(frame, evt["text"], (log_x, y),
-                            font, 0.6, (50, 50, 255), 2, cv2.LINE_AA)  # bright red
+                cv2.putText(
+                    frame, evt["text"], (log_x, y), font, 0.6, (50, 50, 255), 2, cv2.LINE_AA
+                )  # bright red
 
     # --- Bottom description box ---
     max_width = w - 2 * margin
@@ -128,21 +135,36 @@ def draw_overlay(frame: np.ndarray, description: str, metrics: str = "",
 
 def main():
     parser = argparse.ArgumentParser(description="Webcam GUI with live VLM analysis")
-    parser.add_argument("--source", "-s", default="0",
-                        help="RTSP URL, video file, or camera index (default: 0)")
-    parser.add_argument("--prompt", "-p", default=None,
-                        help="Question to ask the VLM (auto-set in watch mode)")
-    parser.add_argument("--watch", "-w", default=None,
-                        help="Watch condition in natural language, e.g. 'someone is at the door'")
+    parser.add_argument(
+        "--source", "-s", default="0", help="RTSP URL, video file, or camera index (default: 0)"
+    )
+    parser.add_argument(
+        "--prompt", "-p", default=None, help="Question to ask the VLM (auto-set in watch mode)"
+    )
+    parser.add_argument(
+        "--watch",
+        "-w",
+        default=None,
+        help="Watch condition in natural language, e.g. 'someone is at the door'",
+    )
     parser.add_argument("--model", "-m", default=None, help="Model name (auto-detected if omitted)")
     parser.add_argument("--backend", "-b", default=None, help="Force backend: mlx or transformers")
     parser.add_argument("--max-tokens", type=int, default=80, help="Max generation tokens")
-    parser.add_argument("--interval", type=float, default=3.0,
-                        help="Seconds between VLM analyses (default: 3.0)")
-    parser.add_argument("--frames", type=int, default=4,
-                        help="Number of frames per analysis for temporal understanding (default: 4)")
-    parser.add_argument("--resolution", type=int, default=None,
-                        help="Max resolution for inference (e.g. 480, 360). Lower = faster.")
+    parser.add_argument(
+        "--interval", type=float, default=3.0, help="Seconds between VLM analyses (default: 3.0)"
+    )
+    parser.add_argument(
+        "--frames",
+        type=int,
+        default=4,
+        help="Number of frames per analysis for temporal understanding (default: 4)",
+    )
+    parser.add_argument(
+        "--resolution",
+        type=int,
+        default=None,
+        help="Max resolution for inference (e.g. 480, 360). Lower = faster.",
+    )
     parser.add_argument("--no-sound", action="store_true", help="Disable audio alerts")
     args = parser.parse_args()
 
@@ -154,7 +176,7 @@ def main():
     elif watch_mode:
         prompt = (
             f"You are a security monitor. Look at this image carefully.\n"
-            f"Check if the following is true: \"{args.watch}\"\n"
+            f'Check if the following is true: "{args.watch}"\n'
             f"{{prev_context}}"
             f"Answer YES or NO first, then briefly explain why."
         )
@@ -162,7 +184,7 @@ def main():
         prompt = "Describe what you see briefly.{prev_context}"
 
     # Initialize engine
-    from trio_core import TrioCore, EngineConfig
+    from trio_core import EngineConfig, TrioCore
 
     config_kwargs = {"max_tokens": args.max_tokens}
     if args.model:
@@ -177,7 +199,7 @@ def main():
     print(f"Device: {health.get('backend', {}).get('device', 'unknown')}")
     print(f"Temporal frames: {args.frames} per analysis")
     if watch_mode:
-        print(f"Watch condition: \"{args.watch}\"")
+        print(f'Watch condition: "{args.watch}"')
 
     # Open source
     source_str = args.source
@@ -192,20 +214,48 @@ def main():
             print("Error: ffmpeg not found — install with: brew install ffmpeg")
             return
         probe = subprocess.run(
-            ["ffprobe", "-v", "error", "-rtsp_transport", "tcp",
-             "-select_streams", "v:0",
-             "-show_entries", "stream=width,height",
-             "-of", "csv=p=0", source],
-            capture_output=True, text=True, timeout=10,
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-rtsp_transport",
+                "tcp",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=width,height",
+                "-of",
+                "csv=p=0",
+                source,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if not probe.stdout.strip():
             print(f"Error: Cannot probe RTSP stream: {source}")
             return
         rtsp_w, rtsp_h = [int(x) for x in probe.stdout.strip().split(",")]
         ffmpeg_proc = subprocess.Popen(
-            ["ffmpeg", "-rtsp_transport", "tcp", "-i", source,
-             "-f", "rawvideo", "-pix_fmt", "bgr24", "-an", "-sn", "-v", "error", "-"],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=rtsp_w * rtsp_h * 3 * 2,
+            [
+                "ffmpeg",
+                "-rtsp_transport",
+                "tcp",
+                "-i",
+                source,
+                "-f",
+                "rawvideo",
+                "-pix_fmt",
+                "bgr24",
+                "-an",
+                "-sn",
+                "-v",
+                "error",
+                "-",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            bufsize=rtsp_w * rtsp_h * 3 * 2,
         )
         cap = None
     else:
@@ -243,8 +293,10 @@ def main():
                 args.resolution = int(max(h_orig, w_orig) * scale)
                 # Clamp to reasonable range
                 args.resolution = max(args.resolution, 180)
-                print(f"  Full-res inference: {cal_time:.1f}s → auto-set resolution={args.resolution}px "
-                      f"(~{target_time:.0f}s target)")
+                print(
+                    f"  Full-res inference: {cal_time:.1f}s → auto-set resolution={args.resolution}px "
+                    f"(~{target_time:.0f}s target)"
+                )
             else:
                 print(f"  Full-res inference: {cal_time:.1f}s — fast enough, no downscale needed")
         else:
@@ -268,8 +320,9 @@ def main():
         if args.no_sound:
             return
         try:
-            subprocess.Popen(["say", "-r", "200", text],
-                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.Popen(
+                ["say", "-r", "200", text], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
         except FileNotFoundError:
             pass
 
@@ -314,13 +367,14 @@ def main():
             # Build prompt with temporal context
             prev_ctx = ""
             if prev_description:
-                prev_ctx = f"\nPrevious observation: \"{prev_description}\"\n"
+                prev_ctx = f'\nPrevious observation: "{prev_description}"\n'
             current_prompt = prompt.replace("{prev_context}", prev_ctx)
 
             try:
                 t0 = time.monotonic()
-                result = engine.analyze_video(video_array, current_prompt,
-                                              max_tokens=args.max_tokens)
+                result = engine.analyze_video(
+                    video_array, current_prompt, max_tokens=args.max_tokens
+                )
                 elapsed = time.monotonic() - t0
                 text = result.text.strip().replace("\n", " ")
 
@@ -344,10 +398,12 @@ def main():
                             triggered_until = time.monotonic() + 2.0
                             ts = datetime.now().strftime("%H:%M:%S")
                             reason = text[3:].lstrip(".,!: ") if len(text) > 3 else text
-                            events.append({
-                                "text": f"[{ts}] {reason[:55]}",
-                                "triggered": True,
-                            })
+                            events.append(
+                                {
+                                    "text": f"[{ts}] {reason[:55]}",
+                                    "triggered": True,
+                                }
+                            )
                             # Only speak on state change (CLEAR -> ALERT)
                             if not was_triggered:
                                 _alert(f"Alert: {args.watch}")
@@ -389,8 +445,11 @@ def main():
                     triggered = False
 
                 display = draw_overlay(
-                    frame, description, metrics_text,
-                    watch_mode=watch_mode, triggered=triggered,
+                    frame,
+                    description,
+                    metrics_text,
+                    watch_mode=watch_mode,
+                    triggered=triggered,
                     events=events if watch_mode else None,
                     watch_text=args.watch or "",
                 )

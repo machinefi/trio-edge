@@ -1,26 +1,31 @@
 """Tests for trio_core.model_adapter — ModelAdapter abstraction."""
 
-from unittest.mock import MagicMock, PropertyMock
+from unittest.mock import MagicMock
+
 import pytest
 
 pytest.importorskip("mlx.core")
 
 from trio_core.model_adapter import (
-    ModelAdapter, Qwen25VLAdapter, Qwen3VLAdapter,
-    InternVLAdapter, LLaVAAdapter, FastVLMAdapter,
-    get_adapter, VisionOutput, MergeResult,
+    FastVLMAdapter,
+    InternVLAdapter,
+    LLaVAAdapter,
+    MergeResult,
+    Qwen3VLAdapter,
+    Qwen25VLAdapter,
+    VisionOutput,
+    get_adapter,
 )
-
 
 # ---------------------------------------------------------------------------
 # Adapter detection via get_adapter()
 # ---------------------------------------------------------------------------
 
+
 class TestGetAdapter:
     """Test auto-detection of model family."""
 
-    def _mock_model(self, vt_model_type="", vt_class_name="VisionModel",
-                    config_model_type=""):
+    def _mock_model(self, vt_model_type="", vt_class_name="VisionModel", config_model_type=""):
         model = MagicMock()
         vt = MagicMock()
         type(vt).__name__ = vt_class_name
@@ -89,8 +94,8 @@ class TestGetAdapter:
 # Adapter properties
 # ---------------------------------------------------------------------------
 
-class TestAdapterProperties:
 
+class TestAdapterProperties:
     def _make_adapter(self, cls):
         model = MagicMock()
         return cls(model)
@@ -135,11 +140,13 @@ class TestAdapterProperties:
 # Token count computation
 # ---------------------------------------------------------------------------
 
+
 class TestOriginalTokenCount:
     """Test original_token_count with different spatial_merge_size values."""
 
     def test_qwen_spatial_merge_2(self):
         import mlx.core as mx
+
         model = MagicMock()
         a = Qwen25VLAdapter(model)
         # t=1, h=28, w=28 → 1 * (28//2) * (28//2) = 196
@@ -148,6 +155,7 @@ class TestOriginalTokenCount:
 
     def test_internvl_spatial_merge_1(self):
         import mlx.core as mx
+
         model = MagicMock()
         a = InternVLAdapter(model)
         # t=1, h=28, w=28 → 1 * 28 * 28 = 784 (no spatial merge)
@@ -156,6 +164,7 @@ class TestOriginalTokenCount:
 
     def test_llava_spatial_merge_1(self):
         import mlx.core as mx
+
         model = MagicMock()
         a = LLaVAAdapter(model)
         grid = mx.array([[1, 14, 14]], dtype=mx.int32)
@@ -166,8 +175,8 @@ class TestOriginalTokenCount:
 # Visual token IDs
 # ---------------------------------------------------------------------------
 
-class TestVisualTokenIds:
 
+class TestVisualTokenIds:
     def test_qwen25_token_ids(self):
         model = MagicMock()
         model.config.video_token_id = 151656
@@ -203,32 +212,38 @@ class TestVisualTokenIds:
 # Profiles supports_tome field
 # ---------------------------------------------------------------------------
 
+
 class TestProfilesSupportsTome:
     """Verify supports_tome is correctly set for each model family."""
 
     def test_qwen_supports_tome(self):
         from trio_core.profiles import PROFILES
+
         assert PROFILES["qwen2.5-vl-3b"].supports_tome is True
         assert PROFILES["qwen3.5-0.8b"].supports_tome is True
         assert PROFILES["qwen3-vl-4b"].supports_tome is False  # deepstack breaks ToMe
 
     def test_internvl_no_tome(self):
         from trio_core.profiles import PROFILES
+
         assert PROFILES["internvl3-1b"].supports_tome is False
         assert PROFILES["internvl3-2b"].supports_tome is False
 
     def test_fastvlm_no_tome(self):
         from trio_core.profiles import PROFILES
+
         assert PROFILES["fastvlm-0.5b"].supports_tome is False
         assert PROFILES["fastvlm-1.5b"].supports_tome is False
 
     def test_nanollava_supports_tome(self):
         from trio_core.profiles import PROFILES
+
         assert PROFILES["nanollava-1.5"].supports_tome is True
 
     def test_default_supports_tome(self):
         """Models without explicit supports_tome should default to True."""
         from trio_core.profiles import PROFILES
+
         assert PROFILES["gemma3-4b"].supports_tome is True
         assert PROFILES["phi4-multimodal"].supports_tome is True
 
@@ -237,16 +252,18 @@ class TestProfilesSupportsTome:
 # VisionOutput and MergeResult dataclasses
 # ---------------------------------------------------------------------------
 
-class TestDataClasses:
 
+class TestDataClasses:
     def test_vision_output_defaults(self):
         import mlx.core as mx
+
         hs = mx.zeros((10, 64))
         vo = VisionOutput(hidden_states=hs)
         assert vo.deepstack_embeds is None
 
     def test_vision_output_with_deepstack(self):
         import mlx.core as mx
+
         hs = mx.zeros((10, 64))
         ds = [mx.zeros((5, 64))]
         vo = VisionOutput(hidden_states=hs, deepstack_embeds=ds)
@@ -254,6 +271,7 @@ class TestDataClasses:
 
     def test_merge_result_defaults(self):
         import mlx.core as mx
+
         embeds = mx.zeros((1, 20, 64))
         mr = MergeResult(embeds=embeds)
         assert mr.image_mask is None
@@ -263,13 +281,14 @@ class TestDataClasses:
 # create_tome_vision rejects unsupported architectures
 # ---------------------------------------------------------------------------
 
-class TestCreateTomeVisionRejects:
 
+class TestCreateTomeVisionRejects:
     def test_rejects_internvit(self):
         from trio_core.native_vision import create_tome_vision
 
         class FakeInternViT:
             model_type = ""
+
         vt = FakeInternViT()
 
         with pytest.raises(ValueError, match="InternViT"):
@@ -280,6 +299,7 @@ class TestCreateTomeVisionRejects:
 
         class FakeFastVLMEncoder:
             model_type = ""
+
         vt = FakeFastVLMEncoder()
 
         with pytest.raises(ValueError, match="FastVLM"):
@@ -290,8 +310,8 @@ class TestCreateTomeVisionRejects:
 # get_adapter: additional detection paths
 # ---------------------------------------------------------------------------
 
-class TestGetAdapterExtra:
 
+class TestGetAdapterExtra:
     def test_fastvlm_via_config_model_type(self):
         """Line 505-507: detect FastVLM via config.model_type."""
         model = MagicMock()
@@ -309,16 +329,14 @@ class TestGetAdapterExtra:
 # Base ModelAdapter methods
 # ---------------------------------------------------------------------------
 
-class TestBaseAdapterMethods:
 
+class TestBaseAdapterMethods:
     def test_compute_position_ids_returns_none(self):
         """Line 91: base compute_position_ids returns (None, None)."""
         model = MagicMock()
         # Use a concrete subclass that doesn't override compute_position_ids
         a = InternVLAdapter(model)
-        pos, delta = a.compute_position_ids(
-            input_ids=MagicMock(), attention_mask=MagicMock()
-        )
+        pos, delta = a.compute_position_ids(input_ids=MagicMock(), attention_mask=MagicMock())
         assert pos is None
         assert delta is None
 
@@ -355,12 +373,13 @@ class TestBaseAdapterMethods:
         model = MagicMock()
         a = InternVLAdapter(model)
         layer = MagicMock(return_value="output")
-        result = a.call_layer(layer, "h", "mask", "cache", position_ids="pos")
+        a.call_layer(layer, "h", "mask", "cache", position_ids="pos")
         layer.assert_called_once_with("h", "mask", "cache")
 
     def test_get_vision_dtype_patch_embed_proj(self):
         """Lines 114-116: vision_tower.patch_embed.proj.weight.dtype."""
         import mlx.core as mx
+
         model = MagicMock()
         model.vision_tower.patch_embed.proj.weight.dtype = mx.float32
         del model.vision_model  # ensure fallback to vision_tower
@@ -372,6 +391,7 @@ class TestBaseAdapterMethods:
     def test_get_vision_dtype_linear_patches(self):
         """Lines 117-118: vision_tower.patch_embed.linear_patches.weight.dtype."""
         import mlx.core as mx
+
         model = MagicMock()
         del model.vision_tower.patch_embed.proj  # no proj
         model.vision_tower.patch_embed.linear_patches.weight.dtype = mx.bfloat16
@@ -382,6 +402,7 @@ class TestBaseAdapterMethods:
     def test_get_vision_dtype_model_patch_embed(self):
         """Lines 120-121: vision_tower.model.patch_embed.proj.weight.dtype."""
         import mlx.core as mx
+
         model = MagicMock()
         del model.vision_tower.patch_embed  # no direct patch_embed
         model.vision_tower.model.patch_embed.proj.weight.dtype = mx.float16
@@ -392,6 +413,7 @@ class TestBaseAdapterMethods:
     def test_get_vision_dtype_fallback(self):
         """Lines 122-123: fallback returns mx.float16."""
         import mlx.core as mx
+
         model = MagicMock()
         del model.vision_tower.patch_embed
         del model.vision_tower.model
@@ -402,6 +424,7 @@ class TestBaseAdapterMethods:
     def test_get_vision_dtype_via_vision_model(self):
         """Lines 111-112: fallback to model.vision_model when no vision_tower."""
         import mlx.core as mx
+
         model = MagicMock()
         del model.vision_tower  # no vision_tower
         model.vision_model.patch_embed.proj.weight.dtype = mx.float32
@@ -414,11 +437,12 @@ class TestBaseAdapterMethods:
 # Qwen25VLAdapter method tests
 # ---------------------------------------------------------------------------
 
-class TestQwen25Methods:
 
+class TestQwen25Methods:
     def test_run_vision_encoder(self):
         """Lines 159-162: calls vision_tower with correct args."""
         import mlx.core as mx
+
         model = MagicMock()
         model.vision_tower.patch_embed.proj.weight.dtype = mx.float16
         del model.vision_tower.patch_embed.linear_patches
@@ -434,11 +458,12 @@ class TestQwen25Methods:
         assert isinstance(result, VisionOutput)
         model.vision_tower.assert_called_once()
         call_args = model.vision_tower.call_args
-        assert call_args[1]['output_hidden_states'] is False
+        assert call_args[1]["output_hidden_states"] is False
 
     def test_merge_visual_features(self):
         """Lines 165-169: calls merge_input_ids_with_image_features."""
         import mlx.core as mx
+
         model = MagicMock()
         model.config.video_token_id = 100
         model.config.image_token_id = 101
@@ -453,7 +478,11 @@ class TestQwen25Methods:
 
         assert isinstance(result, MergeResult)
         model.merge_input_ids_with_image_features.assert_called_once_with(
-            101, 100, hs, text_embeds, input_ids,
+            101,
+            100,
+            hs,
+            text_embeds,
+            input_ids,
         )
 
     def test_compute_position_ids(self):
@@ -465,15 +494,18 @@ class TestQwen25Methods:
             input_ids="ids", attention_mask="mask", image_grid_thw="grid"
         )
         model.language_model.get_rope_index.assert_called_once_with(
-            "ids", attention_mask="mask", image_grid_thw="grid",
+            "ids",
+            attention_mask="mask",
+            image_grid_thw="grid",
         )
         assert pos == "pos"
         assert delta == "delta"
 
     def test_apply_rope_at_layer(self):
         """Lines 177-181: uses rotary_emb + apply_multimodal_rotary_pos_emb."""
-        import mlx.core as mx
         from unittest.mock import patch
+
+        import mlx.core as mx
 
         model = MagicMock()
         a = Qwen25VLAdapter(model)
@@ -500,7 +532,7 @@ class TestQwen25Methods:
         model = MagicMock()
         a = Qwen25VLAdapter(model)
         layer = MagicMock(return_value="out")
-        result = a.call_layer(layer, "h", "mask", "cache", position_ids="pos")
+        a.call_layer(layer, "h", "mask", "cache", position_ids="pos")
         layer.assert_called_once_with("h", "mask", "cache", "pos")
 
 
@@ -508,11 +540,12 @@ class TestQwen25Methods:
 # Qwen3VLAdapter method tests
 # ---------------------------------------------------------------------------
 
-class TestQwen3Methods:
 
+class TestQwen3Methods:
     def test_run_vision_encoder_tuple(self):
         """Lines 221-231: vision_tower returns tuple (hs, deepstack)."""
         import mlx.core as mx
+
         model = MagicMock()
         model.vision_tower.patch_embed.proj.weight.dtype = mx.float16
         del model.vision_tower.patch_embed.linear_patches
@@ -532,6 +565,7 @@ class TestQwen3Methods:
     def test_run_vision_encoder_non_tuple(self):
         """Lines 228-230: vision_tower returns plain tensor."""
         import mlx.core as mx
+
         model = MagicMock()
         model.vision_tower.patch_embed.proj.weight.dtype = mx.float16
         del model.vision_tower.patch_embed.linear_patches
@@ -549,6 +583,7 @@ class TestQwen3Methods:
     def test_run_vision_encoder_tuple_single(self):
         """Line 227: tuple with only one element."""
         import mlx.core as mx
+
         model = MagicMock()
         model.vision_tower.patch_embed.proj.weight.dtype = mx.float16
         del model.vision_tower.patch_embed.linear_patches
@@ -566,6 +601,7 @@ class TestQwen3Methods:
     def test_merge_visual_features(self):
         """Lines 234-239: calls merge with (hs, text, ids, img_id, vid_id)."""
         import mlx.core as mx
+
         model = MagicMock()
         model.config.video_token_index = 42
         model.config.image_token_index = 43
@@ -585,7 +621,11 @@ class TestQwen3Methods:
         assert isinstance(result, MergeResult)
         assert result.image_mask is mask
         model.merge_input_ids_with_image_features.assert_called_once_with(
-            hs, text_embeds, input_ids, 43, 42,
+            hs,
+            text_embeds,
+            input_ids,
+            43,
+            42,
         )
 
     def test_compute_position_ids(self):
@@ -594,14 +634,16 @@ class TestQwen3Methods:
         model.language_model.get_rope_index.return_value = ("pos", "delta")
         a = Qwen3VLAdapter(model)
         pos, delta = a.compute_position_ids(
-            input_ids="ids", attention_mask="mask",
+            input_ids="ids",
+            attention_mask="mask",
         )
         assert pos == "pos"
 
     def test_apply_rope_at_layer(self):
         """Lines 247-251: uses rotary_emb + qwen3_vl apply_multimodal_rotary_pos_emb."""
-        import mlx.core as mx
         from unittest.mock import patch
+
+        import mlx.core as mx
 
         model = MagicMock()
         a = Qwen3VLAdapter(model)
@@ -635,12 +677,13 @@ class TestQwen3Methods:
 # InternVLAdapter method tests
 # ---------------------------------------------------------------------------
 
-class TestInternVLMethods:
 
+class TestInternVLMethods:
     def test_run_vision_encoder(self):
         """Lines 286-301: full InternVL vision pipeline."""
-        import mlx.core as mx
         from unittest.mock import patch
+
+        import mlx.core as mx
 
         model = MagicMock()
         # Setup get_vision_dtype path
@@ -675,13 +718,16 @@ class TestInternVLMethods:
     def test_merge_visual_features_plain(self):
         """Lines 305-311: merge returns plain tensor."""
         import mlx.core as mx
+
         model = MagicMock()
         expected = mx.zeros((1, 20, 64))
         model._merge_input_ids_with_image_features.return_value = expected
 
         a = InternVLAdapter(model)
         hs = mx.zeros((10, 64))  # 2D input, gets [None] added
-        result = a.merge_visual_features(hs, mx.zeros((1, 15, 64)), mx.zeros((1, 15), dtype=mx.int32))
+        result = a.merge_visual_features(
+            hs, mx.zeros((1, 15, 64)), mx.zeros((1, 15), dtype=mx.int32)
+        )
 
         assert isinstance(result, MergeResult)
         assert result.image_mask is None
@@ -689,6 +735,7 @@ class TestInternVLMethods:
     def test_merge_visual_features_tuple(self):
         """Lines 309-310: merge returns tuple (embeds, mask)."""
         import mlx.core as mx
+
         model = MagicMock()
         embeds = mx.zeros((1, 20, 64))
         mask = mx.ones((1, 20))
@@ -696,7 +743,9 @@ class TestInternVLMethods:
 
         a = InternVLAdapter(model)
         hs = mx.zeros((1, 10, 64))  # 3D, no [None] needed
-        result = a.merge_visual_features(hs, mx.zeros((1, 15, 64)), mx.zeros((1, 15), dtype=mx.int32))
+        result = a.merge_visual_features(
+            hs, mx.zeros((1, 15, 64)), mx.zeros((1, 15), dtype=mx.int32)
+        )
 
         assert result.image_mask is mask
 
@@ -705,8 +754,8 @@ class TestInternVLMethods:
 # LLaVAAdapter method tests
 # ---------------------------------------------------------------------------
 
-class TestLLaVAMethods:
 
+class TestLLaVAMethods:
     def test_get_visual_token_ids(self):
         """Lines 345-349."""
         model = MagicMock()
@@ -719,6 +768,7 @@ class TestLLaVAMethods:
     def test_run_vision_encoder(self):
         """Lines 352-362: vision_tower → hidden_state[-1] → mm_projector."""
         import mlx.core as mx
+
         model = MagicMock()
         model.vision_tower.patch_embed.proj.weight.dtype = mx.float16
         del model.vision_tower.patch_embed.linear_patches
@@ -740,13 +790,16 @@ class TestLLaVAMethods:
     def test_merge_visual_features_plain(self):
         """Lines 366-372: merge returns plain tensor."""
         import mlx.core as mx
+
         model = MagicMock()
         expected = mx.zeros((1, 20, 64))
         model._prepare_inputs_for_multimodal.return_value = expected
 
         a = LLaVAAdapter(model)
         hs = mx.zeros((10, 64))
-        result = a.merge_visual_features(hs, mx.zeros((1, 15, 64)), mx.zeros((1, 15), dtype=mx.int32))
+        result = a.merge_visual_features(
+            hs, mx.zeros((1, 15, 64)), mx.zeros((1, 15), dtype=mx.int32)
+        )
 
         assert result.image_mask is None
         model._prepare_inputs_for_multimodal.assert_called_once()
@@ -754,6 +807,7 @@ class TestLLaVAMethods:
     def test_merge_visual_features_tuple(self):
         """Lines 370-371: merge returns tuple."""
         import mlx.core as mx
+
         model = MagicMock()
         embeds = mx.zeros((1, 20, 64))
         mask = mx.ones((1, 20))
@@ -761,7 +815,9 @@ class TestLLaVAMethods:
 
         a = LLaVAAdapter(model)
         hs = mx.zeros((10, 64))
-        result = a.merge_visual_features(hs, mx.zeros((1, 15, 64)), mx.zeros((1, 15), dtype=mx.int32))
+        result = a.merge_visual_features(
+            hs, mx.zeros((1, 15, 64)), mx.zeros((1, 15), dtype=mx.int32)
+        )
         assert result.image_mask is mask
 
 
@@ -769,8 +825,8 @@ class TestLLaVAMethods:
 # FastVLMAdapter method tests
 # ---------------------------------------------------------------------------
 
-class TestFastVLMMethods:
 
+class TestFastVLMMethods:
     def test_get_visual_token_ids(self):
         """Lines 405-409."""
         model = MagicMock()
@@ -783,6 +839,7 @@ class TestFastVLMMethods:
     def test_run_vision_encoder(self):
         """Lines 412-415: calls vision_tower without grid_thw."""
         import mlx.core as mx
+
         model = MagicMock()
         # FastVLM get_vision_dtype path
         model.vision_tower.model.patch_embed.proj.weight.dtype = mx.float16
@@ -798,11 +855,12 @@ class TestFastVLMMethods:
         assert isinstance(result, VisionOutput)
         model.vision_tower.assert_called_once()
         call_kwargs = model.vision_tower.call_args[1]
-        assert call_kwargs['output_hidden_states'] is False
+        assert call_kwargs["output_hidden_states"] is False
 
     def test_merge_visual_features_plain(self):
         """Lines 418-424: merge returns plain tensor."""
         import mlx.core as mx
+
         model = MagicMock()
         model.config.image_token_index = 300
         del model.config.image_token_id
@@ -818,6 +876,7 @@ class TestFastVLMMethods:
     def test_merge_visual_features_tuple(self):
         """Lines 422-423: merge returns tuple."""
         import mlx.core as mx
+
         model = MagicMock()
         model.config.image_token_index = 300
         del model.config.image_token_id
@@ -834,6 +893,7 @@ class TestFastVLMMethods:
     def test_get_vision_dtype_model_patch_embed(self):
         """Lines 430-433: vt.model.patch_embed.proj path."""
         import mlx.core as mx
+
         model = MagicMock()
         model.vision_tower.model.patch_embed.proj.weight.dtype = mx.float32
         del model.vision_tower.patch_embed
@@ -844,6 +904,7 @@ class TestFastVLMMethods:
     def test_get_vision_dtype_direct_patch_embed(self):
         """Lines 434-436: vt.patch_embed.proj path."""
         import mlx.core as mx
+
         model = MagicMock()
         del model.vision_tower.model  # no model sub-attr
         model.vision_tower.patch_embed.proj.weight.dtype = mx.bfloat16
@@ -854,6 +915,7 @@ class TestFastVLMMethods:
     def test_get_vision_dtype_fallback(self):
         """Line 438: fallback to mx.float16."""
         import mlx.core as mx
+
         model = MagicMock()
         del model.vision_tower.model
         del model.vision_tower.patch_embed
@@ -864,6 +926,7 @@ class TestFastVLMMethods:
     def test_original_token_count(self):
         """Lines 441-447: no spatial merge."""
         import mlx.core as mx
+
         model = MagicMock()
         a = FastVLMAdapter(model)
         grid = mx.array([[2, 14, 14]], dtype=mx.int32)

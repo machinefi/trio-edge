@@ -6,10 +6,10 @@ mx = pytest.importorskip("mlx.core")
 
 from trio_core.tome_vision import BaseToMeVisionWrapper
 
-
 # ---------------------------------------------------------------------------
 # ToMeMLXBackend.__init__ validation
 # ---------------------------------------------------------------------------
+
 
 class TestToMeMLXBackendValidation:
     """Test __init__ parameter validation without loading a real model.
@@ -20,6 +20,7 @@ class TestToMeMLXBackendValidation:
     def _make_backend(self, **kwargs):
         """Create a ToMeMLXBackend with a patched parent __init__."""
         from unittest.mock import patch
+
         from trio_core.tome_backend import ToMeMLXBackend
 
         with patch.object(ToMeMLXBackend.__bases__[0], "__init__", return_value=None):
@@ -67,9 +68,11 @@ class TestToMeMLXBackendValidation:
 # ToMeMLXBackend._original_token_count
 # ---------------------------------------------------------------------------
 
+
 class TestOriginalTokenCount:
     def _count(self, grid_thw_list):
         from trio_core.tome_backend import ToMeMLXBackend
+
         grid_thw = mx.array(grid_thw_list, dtype=mx.int32)
         return ToMeMLXBackend._static_token_count(grid_thw)
 
@@ -98,12 +101,14 @@ class TestOriginalTokenCount:
 # ToMeMLXBackend._get_visual_token_ids
 # ---------------------------------------------------------------------------
 
+
 class TestGetVisualTokenIds:
     """Test visual token ID retrieval via ModelAdapter."""
 
     def test_qwen25_uses_direct_token_id(self):
         """Qwen2.5 reads config.video_token_id and config.image_token_id directly."""
         from unittest.mock import MagicMock
+
         from trio_core.model_adapter import Qwen25VLAdapter
 
         model = MagicMock()
@@ -118,6 +123,7 @@ class TestGetVisualTokenIds:
     def test_qwen3_uses_token_index_fallback(self):
         """Qwen3 tries video_token_index first, falls back to video_token_id."""
         from unittest.mock import MagicMock
+
         from trio_core.model_adapter import Qwen3VLAdapter
 
         model = MagicMock()
@@ -134,6 +140,7 @@ class TestGetVisualTokenIds:
     def test_qwen3_fallback_to_token_id(self):
         """Qwen3 falls back to video_token_id when video_token_index is missing."""
         from unittest.mock import MagicMock
+
         from trio_core.model_adapter import Qwen3VLAdapter
 
         model = MagicMock()
@@ -152,9 +159,11 @@ class TestGetVisualTokenIds:
 # ToMeMLXBackend.backend_name
 # ---------------------------------------------------------------------------
 
+
 class TestBackendName:
     def test_backend_name_returns_mlx_tome(self):
         from unittest.mock import patch
+
         from trio_core.tome_backend import ToMeMLXBackend
 
         with patch.object(ToMeMLXBackend.__bases__[0], "__init__", return_value=None):
@@ -166,13 +175,18 @@ class TestBackendName:
 # BaseToMeVisionWrapper._should_merge
 # ---------------------------------------------------------------------------
 
+
 class TestShouldMerge:
     def _make_wrapper(self, skip_first=2, skip_last=2, r=8):
         """Create a BaseToMeVisionWrapper with a dummy vision_model."""
         from unittest.mock import MagicMock
+
         vm = MagicMock()
         return BaseToMeVisionWrapper(
-            vm, r=r, skip_first=skip_first, skip_last=skip_last,
+            vm,
+            r=r,
+            skip_first=skip_first,
+            skip_last=skip_last,
         )
 
     def test_skip_first_layers(self):
@@ -227,12 +241,17 @@ class TestShouldMerge:
 # BaseToMeVisionWrapper._get_layer_r (adaptive mode)
 # ---------------------------------------------------------------------------
 
+
 class TestGetLayerR:
     def _make_wrapper(self, r=4, skip_first=2, skip_last=2, adaptive=False):
         from unittest.mock import MagicMock
+
         vm = MagicMock()
         return BaseToMeVisionWrapper(
-            vm, r=r, skip_first=skip_first, skip_last=skip_last,
+            vm,
+            r=r,
+            skip_first=skip_first,
+            skip_last=skip_last,
             adaptive=adaptive,
         )
 
@@ -295,9 +314,7 @@ class TestGetLayerR:
         prev_r = 0
         for layer in range(2, 30):
             layer_r = wrapper._get_layer_r(layer, n_blocks)
-            assert layer_r >= prev_r, (
-                f"Layer {layer}: r={layer_r} < prev_r={prev_r}, not monotonic"
-            )
+            assert layer_r >= prev_r, f"Layer {layer}: r={layer_r} < prev_r={prev_r}, not monotonic"
             prev_r = layer_r
 
 
@@ -305,10 +322,10 @@ class TestGetLayerR:
 # BaseToMeVisionWrapper._get_metric
 # ---------------------------------------------------------------------------
 
+
 class TestGetMetric:
     def test_hidden_metric_returns_hidden_states(self):
         """When metric='hidden', _get_metric returns hidden_states directly."""
-        import mlx.nn as nn
         from unittest.mock import MagicMock
 
         vm = MagicMock()
@@ -322,8 +339,9 @@ class TestGetMetric:
 
     def test_keys_metric_calls_compute_k(self):
         """When metric='keys', _get_metric calls compute_k_metric."""
-        import mlx.nn as nn
         from unittest.mock import MagicMock
+
+        import mlx.nn as nn
 
         vm = MagicMock()
         wrapper = BaseToMeVisionWrapper(vm, metric="keys")
@@ -348,20 +366,24 @@ class TestGetMetric:
 # Profile matching for Qwen3-VL
 # ---------------------------------------------------------------------------
 
+
 class TestQwen3VLProfile:
     def test_qwen3_vl_4b_direct(self):
         from trio_core.profiles import get_profile
+
         p = get_profile("qwen3-vl-4b")
         assert p.family == "qwen3-vl"
         assert p.param_size == "4B"
 
     def test_qwen3_vl_4b_huggingface_id(self):
         from trio_core.profiles import get_profile
+
         p = get_profile("mlx-community/Qwen3-VL-4B-Instruct-4bit")
         assert p.family == "qwen3-vl"
         assert p.param_size == "4B"
 
     def test_qwen3_vl_generic_fallback(self):
         from trio_core.profiles import get_profile
+
         p = get_profile("Qwen/Qwen3-VL-8B")
         assert p.family == "qwen3-vl"

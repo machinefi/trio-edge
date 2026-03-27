@@ -174,9 +174,7 @@ class StreamingMemory:
         mx.eval(saliency)
         return saliency
 
-    def evict_and_merge(
-        self, kv_cache: List, saliency: mx.array
-    ) -> EvictionStats:
+    def evict_and_merge(self, kv_cache: List, saliency: mx.array) -> EvictionStats:
         """Evict low-saliency tokens, merge into prototypes.
 
         Only operates on KVCache layers. DeltaNet ArraysCache layers
@@ -222,8 +220,8 @@ class StreamingMemory:
             if not self._is_kvcache_layer(c):
                 continue
 
-            keys = c.keys[:, :, : c.offset, :]    # (B, H, S, D)
-            values = c.values[:, :, : c.offset, :] # (B, H, S, D)
+            keys = c.keys[:, :, : c.offset, :]  # (B, H, S, D)
+            values = c.values[:, :, : c.offset, :]  # (B, H, S, D)
 
             # Split: text prefix | visual tokens | text suffix
             k_text = keys[:, :, text_start:text_end, :]
@@ -260,12 +258,8 @@ class StreamingMemory:
                 w = w / (w.sum() + 1e-8)
                 # Weighted average: (B, H, chunk, D) -> (B, H, 1, D)
                 w_expanded = w[None, None, :, None]  # broadcast
-                pk = (k_evicted[:, :, start_idx:end_idx, :] * w_expanded).sum(
-                    axis=2, keepdims=True
-                )
-                pv = (v_evicted[:, :, start_idx:end_idx, :] * w_expanded).sum(
-                    axis=2, keepdims=True
-                )
+                pk = (k_evicted[:, :, start_idx:end_idx, :] * w_expanded).sum(axis=2, keepdims=True)
+                pv = (v_evicted[:, :, start_idx:end_idx, :] * w_expanded).sum(axis=2, keepdims=True)
                 layer_proto_keys.append(pk)
                 layer_proto_values.append(pv)
 
@@ -278,12 +272,8 @@ class StreamingMemory:
                 v_protos = mx.zeros_like(v_kept[:, :, :0, :])
 
             # Reassemble: [text_prefix] + [kept visual] + [prototypes] + [suffix]
-            new_keys = mx.concatenate(
-                [k_text, k_kept, k_protos, k_suffix], axis=2
-            )
-            new_values = mx.concatenate(
-                [v_text, v_kept, v_protos, v_suffix], axis=2
-            )
+            new_keys = mx.concatenate([k_text, k_kept, k_protos, k_suffix], axis=2)
+            new_values = mx.concatenate([v_text, v_kept, v_protos, v_suffix], axis=2)
 
             mx.eval(new_keys, new_values)
 

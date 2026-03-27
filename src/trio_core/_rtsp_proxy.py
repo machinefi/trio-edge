@@ -42,7 +42,8 @@ def _needs_proxy(host: str, port: int) -> bool:
         try:
             r = subprocess.run(
                 ["nc", "-z", "-w", "3", host, str(port)],
-                capture_output=True, timeout=5,
+                capture_output=True,
+                timeout=5,
             )
             if r.returncode == 0:
                 return True  # Reachable via system binary, need proxy
@@ -63,7 +64,7 @@ def start_proxy(remote_host: str, remote_port: int, local_port: int = 15554) -> 
 
     # Pass host/port/local_port as command-line arguments to avoid code injection
     # via user-controlled RTSP URLs (the host comes from user input).
-    proxy_code = '''
+    proxy_code = """
 import socket, sys, threading
 remote_host = sys.argv[1]
 remote_port = int(sys.argv[2])
@@ -98,10 +99,11 @@ while True:
     r.settimeout(None)
     threading.Thread(target=relay, args=(c, r), daemon=True).start()
     threading.Thread(target=relay, args=(r, c), daemon=True).start()
-'''
+"""
     _proxy_proc = subprocess.Popen(
         ["/usr/bin/python3", "-c", proxy_code, remote_host, str(remote_port), str(local_port)],
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
     )
     line = _proxy_proc.stdout.readline()
     if b"READY" not in line:

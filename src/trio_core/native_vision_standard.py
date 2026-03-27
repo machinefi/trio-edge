@@ -17,7 +17,7 @@ import logging
 import mlx.core as mx
 
 from trio_core.native_vision import _ToMeMixin
-from trio_core.tome import bipartite_soft_matching, merge_tokens, compute_k_metric
+from trio_core.tome import bipartite_soft_matching, compute_k_metric, merge_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -29,12 +29,28 @@ class NativeToMeStandardVision(_ToMeMixin):
     Class token (position 0) is preserved — only patch tokens are merged.
     """
 
-    def __init__(self, original_vision, *, tome_r=8, skip_first=2, skip_last=2,
-                 min_keep_ratio=0.3, metric="hidden", adaptive=False,
-                 content_aware=False):
+    def __init__(
+        self,
+        original_vision,
+        *,
+        tome_r=8,
+        skip_first=2,
+        skip_last=2,
+        min_keep_ratio=0.3,
+        metric="hidden",
+        adaptive=False,
+        content_aware=False,
+    ):
         self._vm = original_vision
-        self._init_tome(tome_r, skip_first, skip_last, min_keep_ratio, metric, adaptive,
-                        content_aware=content_aware)
+        self._init_tome(
+            tome_r,
+            skip_first,
+            skip_last,
+            min_keep_ratio,
+            metric,
+            adaptive,
+            content_aware=content_aware,
+        )
 
     def __call__(self, hidden_states, output_hidden_states=None, **kwargs):
         """Run vision encoder with ToMe.
@@ -48,20 +64,20 @@ class NativeToMeStandardVision(_ToMeMixin):
 
         # SigLIP: embeddings include patch_embed + position_embedding
         # The vision_model typically has an embeddings module
-        if hasattr(vm, 'embeddings'):
+        if hasattr(vm, "embeddings"):
             hidden_states = vm.embeddings(hidden_states)
-        elif hasattr(vm, 'patch_embed'):
+        elif hasattr(vm, "patch_embed"):
             hidden_states = vm.patch_embed(hidden_states)
-            if hasattr(vm, 'position_embedding'):
+            if hasattr(vm, "position_embedding"):
                 hidden_states = hidden_states + vm.position_embedding.weight
 
         # Get blocks
         blocks = None
-        if hasattr(vm, 'encoder') and hasattr(vm.encoder, 'layers'):
+        if hasattr(vm, "encoder") and hasattr(vm.encoder, "layers"):
             blocks = vm.encoder.layers
-        elif hasattr(vm, 'blocks'):
+        elif hasattr(vm, "blocks"):
             blocks = vm.blocks
-        elif hasattr(vm, 'layers'):
+        elif hasattr(vm, "layers"):
             blocks = vm.layers
 
         if blocks is None:
@@ -72,7 +88,7 @@ class NativeToMeStandardVision(_ToMeMixin):
 
         # Detect if there's a class token (SigLIP typically has one)
         # We'll preserve it during merging
-        has_cls = hasattr(vm, 'class_embedding') or hasattr(vm, 'cls_token')
+        has_cls = hasattr(vm, "class_embedding") or hasattr(vm, "cls_token")
 
         # hidden_states shape: (B, L, D) for standard ViTs
         is_batched = hidden_states.ndim == 3
@@ -87,7 +103,11 @@ class NativeToMeStandardVision(_ToMeMixin):
             hidden_states = blk(hidden_states)
 
             # Content-aware: compute diversity factor once
-            if self.tome_content_aware and not content_factor_computed and self._should_merge(layer_num, n_blocks):
+            if (
+                self.tome_content_aware
+                and not content_factor_computed
+                and self._should_merge(layer_num, n_blocks)
+            ):
                 # Use first batch element for diversity estimation
                 self._compute_content_factor(hidden_states[0])
                 content_factor_computed = True
@@ -117,7 +137,10 @@ class NativeToMeStandardVision(_ToMeMixin):
                         if r_eff > 0:
                             dst_idx, src_dst_map = bipartite_soft_matching(metric, r_eff)
                             merged_patches, merged_size = merge_tokens(
-                                patch_tokens, dst_idx, src_dst_map, patch_size,
+                                patch_tokens,
+                                dst_idx,
+                                src_dst_map,
+                                patch_size,
                             )
                         else:
                             merged_patches = patch_tokens
@@ -137,7 +160,10 @@ class NativeToMeStandardVision(_ToMeMixin):
                         if r_eff > 0:
                             dst_idx, src_dst_map = bipartite_soft_matching(metric, r_eff)
                             merged_b, merged_size = merge_tokens(
-                                h_b, dst_idx, src_dst_map, token_sizes[b],
+                                h_b,
+                                dst_idx,
+                                src_dst_map,
+                                token_sizes[b],
                             )
                         else:
                             merged_b = h_b
@@ -161,15 +187,19 @@ class NativeToMeStandardVision(_ToMeMixin):
                     hidden_states = mx.expand_dims(merged_batch[0], 0)
 
                 after = hidden_states.shape[1]
-                self._merge_log.append({
-                    "layer": layer_num, "before": before,
-                    "after": after, "merged": before - after,
-                })
+                self._merge_log.append(
+                    {
+                        "layer": layer_num,
+                        "before": before,
+                        "after": after,
+                        "merged": before - after,
+                    }
+                )
 
         # Post-layernorm
-        if hasattr(vm, 'post_layernorm'):
+        if hasattr(vm, "post_layernorm"):
             hidden_states = vm.post_layernorm(hidden_states)
-        elif hasattr(vm, 'layernorm') and not hasattr(vm, 'encoder'):
+        elif hasattr(vm, "layernorm") and not hasattr(vm, "encoder"):
             hidden_states = vm.layernorm(hidden_states)
 
         if not is_batched:
@@ -177,8 +207,11 @@ class NativeToMeStandardVision(_ToMeMixin):
 
         total_merged = sum(e["merged"] for e in self._merge_log)
         if total_merged > 0:
-            logger.info("ToMe (standard ViT): merged %d tokens across %d layers",
-                        total_merged, len(self._merge_log))
+            logger.info(
+                "ToMe (standard ViT): merged %d tokens across %d layers",
+                total_merged,
+                len(self._merge_log),
+            )
 
         return hidden_states
 
@@ -189,6 +222,6 @@ class NativeToMeStandardVision(_ToMeMixin):
         return hidden_states
 
     def __getattr__(self, name):
-        if name.startswith('_') or name.startswith('tome_'):
+        if name.startswith("_") or name.startswith("tome_"):
             raise AttributeError(name)
         return getattr(self._vm, name)

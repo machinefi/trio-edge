@@ -1,13 +1,13 @@
 """Tests for trio_core.engine — uses mocks since we may not have the model."""
 
 from unittest.mock import MagicMock, patch
+
 import numpy as np
 import pytest
-import pytest_asyncio
 
 from trio_core.backends import GenerationResult, StreamChunk
 from trio_core.config import EngineConfig
-from trio_core.engine import TrioCore, VideoResult, InferenceMetrics
+from trio_core.engine import InferenceMetrics, TrioCore, VideoResult
 
 
 def _mock_engine(backend_name="mock") -> TrioCore:
@@ -27,8 +27,12 @@ def _mock_engine(backend_name="mock") -> TrioCore:
         peak_memory=1.0,
     )
     mock_backend.health.return_value = {
-        "backend": backend_name, "model": "test", "loaded": True,
-        "device": "Test Device", "accelerator": "cpu", "memory_gb": 16.0,
+        "backend": backend_name,
+        "model": "test",
+        "loaded": True,
+        "device": "Test Device",
+        "accelerator": "cpu",
+        "memory_gb": 16.0,
     }
     engine._backend = mock_backend
     engine._loaded = True
@@ -179,11 +183,14 @@ class TestBackendSwap:
         config = EngineConfig(tome_enabled=True, tome_r=4)
 
         mock_tb = MagicMock(return_value=mock_tome_instance)
-        with patch.dict("sys.modules", {"trio_core.tome_backend": MagicMock(ToMeMLXBackend=mock_tb)}):
+        with patch.dict(
+            "sys.modules", {"trio_core.tome_backend": MagicMock(ToMeMLXBackend=mock_tb)}
+        ):
             result = resolve_backend(config)
 
         assert result is mock_tome_instance
         mock_tb.assert_called_once()
+
 
 class TestFeatureFlagMethods:
     """Feature flags: early_stop, visual_similarity, streaming_memory (lines 181, 185, 189)."""
@@ -267,8 +274,11 @@ class TestMotionGate:
         mock_backend = MagicMock()
         mock_backend.backend_name = "mock"
         mock_backend.generate.return_value = GenerationResult(
-            text="ok", prompt_tokens=10, completion_tokens=5,
-            generation_tps=50.0, peak_memory=1.0,
+            text="ok",
+            prompt_tokens=10,
+            completion_tokens=5,
+            generation_tps=50.0,
+            peak_memory=1.0,
         )
         engine._backend = mock_backend
         engine._loaded = True
@@ -306,8 +316,11 @@ class TestMotionGate:
         mock_backend = MagicMock()
         mock_backend.backend_name = "mock"
         mock_backend.generate.return_value = GenerationResult(
-            text="motion detected", prompt_tokens=10, completion_tokens=5,
-            generation_tps=50.0, peak_memory=1.0,
+            text="motion detected",
+            prompt_tokens=10,
+            completion_tokens=5,
+            generation_tps=50.0,
+            peak_memory=1.0,
         )
         engine._backend = mock_backend
         engine._loaded = True
@@ -332,7 +345,7 @@ class TestPrefillTiming:
             text="result",
             prompt_tokens=100,
             completion_tokens=10,
-            prompt_tps=500.0,      # 500 tok/sec → 200ms for 100 tokens
+            prompt_tps=500.0,  # 500 tok/sec → 200ms for 100 tokens
             generation_tps=50.0,
             peak_memory=1.0,
         )

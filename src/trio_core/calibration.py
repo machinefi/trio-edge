@@ -18,7 +18,6 @@ from __future__ import annotations
 import logging
 import os
 import re
-import time
 from dataclasses import dataclass
 
 import cv2
@@ -41,6 +40,7 @@ COUNT_PROMPT = (
 @dataclass
 class CalibrationResult:
     """Result of a calibration run."""
+
     correction_factor: float
     cloud_counts: list[int]
     yolo_counts: list[int]
@@ -73,6 +73,7 @@ def get_cloud_count(frame_bgr: np.ndarray, api_key: str | None = None) -> int | 
 
         # Send to Gemini with image
         import base64
+
         b64_image = base64.b64encode(image_bytes).decode()
 
         response = client.models.generate_content(
@@ -153,7 +154,9 @@ def calibrate_counter(
         logger.info("Frame %d: cloud=%d, YOLO=%d, ratio=%.2f", i, cloud, yolo, cloud / yolo)
 
     if len(cloud_counts) < 2:
-        logger.warning("Not enough valid calibration samples (%d). Using factor 1.0", len(cloud_counts))
+        logger.warning(
+            "Not enough valid calibration samples (%d). Using factor 1.0", len(cloud_counts)
+        )
         return CalibrationResult(
             correction_factor=1.0,
             cloud_counts=cloud_counts,
@@ -182,8 +185,11 @@ def calibrate_counter(
     logger.info(
         "Calibration complete: factor=%.2fx, confidence=%.0f%%, "
         "cloud_avg=%.1f, yolo_avg=%.1f, %d frames",
-        correction_factor, confidence * 100,
-        np.mean(cloud_counts), np.mean(yolo_counts), len(cloud_counts),
+        correction_factor,
+        confidence * 100,
+        np.mean(cloud_counts),
+        np.mean(yolo_counts),
+        len(cloud_counts),
     )
 
     return CalibrationResult(
