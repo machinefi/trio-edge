@@ -1,38 +1,24 @@
 """Tests for trio_core.api — uses mocked engine."""
 
-from unittest.mock import MagicMock, patch, AsyncMock
+import json
+from unittest.mock import MagicMock, patch
+
 import pytest
+from conftest import make_mock_engine, noop_lifespan
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from trio_core.engine import VideoResult, InferenceMetrics
+from trio_core.engine import InferenceMetrics, VideoResult
 
 
 @pytest.fixture
 def client():
     """Create test client with mocked engine."""
-    from trio_core.api.server import create_app, _engine
     import trio_core.api.server as server_mod
+    from trio_core.api.server import create_app
 
     app = create_app()
-
-    # Mock the engine
-    mock_engine = MagicMock()
-    mock_engine._loaded = True
-    mock_engine.config.model = "test-model"
-    mock_engine.config.max_tokens = 512
-    mock_engine.config.temperature = 0.0
-    mock_engine.config.top_p = 1.0
-    mock_engine.config.video_fps = 2.0
-    mock_engine.config.video_max_frames = 128
-    mock_engine.config.dedup_enabled = True
-    mock_engine.config.dedup_threshold = 0.95
-    mock_engine.config.motion_enabled = False
-    mock_engine.health.return_value = {
-        "status": "ok",
-        "model": "test-model",
-        "loaded": True,
-        "config": {},
-    }
+    mock_engine = make_mock_engine()
     mock_engine.analyze_video.return_value = VideoResult(
         text="Test analysis result",
         metrics=InferenceMetrics(
@@ -45,21 +31,12 @@ def client():
     )
 
     server_mod._engine = mock_engine
-
-    # Skip lifespan (model loading)
-    app.router.lifespan_context = _noop_lifespan
+    app.router.lifespan_context = noop_lifespan
 
     with TestClient(app) as c:
         yield c
 
     server_mod._engine = None
-
-
-from contextlib import asynccontextmanager
-
-@asynccontextmanager
-async def _noop_lifespan(app):
-    yield
 
 
 class TestHealthEndpoint:
@@ -81,10 +58,13 @@ class TestModelsEndpoint:
 
 class TestVideoAnalyze:
     def test_analyze(self, client):
-        resp = client.post("/v1/video/analyze", json={
-            "video": "/tmp/test.mp4",
-            "prompt": "What is happening?",
-        })
+        resp = client.post(
+            "/v1/video/analyze",
+            json={
+                "video": "/tmp/test.mp4",
+                "prompt": "What is happening?",
+            },
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert "text" in data
@@ -96,6 +76,7 @@ class TestFramesAnalyze:
     def test_upload_frames(self, client):
         """Multipart frame upload."""
         import io
+
         from PIL import Image
 
         # Create two 8x8 test images
@@ -119,8 +100,11 @@ class TestFramesAnalyze:
 
     def test_upload_frames_checks_engine_call(self, client):
         """Verify frames are passed as numpy array to engine."""
-        import io, numpy as np
+        import io
+
+        import numpy as np
         from PIL import Image
+
         import trio_core.api.server as server_mod
 
         img = Image.new("RGB", (4, 4), (128, 128, 128))
@@ -153,6 +137,7 @@ class TestTrioClawCompat:
     def test_analyze_frame(self, client):
         import base64
         import io
+
         from PIL import Image
 
         # Create a test JPEG
@@ -161,10 +146,13 @@ class TestTrioClawCompat:
         img.save(buf, format="JPEG")
         frame_b64 = base64.b64encode(buf.getvalue()).decode()
 
-        resp = client.post("/analyze-frame", json={
-            "frame_b64": frame_b64,
-            "question": "what do you see?",
-        })
+        resp = client.post(
+            "/analyze-frame",
+            json={
+                "frame_b64": frame_b64,
+                "question": "what do you see?",
+            },
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert "answer" in data
@@ -173,8 +161,11 @@ class TestTrioClawCompat:
 
     def test_analyze_frame_triggered_yes(self, client):
         """triggered=true when answer starts with 'Yes'."""
-        import base64, io
+        import base64
+        import io
+
         from PIL import Image
+
         import trio_core.api.server as server_mod
 
         # Mock answer starting with "Yes"
@@ -188,17 +179,23 @@ class TestTrioClawCompat:
         img.save(buf, format="JPEG")
         frame_b64 = base64.b64encode(buf.getvalue()).decode()
 
-        resp = client.post("/analyze-frame", json={
-            "frame_b64": frame_b64,
-            "question": "is there a person at the door?",
-        })
+        resp = client.post(
+            "/analyze-frame",
+            json={
+                "frame_b64": frame_b64,
+                "question": "is there a person at the door?",
+            },
+        )
         data = resp.json()
         assert data["triggered"] is True
 
     def test_analyze_frame_triggered_no(self, client):
         """triggered=false when answer starts with 'No'."""
-        import base64, io
+        import base64
+        import io
+
         from PIL import Image
+
         import trio_core.api.server as server_mod
 
         server_mod._engine.analyze_video.return_value = VideoResult(
@@ -211,17 +208,23 @@ class TestTrioClawCompat:
         img.save(buf, format="JPEG")
         frame_b64 = base64.b64encode(buf.getvalue()).decode()
 
-        resp = client.post("/analyze-frame", json={
-            "frame_b64": frame_b64,
-            "question": "is there a package?",
-        })
+        resp = client.post(
+            "/analyze-frame",
+            json={
+                "frame_b64": frame_b64,
+                "question": "is there a package?",
+            },
+        )
         data = resp.json()
         assert data["triggered"] is False
 
     def test_analyze_frame_triggered_null(self, client):
         """triggered=null when answer is descriptive (not yes/no)."""
-        import base64, io
+        import base64
+        import io
+
         from PIL import Image
+
         import trio_core.api.server as server_mod
 
         server_mod._engine.analyze_video.return_value = VideoResult(
@@ -234,46 +237,62 @@ class TestTrioClawCompat:
         img.save(buf, format="JPEG")
         frame_b64 = base64.b64encode(buf.getvalue()).decode()
 
-        resp = client.post("/analyze-frame", json={
-            "frame_b64": frame_b64,
-            "question": "describe this image",
-        })
+        resp = client.post(
+            "/analyze-frame",
+            json={
+                "frame_b64": frame_b64,
+                "question": "describe this image",
+            },
+        )
         data = resp.json()
         assert data["triggered"] is None
 
 
 class TestChatCompletions:
     def test_no_video_returns_400(self, client):
-        resp = client.post("/v1/chat/completions", json={
-            "messages": [{"role": "user", "content": "hello"}],
-        })
+        resp = client.post(
+            "/v1/chat/completions",
+            json={
+                "messages": [{"role": "user", "content": "hello"}],
+            },
+        )
         assert resp.status_code == 400
 
     def test_with_video(self, client):
-        resp = client.post("/v1/chat/completions", json={
-            "messages": [{
-                "role": "user",
-                "content": [
-                    {"type": "video", "video": "/tmp/test.mp4"},
-                    {"type": "text", "text": "What is this?"},
+        resp = client.post(
+            "/v1/chat/completions",
+            json={
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "video", "video": "/tmp/test.mp4"},
+                            {"type": "text", "text": "What is this?"},
+                        ],
+                    }
                 ],
-            }],
-        })
+            },
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["choices"][0]["message"]["content"] == "Test analysis result"
 
     def test_with_image_url(self, client):
         """OpenAI-compatible image_url content part."""
-        resp = client.post("/v1/chat/completions", json={
-            "messages": [{
-                "role": "user",
-                "content": [
-                    {"type": "image_url", "image_url": {"url": "/tmp/test.jpg"}},
-                    {"type": "text", "text": "What do you see?"},
+        resp = client.post(
+            "/v1/chat/completions",
+            json={
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "image_url", "image_url": {"url": "/tmp/test.jpg"}},
+                            {"type": "text", "text": "What do you see?"},
+                        ],
+                    }
                 ],
-            }],
-        })
+            },
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["choices"][0]["message"]["content"] == "Test analysis result"
@@ -283,26 +302,32 @@ class TestChatCompletions:
     def test_with_base64_image(self, client):
         """Base64 data URI image."""
         import base64
+
         # 1x1 red PNG
         pixel = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"\x00" * 50).decode()
-        resp = client.post("/v1/chat/completions", json={
-            "messages": [{
-                "role": "user",
-                "content": [
-                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{pixel}"}},
-                    {"type": "text", "text": "What is this?"},
+        resp = client.post(
+            "/v1/chat/completions",
+            json={
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:image/png;base64,{pixel}"},
+                            },
+                            {"type": "text", "text": "What is this?"},
+                        ],
+                    }
                 ],
-            }],
-        })
+            },
+        )
         assert resp.status_code == 200
 
 
 # ---------------------------------------------------------------------------
 # Additional coverage tests
 # ---------------------------------------------------------------------------
-
-import json
-from fastapi import HTTPException
 
 
 class TestGetEngineNotLoaded:
@@ -341,11 +366,11 @@ class TestHealthNotLoaded:
     """Test /health and /healthz when engine is None (lines 90, 97)."""
 
     def test_health_not_loaded(self):
-        from trio_core.api.server import create_app
         import trio_core.api.server as server_mod
+        from trio_core.api.server import create_app
 
         app = create_app()
-        app.router.lifespan_context = _noop_lifespan
+        app.router.lifespan_context = noop_lifespan
         saved = server_mod._engine
         try:
             server_mod._engine = None
@@ -359,11 +384,11 @@ class TestHealthNotLoaded:
             server_mod._engine = saved
 
     def test_healthz_not_loaded(self):
-        from trio_core.api.server import create_app
         import trio_core.api.server as server_mod
+        from trio_core.api.server import create_app
 
         app = create_app()
-        app.router.lifespan_context = _noop_lifespan
+        app.router.lifespan_context = noop_lifespan
         saved = server_mod._engine
         try:
             server_mod._engine = None
@@ -379,30 +404,37 @@ class TestDetectTriggered:
 
     def test_positive_there_is_a(self):
         from trio_core.api.server import _detect_triggered
+
         assert _detect_triggered("There is a person at the door.") is True
 
     def test_positive_i_can_see(self):
         from trio_core.api.server import _detect_triggered
+
         assert _detect_triggered("I can see someone approaching.") is True
 
     def test_positive_someone(self):
         from trio_core.api.server import _detect_triggered
+
         assert _detect_triggered("Someone is standing there.") is True
 
     def test_positive_a_package(self):
         from trio_core.api.server import _detect_triggered
+
         assert _detect_triggered("A package is on the porch.") is True
 
     def test_negative_there_is_no(self):
         from trio_core.api.server import _detect_triggered
+
         assert _detect_triggered("There is no one at the door.") is False
 
     def test_negative_cannot_see(self):
         from trio_core.api.server import _detect_triggered
+
         assert _detect_triggered("I cannot see anything.") is False
 
     def test_none_for_ambiguous(self):
         from trio_core.api.server import _detect_triggered
+
         assert _detect_triggered("The image shows a red square on a white background.") is None
 
 
@@ -411,6 +443,7 @@ class TestResolveMedia:
 
     def test_invalid_data_uri_no_comma(self):
         from trio_core.api.server import _resolve_media
+
         with pytest.raises(HTTPException) as exc_info:
             _resolve_media("data:image/jpeg;base64nocomma")
         assert exc_info.value.status_code == 400
@@ -418,6 +451,7 @@ class TestResolveMedia:
 
     def test_plain_path_passthrough(self):
         from trio_core.api.server import _resolve_media
+
         path, temp = _resolve_media("/tmp/test.mp4")
         assert path == "/tmp/test.mp4"
         assert temp is None
@@ -447,7 +481,7 @@ class TestStreamVideoAnalyze:
         assert resp.status_code == 200
         assert "text/event-stream" in resp.headers["content-type"]
 
-        lines = [l for l in resp.text.strip().split("\n") if l.startswith("data: ")]
+        lines = [ln for ln in resp.text.strip().split("\n") if ln.startswith("data: ")]
         assert len(lines) >= 3  # 2 content + 1 metrics + DONE
         # Check first chunk
         first = json.loads(lines[0].removeprefix("data: "))
@@ -466,8 +500,10 @@ class TestStreamFramesAnalyze:
 
     def test_stream_frames_analyze(self, client):
         import io
-        import trio_core.api.server as server_mod
+
         from PIL import Image
+
+        import trio_core.api.server as server_mod
 
         metrics = InferenceMetrics(latency_ms=100.0)
 
@@ -490,7 +526,7 @@ class TestStreamFramesAnalyze:
         assert resp.status_code == 200
         assert "text/event-stream" in resp.headers["content-type"]
 
-        lines = [l for l in resp.text.strip().split("\n") if l.startswith("data: ")]
+        lines = [ln for ln in resp.text.strip().split("\n") if ln.startswith("data: ")]
         assert len(lines) >= 2
         assert lines[-1] == "data: [DONE]"
 
@@ -501,9 +537,7 @@ class TestStreamChatCompletions:
     def test_stream_chat_completions(self, client):
         import trio_core.api.server as server_mod
 
-        metrics = InferenceMetrics(
-            prompt_tokens=50, completion_tokens=10, latency_ms=150.0
-        )
+        metrics = InferenceMetrics(prompt_tokens=50, completion_tokens=10, latency_ms=150.0)
 
         async def mock_stream_analyze(**kwargs):
             yield {"text": "The video ", "finished": False}
@@ -530,7 +564,7 @@ class TestStreamChatCompletions:
         assert resp.status_code == 200
         assert "text/event-stream" in resp.headers["content-type"]
 
-        lines = [l for l in resp.text.strip().split("\n") if l.startswith("data: ")]
+        lines = [ln for ln in resp.text.strip().split("\n") if ln.startswith("data: ")]
         # First line should be role chunk
         first = json.loads(lines[0].removeprefix("data: "))
         assert first["choices"][0]["delta"]["role"] == "assistant"
@@ -540,8 +574,10 @@ class TestStreamChatCompletions:
         # Last data line should be [DONE]
         assert lines[-1] == "data: [DONE]"
         # There should be a finish_reason="stop" chunk
-        all_chunks = [json.loads(l.removeprefix("data: ")) for l in lines if l != "data: [DONE]"]
-        finish_chunks = [c for c in all_chunks if c.get("choices", [{}])[0].get("finish_reason") == "stop"]
+        all_chunks = [json.loads(ln.removeprefix("data: ")) for ln in lines if ln != "data: [DONE]"]
+        finish_chunks = [
+            c for c in all_chunks if c.get("choices", [{}])[0].get("finish_reason") == "stop"
+        ]
         assert len(finish_chunks) == 1
 
 
@@ -551,7 +587,7 @@ class TestLifespan:
     @pytest.mark.asyncio
     async def test_lifespan_loads_engine(self):
         import trio_core.api.server as server_mod
-        from trio_core.api.server import lifespan, create_app
+        from trio_core.api.server import create_app, lifespan
 
         app = create_app()
         saved = server_mod._engine
@@ -562,7 +598,10 @@ class TestLifespan:
                 mock_instance._loaded = True
                 mock_instance._backend.backend_name = "mock"
                 mock_instance.health.return_value = {
-                    "status": "ok", "model": "test", "loaded": True, "config": {},
+                    "status": "ok",
+                    "model": "test",
+                    "loaded": True,
+                    "config": {},
                 }
                 MockTrioCore.return_value = mock_instance
 
@@ -599,11 +638,11 @@ class TestBodySizeLimit:
     """Test request body size limit (413 on oversized payload)."""
 
     def test_oversized_body_rejected(self):
-        from trio_core.api.server import create_app, _MAX_BODY_BYTES
         import trio_core.api.server as server_mod
+        from trio_core.api.server import _MAX_BODY_BYTES, create_app
 
         app = create_app()
-        app.router.lifespan_context = _noop_lifespan
+        app.router.lifespan_context = noop_lifespan
 
         mock_engine = MagicMock()
         mock_engine._loaded = True
@@ -628,7 +667,6 @@ class TestReloadEndpoint:
     """Test POST /v1/admin/reload hot-reloads the engine."""
 
     def test_reload_same_model(self, client):
-        import trio_core.api.server as server_mod
 
         with patch("trio_core.api.server.TrioCore") as MockTrioCore:
             new_engine = MagicMock()
@@ -665,12 +703,18 @@ class TestStructuredLogging:
     def test_json_formatter(self):
         import json
         import logging
+
         from trio_core.cli import _JSONFormatter
 
         formatter = _JSONFormatter()
         record = logging.LogRecord(
-            name="test", level=logging.INFO, pathname="", lineno=0,
-            msg="hello %s", args=("world",), exc_info=None,
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="hello %s",
+            args=("world",),
+            exc_info=None,
         )
         output = formatter.format(record)
         data = json.loads(output)
