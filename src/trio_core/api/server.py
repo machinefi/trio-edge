@@ -114,11 +114,14 @@ async def lifespan(app: FastAPI):
         raise
     logger.info("Engine ready: backend=%s", _engine._backend.backend_name if _engine._backend else "none")
 
-    # Console event store
-    from .store import EventStore
-    store = EventStore()
-    await store.init()
-    app.state.event_store = store
+    # Console event store (optional — module removed in OSS cleanup)
+    try:
+        from .store import EventStore
+        store = EventStore()
+        await store.init()
+        app.state.event_store = store
+    except ImportError:
+        pass
 
     # SIGHUP → reload model (same as POST /v1/admin/reload)
     import signal

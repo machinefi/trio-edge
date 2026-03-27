@@ -1,5 +1,8 @@
 """Tests for OpenClaw node integration — protocol, handshake, invoke dispatch."""
 
+import pytest
+cv2 = pytest.importorskip("cv2")
+
 import asyncio
 import json
 import signal

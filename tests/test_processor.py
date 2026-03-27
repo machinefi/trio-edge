@@ -2,6 +2,9 @@
 
 import numpy as np
 import pytest
+
+pytest.importorskip("huggingface_hub")
+
 from PIL import Image
 
 # Test with a simple synthetic image

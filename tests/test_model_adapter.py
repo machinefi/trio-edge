@@ -3,6 +3,8 @@
 from unittest.mock import MagicMock, PropertyMock
 import pytest
 
+pytest.importorskip("mlx.core")
+
 from trio_core.model_adapter import (
     ModelAdapter, Qwen25VLAdapter, Qwen3VLAdapter,
     InternVLAdapter, LLaVAAdapter, FastVLMAdapter,

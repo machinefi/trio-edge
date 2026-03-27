@@ -2,9 +2,10 @@
 
 import hashlib
 
-import mlx.core as mx
 import numpy as np
 import pytest
+
+mx = pytest.importorskip("mlx.core")
 
 
 # ---------------------------------------------------------------------------

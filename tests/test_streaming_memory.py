@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import mlx.core as mx
 import pytest
+
+mx = pytest.importorskip("mlx.core")
 
 from trio_core.streaming_memory import EvictionStats, StreamingMemory
 
