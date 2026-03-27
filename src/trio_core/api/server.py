@@ -1,4 +1,4 @@
-"""FastAPI server for TrioCore."""
+﻿"""FastAPI server for TrioCore."""
 
 from __future__ import annotations
 
@@ -114,6 +114,32 @@ async def lifespan(app: FastAPI):
         raise
     logger.info("Engine ready: backend=%s", _engine._backend.backend_name if _engine._backend else "none")
 
+    # Warm-up inference — run after model is loaded to prime JIT/caches so the
+    # first real user request is not penalized. Respects --no-warmup flag or TRIO_WARMUP=0.
+    # app.state.warmup is set by create_app(); None means "use config default".
+    _warmup_override = getattr(app.state, "warmup", None)
+    do_warmup = (_warmup_override is not None and _warmup_override) or (_warmup_override is None and config.warmup)
+    if do_warmup:
+        import time as _wall
+        _t0 = _wall.perf_counter()
+        warmup_parts = []
+        # 1. YOLO warm-up (always runs — YOLO is required)
+        if hasattr(_engine, "_counter") and hasattr(_engine._counter, "warmup"):
+            _elapsed = _engine._counter.warmup()
+            warmup_parts.append(f"YOLO={_elapsed:.3f}s")
+            logger.info("YOLO warm-up complete (%.3fs)", _elapsed)
+        # 2. VLM warm-up (only if VLM is loaded — graceful no-op otherwise)
+        if hasattr(_engine, "warmup"):
+            _elapsed = _engine.warmup()
+            if _elapsed is not None:
+                warmup_parts.append(f"VLM={_elapsed:.3f}s")
+                logger.info("VLM warm-up complete (%.3fs)", _elapsed)
+        _total = _wall.perf_counter() - _t0
+        if warmup_parts:
+            logger.info("Model warm-up complete (%s) total=%.3fs", ", ".join(warmup_parts), _total)
+        else:
+            logger.info("Model warm-up complete (total=%.3fs)", _total)
+
     # Console event store
     from .store import EventStore
     store = EventStore()
@@ -183,7 +209,7 @@ class _RequestIDMiddleware(BaseHTTPMiddleware):
                 _active_requests -= 1
 
 
-def create_app(config: EngineConfig | None = None, backend: str | None = None) -> FastAPI:
+def create_app(config: EngineConfig | None = None, backend: str | None = None, warmup: bool | None = None) -> FastAPI:
     """Create and configure the FastAPI app."""
     app = FastAPI(
         title="TrioCore",
@@ -193,6 +219,7 @@ def create_app(config: EngineConfig | None = None, backend: str | None = None) -
     )
     app.state.config = config or EngineConfig()
     app.state.backend = backend
+    app.state.warmup = warmup  # None means "use config default", False means skip
 
     # Global exception handler — return structured JSON, never raw 500
     # Note: HTTPException is handled by FastAPI's built-in handler (correct status codes).
@@ -1262,3 +1289,4 @@ async def _stream_chat_completion(
         yield f"data: {error_chunk.model_dump_json(exclude_none=True)}\n\n"
 
     yield "data: [DONE]\n\n"
+

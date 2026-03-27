@@ -1,4 +1,4 @@
-"""Engine configuration with environment variable overrides."""
+﻿"""Engine configuration with environment variable overrides."""
 
 from __future__ import annotations
 
@@ -112,3 +112,10 @@ class EngineConfig(BaseSettings):
     cache_enabled: bool = Field(default=False, description="Enable video cache")
     cache_max_entries: int = Field(default=50, description="Max cache entries")
     cache_max_memory_mb: int = Field(default=2048, description="Max cache memory in MB")
+
+    # Warm-up
+    warmup: bool = Field(
+        default=True,
+        description="Run warm-up inference on startup to prime JIT/caches. Set TRIO_WARMUP=0 to disable.",
+    )
+

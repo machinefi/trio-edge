@@ -1,4 +1,4 @@
-"""Core inference engine — orchestrates video pipeline, VLM, and caching."""
+﻿"""Core inference engine — orchestrates video pipeline, VLM, and caching."""
 
 from __future__ import annotations
 
@@ -429,3 +429,23 @@ class TrioCore(CallbackMixin):
     def _ensure_loaded(self) -> None:
         if not self._loaded:
             raise RuntimeError("Model not loaded. Call engine.load() first.")
+
+    def warmup(self) -> float | None:
+        """Run a dummy VLM inference to prime JIT compilation and caches.
+
+        Only runs if a VLM model is loaded (not YOLO-only mode).
+        Uses a minimal 480x640 black frame and single-token generation
+        to minimize warm-up overhead while still exercising the full pipeline.
+
+        Returns elapsed seconds, or None if no VLM is available (YOLO-only mode).
+        """
+        if not self._vlm:
+            return None
+        import time as _time
+
+        t0 = _time.perf_counter()
+        # Minimal dummy frame: 1x3x480x640 uint8 (CHW format as used by analyze_video)
+        dummy = np.zeros((1, 3, 480, 640), dtype=np.uint8)
+        self.analyze_video(dummy, "warmup", max_tokens=1)
+        return _time.perf_counter() - t0
+

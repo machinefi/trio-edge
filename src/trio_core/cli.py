@@ -1,4 +1,4 @@
-"""CLI for TrioCore."""
+﻿"""CLI for TrioCore."""
 
 from __future__ import annotations
 
@@ -187,13 +187,14 @@ def serve(
     port: int = typer.Option(8100, "--port", "-p", help="Bind port"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Debug logging"),
     json_logs: bool = typer.Option(False, "--json-logs", help="Structured JSON logging (or set TRIO_LOG_JSON=1)"),
+    no_warmup: bool = typer.Option(False, "--no-warmup", help="Skip warm-up inference on startup"),
 ):
     """Start the inference server (YOLO + VLM)."""
     _setup_logging(verbose, json_logs=json_logs)
     from trio_core.api.inference_server import create_app, main as run_server
 
     uv_level = "debug" if verbose else "info"
-    run_server(host=host, port=port, log_level=uv_level)
+    run_server(host=host, port=port, log_level=uv_level, warmup=not no_warmup)
 
 
 @app.command()
@@ -845,3 +846,4 @@ def _load_claw_config(path: str) -> dict:
 
 if __name__ == "__main__":
     app()
+

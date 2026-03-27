@@ -1,4 +1,4 @@
-"""People counting + crop-describe pipeline — YOLO + ByteTrack + VLM.
+﻿"""People counting + crop-describe pipeline — YOLO + ByteTrack + VLM.
 
 License-safe stack:
   - YOLOv10-nano: Apache 2.0 (THU-MIG)
@@ -196,6 +196,22 @@ class YOLOv10Detector:
             iou = inter / (area_i + area_r - inter + 1e-6)
             order = rest[iou < iou_threshold]
         return np.array(keep, dtype=int)
+
+    def warmup(self) -> float:
+        """Run a dummy inference to prime JIT compilation and CPU/GPU caches.
+
+        Uses a small black frame as input so the first real request is not penalized
+        by lazy JIT compilation and cold caches.
+
+        Returns elapsed time in seconds.
+        """
+        import time as _time
+
+        t0 = _time.perf_counter()
+        # 640x480 black frame — standard YOLO input size, minimal compute
+        dummy = np.zeros((480, 640, 3), dtype=np.uint8)
+        self.detect(dummy)
+        return _time.perf_counter() - t0
 
 
 class PeopleCounter:
@@ -556,3 +572,4 @@ class PeopleCounter:
         if self._line_zone:
             self._line_zone.in_count = 0
             self._line_zone.out_count = 0
+
