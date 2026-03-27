@@ -240,6 +240,28 @@ def _register_routes(app: FastAPI) -> None:
             raise HTTPException(503, "Engine not loaded")
         return {"status": "ok"}
 
+    @app.get("/readyz")
+    async def readyz():
+        """
+        Readiness probe: returns 200 only when all models are loaded AND
+        warm-up inference has completed. Enables Kubernetes/container health checks.
+        """
+        if _engine is None:
+            raise HTTPException(503, "Engine not initialized")
+        health = _engine.health()
+        if not health.get("model_loaded", False):
+            raise HTTPException(503, "Model not loaded")
+        warmup_done = getattr(_engine, "_warmup_done", True)
+        if not warmup_done:
+            raise HTTPException(503, "Warm-up in progress")
+        return {
+            "status": "ready",
+            "model_loaded": health.get("model_loaded", False),
+            "device": health.get("device", "unknown"),
+        }
+
+
+
     @app.post("/analyze-frame", response_model=AnalyzeFrameResponse)
     async def analyze_frame(request: AnalyzeFrameRequest):
         """TrioClaw-compatible single-frame analysis.
