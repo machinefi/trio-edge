@@ -69,6 +69,7 @@ ignore = ["E501", "E402", "E702"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 timeout = 30
+pythonpath = ["tests"]
 
 [tool.coverage.run]
 source = ["trio_core"]

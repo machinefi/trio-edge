@@ -4,9 +4,9 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
-from conftest import make_mock_engine, noop_lifespan
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
+from helpers import make_mock_engine, noop_lifespan
 
 from trio_core.engine import InferenceMetrics, VideoResult
 

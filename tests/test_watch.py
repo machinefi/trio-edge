@@ -5,8 +5,8 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
-from conftest import make_mock_engine, noop_lifespan
 from fastapi.testclient import TestClient
+from helpers import make_mock_engine, noop_lifespan
 
 from trio_core.api.models import (
     WatchCondition,
