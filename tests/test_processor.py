@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-pytest.importorskip("huggingface_hub")
+pytest.importorskip("tokenizers")
 
 from PIL import Image
 
