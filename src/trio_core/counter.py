@@ -67,12 +67,41 @@ class CountResult:
     raw_count: int = 0  # raw YOLO detections before smoothing/correction
 
 
+YOLO_HF_REPO = "onnx-community/yolov10n"
+YOLO_HF_FILE = "onnx/model.onnx"
+
+
+def _ensure_yolo_model(model_path: str) -> str:
+    """Return model_path if it exists, otherwise download from HuggingFace."""
+    from pathlib import Path
+
+    p = Path(model_path)
+    if p.exists():
+        return model_path
+
+    logger.info("YOLO model not found at %s — downloading from HuggingFace...", model_path)
+    from huggingface_hub import hf_hub_download
+
+    downloaded = hf_hub_download(
+        repo_id=YOLO_HF_REPO,
+        filename=YOLO_HF_FILE,
+    )
+    # Copy to expected location so future runs don't re-download
+    p.parent.mkdir(parents=True, exist_ok=True)
+    import shutil
+
+    shutil.copy2(downloaded, p)
+    logger.info("YOLO model saved to %s", p)
+    return str(p)
+
+
 class YOLOv10Detector:
     """ONNX-based YOLOv10 person detector."""
 
     def __init__(self, model_path: str, confidence: float = CONFIDENCE_THRESHOLD):
         import onnxruntime as ort
 
+        model_path = _ensure_yolo_model(model_path)
         self.confidence = confidence
         self.session = ort.InferenceSession(
             model_path,

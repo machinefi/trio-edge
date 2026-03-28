@@ -433,7 +433,7 @@ All settings via environment variables or `EngineConfig`:
 | `TRIO_COMPRESS_ENABLED` | `false` | Enable visual token compression |
 | `TRIO_COMPRESS_RATIO` | `0.5` | Compression ratio |
 | `TRIO_API_KEY` | (none) | Bearer token for API auth |
-| `TRIO_YOLO_MODEL` | (bundled) | Path to YOLO ONNX model |
+| `TRIO_YOLO_MODEL` | (auto-downloaded) | Path to YOLO ONNX model |
 
 See [`src/trio_core/config.py`](src/trio_core/config.py) for all options.
 
@@ -455,7 +455,7 @@ trio claw -g ws://gateway:18789 -c "rtsp://admin:pass@camera/stream"
 
 | Problem | Solution |
 |---|---|
-| `trio serve` hangs on first run | It's downloading the model (~2 GB). Wait for it to finish. Check progress with `ls -la ~/.cache/huggingface/` |
+| `trio serve` hangs on first run | It's downloading the VLM (~2 GB) and YOLO model (~9 MB) automatically. Wait for it to finish. Check progress with `ls -la ~/.cache/huggingface/` |
 | `ModuleNotFoundError: mlx` | You installed without the `[mlx]` extra. Run `pip install 'trio-core[mlx]'` |
 | Server starts but curl returns errors | Make sure you're using port **8100** (not 8000). Check with `curl http://localhost:8100/health` |
 | `trio analyze` says "no model found" | Run `trio doctor` to check your setup and see which models are available |
