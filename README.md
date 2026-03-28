@@ -111,7 +111,7 @@ and [`api_client.py`](examples/api_client.py) (full API usage).
 
 ## Install
 
-Requires **Python 3.10+**.
+Requires **Python 3.12+**.
 
 ```bash
 # Apple Silicon Mac (M1/M2/M3/M4) — recommended, uses Apple's MLX framework
