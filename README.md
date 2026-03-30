@@ -439,6 +439,23 @@ See [`src/trio_core/config.py`](src/trio_core/config.py) for all options.
 
 ---
 
+## Tested Cameras
+
+Any IP camera with RTSP support should work with TrioCore. Below are budget-friendly cameras that have been tested by the community.
+
+| Camera | Price (USD) | Connection | RTSP URL Format | Indoor/Outdoor | Notes |
+|---|---|---|---|---|---|
+| **Reolink E1 Pro** | ~$44 | WiFi | `rtsp://user:pass@IP:554/h264Preview_01_main` | Indoor | 5MP, pan/tilt, best budget pick |
+| **TP-Link Tapo C120** | ~$35 | WiFi | `rtsp://user:pass@IP/stream1` | Indoor/Outdoor | 2K, requires Tapo app to enable RTSP |
+| **Reolink RLC-510A** | ~$47 | PoE | `rtsp://admin:pass@IP:554/h264Preview_01_main` | Outdoor | 5MP, IP67, requires PoE switch/injector |
+| **Reolink RLC-510WA** | ~$50 | WiFi | `rtsp://admin:pass@IP:554/h264Preview_01_main` | Outdoor | 5MP, WiFi version of 510A |
+
+> **Tip:** For the cheapest way to get started, grab a **Reolink E1 Pro** or **Tapo C120** — both work over WiFi with a regular wall outlet, no extra hardware needed.
+>
+> Have a camera that works? Open a PR to add it to this list!
+
+---
+
 ## OpenClaw Integration
 
 TrioCore can connect to an [OpenClaw](https://openclaw.ai) Gateway as a node for remote camera monitoring via WebSocket.
