@@ -2,6 +2,8 @@
 
 from unittest.mock import MagicMock
 
+import numpy as np
+
 from trio_core.backends import (
     GenerationResult,
     MLXBackend,
@@ -76,6 +78,43 @@ class TestTransformersFeatureDetection:
         b._model = mock_model
         b._is_video_model = hasattr(mock_model.config, "video_token_id")
         assert b._is_video_model is False
+
+    def test_single_frame_uses_image_path_even_for_video_model(self):
+        """Single images should not be forced through the video prep path."""
+        info = DeviceInfo("transformers", "RTX 4090", "cuda", 24.0, 0)
+        b = TransformersBackend("qwen-video-model", device_info=info)
+        b._is_video_model = True
+        b._device = "cuda"
+        b._prepare_video = MagicMock(return_value={"input_ids": MagicMock(shape=(1, 1))})
+        b._frames_to_pil = MagicMock(return_value=["image-frame"])
+        fake_tensor = MagicMock()
+        fake_tensor.shape = (1, 1)
+        fake_tensor.to.return_value = fake_tensor
+        b._processor = MagicMock()
+        b._processor.apply_chat_template.return_value = "formatted"
+        b._processor.return_value = {"input_ids": fake_tensor}
+
+        frames = np.zeros((1, 3, 64, 64), dtype=np.float32)
+
+        result = b._prepare(frames, "describe this image")
+
+        b._prepare_video.assert_not_called()
+        b._frames_to_pil.assert_called_once_with(frames)
+        assert result["input_ids"].shape == (1, 1)
+
+    def test_multi_frame_uses_video_path_for_video_model(self):
+        """True videos should still route through video-specific prep."""
+        info = DeviceInfo("transformers", "RTX 4090", "cuda", 24.0, 0)
+        b = TransformersBackend("qwen-video-model", device_info=info)
+        b._is_video_model = True
+        b._prepare_video = MagicMock(return_value={"input_ids": MagicMock(shape=(1, 2))})
+
+        frames = np.zeros((2, 3, 64, 64), dtype=np.float32)
+
+        result = b._prepare(frames, "describe this video")
+
+        b._prepare_video.assert_called_once_with(frames, "describe this video")
+        assert result["input_ids"].shape == (1, 2)
 
 
 class TestBaseBackendHealth:

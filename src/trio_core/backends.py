@@ -870,19 +870,21 @@ class TransformersBackend(BaseBackend):
 
     def load(self) -> None:
         import torch
-        from transformers import AutoModelForVision2Seq, AutoProcessor
+        from transformers import AutoModelForImageTextToText, AutoProcessor
 
         device = "cuda" if self.device_info.accelerator == "cuda" else "cpu"
         dtype = torch.float16 if device == "cuda" else torch.float32
 
         logger.info("[Transformers] Loading model: %s (device=%s)", self.model_name, device)
         t0 = time.monotonic()
-        self._processor = AutoProcessor.from_pretrained(self.model_name)
-        self._model = AutoModelForVision2Seq.from_pretrained(
+        self._processor = AutoProcessor.from_pretrained(self.model_name, trust_remote_code=True)
+        self._model = AutoModelForImageTextToText.from_pretrained(
             self.model_name,
             torch_dtype=dtype,
             device_map=device,
+            trust_remote_code=True,
         )
+        self._model.eval()
         self._device = device
         self._is_video_model = hasattr(self._model.config, "video_token_id")
         self._loaded = True
@@ -968,7 +970,11 @@ class TransformersBackend(BaseBackend):
         Returns a dict of tensors ready to pass to model.generate(**inputs).
         """
 
-        if self._is_video_model:
+        # Single-frame requests should still use the image path even for
+        # video-capable models. Qwen's video utils expect a list/tuple of
+        # frames and can assert on one-frame numpy inputs that originate from
+        # analyze_frame().
+        if self._is_video_model and frames.shape[0] > 1:
             return self._prepare_video(frames, prompt)
 
         # Generic path: convert frames to PIL images
