@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import logging
+import threading
 import time
 
 import cv2
@@ -48,17 +49,25 @@ def _strip_thinking(text: str) -> str:
 
 _vlm_engine = None
 _yolo_counter = None
+_vlm_init_lock = threading.Lock()
 
 
 def _get_vlm():
     global _vlm_engine
-    if _vlm_engine is None:
+    if _vlm_engine is not None:
+        return _vlm_engine
+
+    with _vlm_init_lock:
+        if _vlm_engine is not None:
+            return _vlm_engine
+
         from trio_core.config import EngineConfig
         from trio_core.engine import TrioCore
 
         config = EngineConfig()
-        _vlm_engine = TrioCore(config)
-        _vlm_engine.load()
+        engine = TrioCore(config)
+        engine.load()
+        _vlm_engine = engine
         logger.info("VLM loaded (shared): %s", config.model)
     return _vlm_engine
 
@@ -161,6 +170,54 @@ def _frame_to_chw(frame_bgr: np.ndarray) -> np.ndarray:
     return rgb.transpose(2, 0, 1).astype(np.float32) / 255.0
 
 
+def _align_crop_to_model(crop_bgr: np.ndarray, image_factor: int) -> np.ndarray:
+    """Upscale small crops to a valid multiple for model processors."""
+    if crop_bgr.size == 0:
+        return crop_bgr
+
+    h, w = crop_bgr.shape[:2]
+    th = max(image_factor, round(h / image_factor) * image_factor)
+    tw = max(image_factor, round(w / image_factor) * image_factor)
+
+    return cv2.resize(crop_bgr, (tw, th)) if (th != h or tw != w) else crop_bgr
+
+
+def _normalize_entity_item(kind: str, item) -> dict:
+    """Normalize model-emitted entity items (strings or dicts) to a standard dict."""
+    if isinstance(item, dict):
+        norm = dict(item)
+    else:
+        text = str(item).strip()
+        norm = {"description": text}
+        if kind == "vehicles":
+            norm["make"] = norm["brand"] = text
+        elif kind == "persons":
+            norm["attire"] = text
+            norm["role"] = "unknown"
+        elif kind == "animals":
+            norm["breed"] = text
+
+    if kind == "vehicles":
+        label = norm.get("brand") or norm.get("make") or norm.get("description", "")
+        norm.setdefault("brand", label)
+        norm.setdefault("make", label)
+    return norm
+
+
+def _normalize_entities(entities: dict | None) -> dict:
+    """Normalize parsed entities payload into the shape downstream code expects."""
+    if not isinstance(entities, dict):
+        return {}
+
+    res = dict(entities)
+    for k in ("persons", "vehicles", "animals"):
+        items = res.get(k) or []
+        if not isinstance(items, list):
+            items = [items]
+        res[k] = [_normalize_entity_item(k, i) for i in items]
+    return res
+
+
 # ── Endpoints ──
 
 
@@ -207,6 +264,7 @@ async def _crop_describe_inner(req: CropDescribeRequest):
 
     frame = _decode_image(req.image_b64)
     engine = _get_vlm()
+    image_factor = getattr(getattr(engine, "_profile", None), "merge_factor", 32)
 
     t0 = time.time()
     loop = asyncio.get_event_loop()
@@ -232,8 +290,9 @@ async def _crop_describe_inner(req: CropDescribeRequest):
         cx2, cy2 = min(w, x2 + pw), min(h, y2 + ph)
         crop_bgr = frame[cy1:cy2, cx1:cx2]
 
-        if crop_bgr.shape[0] < 30 or crop_bgr.shape[1] < 30:
+        if crop_bgr.shape[0] < 8 or crop_bgr.shape[1] < 8:
             continue
+        crop_bgr = _align_crop_to_model(crop_bgr, image_factor)
 
         # Build crop prompt
         if obj_class in ("car", "truck", "bus", "motorcycle"):
@@ -303,6 +362,7 @@ async def _crop_describe_inner(req: CropDescribeRequest):
             entities = json.loads(clean[s : e + 1])
         except json.JSONDecodeError:
             pass
+    entities = _normalize_entities(entities)
 
     # Extract description
     if "DESCRIPTION:" in text:

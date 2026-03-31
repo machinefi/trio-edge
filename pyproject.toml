@@ -42,7 +42,7 @@ Issues = "https://github.com/machinefi/trio-core/issues"
 [project.optional-dependencies]
 mlx = ["mlx>=0.16", "tokenizers>=0.19", "huggingface-hub", "safetensors", "jinja2"]
 mlx-vlm = ["mlx-vlm>=0.3.12"]
-transformers = ["transformers>=4.40", "torch", "accelerate", "qwen-vl-utils"]
+transformers = ["transformers>=5.0", "torch", "torchvision", "accelerate", "qwen-vl-utils"]
 webcam = ["opencv-python>=4.8"]
 claw = ["websockets>=13.0", "cryptography>=41.0"]
 console = ["google-genai>=1.0"]

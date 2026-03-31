@@ -78,6 +78,7 @@ class TestTransformersFeatureDetection:
         assert b._is_video_model is False
 
 
+
 class TestBaseBackendHealth:
     def test_health(self):
         info = DeviceInfo("mlx", "M3", "metal", 36.0, 40)
