@@ -970,7 +970,11 @@ class TransformersBackend(BaseBackend):
         Returns a dict of tensors ready to pass to model.generate(**inputs).
         """
 
-        if self._is_video_model:
+        # Single-frame requests should still use the image path even for
+        # video-capable models. Qwen's video utils expect a list/tuple of
+        # frames and can assert on one-frame numpy inputs that originate from
+        # analyze_frame().
+        if self._is_video_model and frames.shape[0] > 1:
             return self._prepare_video(frames, prompt)
 
         # Generic path: convert frames to PIL images
