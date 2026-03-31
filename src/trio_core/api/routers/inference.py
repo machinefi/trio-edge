@@ -227,14 +227,17 @@ async def describe(req: DescribeRequest):
     import asyncio
 
     async with _vlm_semaphore:
-        frame = _decode_image(req.image_b64)
-        frame_chw = _frame_to_chw(frame)
-        engine = _get_vlm()
-
-        t0 = time.time()
         loop = asyncio.get_event_loop()
+        t0 = time.time()
+
+        def _sync_describe():
+            frame = _decode_image(req.image_b64)
+            frame_chw = _frame_to_chw(frame)
+            engine = _get_vlm()
+            return engine.analyze_frame(frame_chw, req.prompt)
+
         try:
-            result = await loop.run_in_executor(None, engine.analyze_frame, frame_chw, req.prompt)
+            result = await loop.run_in_executor(None, _sync_describe)
         except Exception as e:
             logger.error("VLM describe failed: %s", e)
             raise HTTPException(status_code=503, detail=f"VLM inference error: {e}")
@@ -262,7 +265,8 @@ async def _crop_describe_inner(req: CropDescribeRequest):
     import asyncio
     import json
 
-    frame = _decode_image(req.image_b64)
+    loop = asyncio.get_event_loop()
+    frame = await loop.run_in_executor(None, _decode_image, req.image_b64)
     engine = _get_vlm()
     image_factor = getattr(getattr(engine, "_profile", None), "merge_factor", 32)
 
@@ -318,13 +322,21 @@ async def _crop_describe_inner(req: CropDescribeRequest):
         cd = f"{obj_class}: {text}" if text else f"{obj_class}: unidentified"
         crop_descriptions.append(cd)
 
-    # Phase 2: Full scene description with crop context
+    # Phase 2: Full scene understanding with crop context
     scene_prompt = req.scene_prompt or (
-        "You are a security camera AI. "
-        "Provide SPECIFIC details: vehicle make/model/color, person appearance, animal breed. "
-        "Format: DESCRIPTION: [one detailed sentence]\n"
-        'JSON: {"persons":[...],"vehicles":[...],"animals":[...],'
-        '"action":"...","security_relevant":false,"people_count":0,"weather":"..."}'
+        "You are an expert scene analyst for a video intelligence system. "
+        "Your job is to UNDERSTAND what is happening, not just list objects.\n\n"
+        "Analyze this camera frame and provide:\n"
+        "1. SCENE: What is the overall situation? (e.g. 'busy morning commute', 'quiet residential street at night', 'loading dock with delivery in progress')\n"
+        "2. ACTIVITIES: What are people/vehicles DOING? Describe actions, movements, interactions. (e.g. 'two people having a conversation near the bench', 'delivery truck unloading packages', 'person walking a dog heading east')\n"
+        "3. RELATIONSHIPS: How do entities relate to each other? (e.g. 'group of 3 walking together', 'car waiting for pedestrian to cross', 'person appears to be watching the building entrance')\n"
+        "4. NOTABLE: Anything unusual, security-relevant, or worth remembering? (e.g. 'vehicle parked in no-parking zone', 'person lingering near entrance without entering', 'unusually empty for this type of location')\n\n"
+        "Be SPECIFIC about appearances: vehicle make/model/color, person clothing/build, animal breed.\n\n"
+        "Format your response as:\n"
+        "SCENE: [one sentence scene summary]\n"
+        "ACTIVITIES: [2-3 sentences describing what's happening]\n"
+        "NOTABLE: [anything unusual or worth tracking, or 'nothing unusual']\n"
+        'JSON: {"people_count":N,"vehicle_count":N,"persons":[{"appearance":"...","action":"...","location":"..."}],"vehicles":[{"type":"...","color":"...","make":"...","action":"..."}],"scene_type":"...","activity_level":"quiet|moderate|busy","mood":"calm|tense|active"}'
     )
 
     if crop_descriptions:
@@ -364,28 +376,81 @@ async def _crop_describe_inner(req: CropDescribeRequest):
             pass
     entities = _normalize_entities(entities)
 
-    # Extract description
-    if "DESCRIPTION:" in text:
-        parts = text.split("DESCRIPTION:", 1)[1]
-        desc = parts.split("JSON:", 1)[0].strip() if "JSON:" in parts else parts.strip()
+    # Extract description — combine SCENE + ACTIVITIES + NOTABLE into rich description
+    scene_line = ""
+    activities_line = ""
+    notable_line = ""
+
+    for prefix in ["SCENE:", "ACTIVITIES:", "NOTABLE:", "DESCRIPTION:"]:
+        if prefix in text:
+            after = text.split(prefix, 1)[1]
+            # Take until next section header or JSON
+            for end_marker in ["SCENE:", "ACTIVITIES:", "NOTABLE:", "JSON:", "```"]:
+                if end_marker != prefix and end_marker in after:
+                    after = after.split(end_marker, 1)[0]
+                    break
+            line = after.strip().split("\n")[0].strip() if after.strip() else ""
+            if prefix == "SCENE:" or prefix == "DESCRIPTION:":
+                scene_line = line
+            elif prefix == "ACTIVITIES:":
+                activities_line = line
+            elif prefix == "NOTABLE:":
+                notable_line = line
+
+    if scene_line:
+        desc = scene_line
+        if activities_line:
+            desc += " " + activities_line
+        if notable_line and notable_line.lower() not in ("nothing unusual", "none", "n/a", "nothing unusual."):
+            desc += " " + notable_line
     elif entities:
-        # VLM might put DESCRIPTION inside the JSON object
         if "DESCRIPTION" in entities:
             desc = entities.pop("DESCRIPTION")
+        elif "SCENE" in entities:
+            desc = entities.pop("SCENE")
         else:
-            # Build description from entities
             parts = []
             for p in entities.get("persons") or []:
-                parts.append(p.get("attire", "person"))
+                action = p.get("action", p.get("attire", "person"))
+                parts.append(action)
             for v in entities.get("vehicles") or []:
                 parts.append(
-                    f"{v.get('color', '')} {v.get('make', '')} {v.get('type', '')}".strip()
+                    f"{v.get('color', '')} {v.get('make', '')} {v.get('action', v.get('type', ''))}".strip()
                 )
-            desc = f"{entities.get('people_count', 0)} people, {len(entities.get('vehicles', []))} vehicles"
+            desc = (
+                f"{entities.get('people_count', 0)} people, "
+                f"{entities.get('vehicle_count', len(entities.get('vehicles', [])))} vehicles"
+            )
             if parts:
                 desc += ": " + ", ".join(parts[:5])
     else:
-        desc = clean[:200] if clean else ""
+        desc = clean[:300] if clean else ""
+
+    # Fallback: if no structured entities parsed, construct from description
+    if not entities:
+        entities = {}
+        # Infer scene metadata from description text
+        dl = desc.lower()
+        if any(w in dl for w in ["bustling", "crowded", "busy", "packed", "dense"]):
+            entities["activity_level"] = "busy"
+        elif any(w in dl for w in ["moderate", "steady", "normal"]):
+            entities["activity_level"] = "moderate"
+        elif any(w in dl for w in ["quiet", "empty", "calm", "sparse", "deserted"]):
+            entities["activity_level"] = "quiet"
+        if any(w in dl for w in ["times square", "new york", "nyc"]):
+            entities["scene_type"] = "Times Square plaza"
+        elif any(w in dl for w in ["parking", "lot"]):
+            entities["scene_type"] = "parking lot"
+        elif any(w in dl for w in ["intersection", "crosswalk", "street"]):
+            entities["scene_type"] = "urban street"
+        elif any(w in dl for w in ["plaza", "square", "park"]):
+            entities["scene_type"] = "public plaza"
+        if any(w in dl for w in ["tense", "aggressive", "alarming"]):
+            entities["mood"] = "tense"
+        elif any(w in dl for w in ["active", "energetic", "bustling"]):
+            entities["mood"] = "active"
+        else:
+            entities["mood"] = "calm"
 
     elapsed = int((time.time() - t0) * 1000)
 
