@@ -401,7 +401,12 @@ async def _crop_describe_inner(req: CropDescribeRequest):
         desc = scene_line
         if activities_line:
             desc += " " + activities_line
-        if notable_line and notable_line.lower() not in ("nothing unusual", "none", "n/a", "nothing unusual."):
+        if notable_line and notable_line.lower() not in (
+            "nothing unusual",
+            "none",
+            "n/a",
+            "nothing unusual.",
+        ):
             desc += " " + notable_line
     elif entities:
         if "DESCRIPTION" in entities:
