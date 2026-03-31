@@ -264,6 +264,7 @@ class TestWatchEndpoints:
         with (
             patch("trio_core._rtsp_proxy.ensure_rtsp_url", return_value="rtsp://test"),
             patch("subprocess.Popen", return_value=mock_proc),
+            patch("trio_core.api.server._WATCH_MAX_RECONNECTS", 0),
         ):
             resp = client.post(
                 "/v1/watch",
@@ -322,6 +323,7 @@ class TestWatchEndpoints:
         with (
             patch("trio_core._rtsp_proxy.ensure_rtsp_url", return_value="rtsp://test"),
             patch("subprocess.Popen", return_value=mock_proc),
+            patch("trio_core.api.server._WATCH_MAX_RECONNECTS", 0),
         ):
             resp = client.post(
                 "/v1/watch",
@@ -368,6 +370,7 @@ class TestWatchEndpoints:
         with (
             patch("trio_core._rtsp_proxy.ensure_rtsp_url", return_value="rtsp://test"),
             patch("subprocess.Popen", return_value=mock_proc),
+            patch("trio_core.api.server._WATCH_MAX_RECONNECTS", 0),
         ):
             resp = client.post(
                 "/v1/watch",
@@ -417,6 +420,7 @@ class TestWatchEndpoints:
         with (
             patch("trio_core._rtsp_proxy.ensure_rtsp_url", return_value="rtsp://test"),
             patch("subprocess.Popen", return_value=mock_proc),
+            patch("trio_core.api.server._WATCH_MAX_RECONNECTS", 0),
         ):
             resp = client.post(
                 "/v1/watch",
@@ -506,6 +510,7 @@ class TestWatchCustomResolution:
         with (
             patch("trio_core._rtsp_proxy.ensure_rtsp_url", return_value="rtsp://test"),
             patch("trio_core.api.server._start_ffmpeg", side_effect=capture_start_ffmpeg),
+            patch("trio_core.api.server._WATCH_MAX_RECONNECTS", 0),
         ):
             resp = client.post(
                 "/v1/watch",
@@ -552,9 +557,17 @@ class TestWatchReconnect:
         mock_proc1.terminate = MagicMock()
         mock_proc1.wait = MagicMock()
 
-        # Second proc (reconnected): 1 frame then EOF
+        # Second proc (reconnected): 1 frame then perpetual EOF so side_effect never exhausts
         mock_stdout2 = MagicMock()
-        mock_stdout2.read = MagicMock(side_effect=[frame2.tobytes(), b""])
+        frame2_sent = [False]
+
+        def _read2(n):
+            if not frame2_sent[0]:
+                frame2_sent[0] = True
+                return frame2.tobytes()
+            return b""
+
+        mock_stdout2.read = MagicMock(side_effect=_read2)
         mock_proc2 = MagicMock()
         mock_proc2.stdout = mock_stdout2
         mock_proc2.poll.return_value = None
