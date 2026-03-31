@@ -13,7 +13,7 @@ class EngineConfig(BaseSettings):
 
     # Model
     model: str = Field(
-        default="mlx-community/Qwen2.5-VL-3B-Instruct-4bit",
+        default="mlx-community/Qwen3-VL-8B-Instruct-4bit",
         description="HuggingFace model ID or local path",
     )
     adapter_path: str | None = Field(
