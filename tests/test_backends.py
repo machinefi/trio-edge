@@ -117,7 +117,6 @@ class TestTransformersFeatureDetection:
         assert result["input_ids"].shape == (1, 2)
 
 
-
 class TestBaseBackendHealth:
     def test_health(self):
         info = DeviceInfo("mlx", "M3", "metal", 36.0, 40)
