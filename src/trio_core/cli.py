@@ -637,8 +637,11 @@ def cam(
     os.environ.setdefault("TRIO_COMPRESS_ENABLED", "1")
     os.environ.setdefault("TRIO_COMPRESS_RATIO", "0.5")
 
-    # Resolve RTSP URL
+    # Resolve RTSP URL (with Tailscale proxy auto-detection)
     rtsp_url = rtsp
+    if rtsp_url:
+        from trio_core._rtsp_proxy import ensure_rtsp_url
+        rtsp_url = ensure_rtsp_url(rtsp_url)
     if not rtsp_url:
         if host:
             enc_pw = quote(password, safe="")
@@ -674,6 +677,8 @@ def cam(
             if not rtsp_url:
                 typer.echo("Failed to get RTSP URI.")
                 raise typer.Exit(1)
+            from trio_core._rtsp_proxy import ensure_rtsp_url
+            rtsp_url = ensure_rtsp_url(rtsp_url)
 
     if discover:
         return
