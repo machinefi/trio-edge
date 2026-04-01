@@ -730,6 +730,83 @@ def cam(
         pass
 
 
+@app.command()
+def relay(
+    whip_url: str = typer.Argument(
+        ..., help="WHIP ingest endpoint URL (e.g. http://cortex:8000/api/stream/whip)"
+    ),
+    source: str = typer.Option(
+        "0", "--source", "-s", help="Video source: camera index, RTSP URL, or video file"
+    ),
+    token: str = typer.Option(None, "--token", "-t", help="Bearer token for WHIP authentication"),
+    resolution: str = typer.Option(
+        None, "--resolution", "-r", help="Video resolution WxH (e.g. 1280x720)"
+    ),
+    framerate: int = typer.Option(30, "--framerate", "--fps", help="Target frame rate"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Debug logging"),
+    json_logs: bool = typer.Option(
+        False, "--json-logs", help="Structured JSON logging (or set TRIO_LOG_JSON=1)"
+    ),
+):
+    """Relay video from a webcam, RTSP camera, or file to a WHIP endpoint."""
+    import asyncio
+
+    _setup_logging(verbose, json_logs=json_logs)
+
+    resolution_tuple = None
+    if resolution:
+        try:
+            width, height = resolution.lower().split("x", 1)
+            resolution_tuple = (int(width), int(height))
+        except ValueError:
+            typer.echo(
+                f"✗ Invalid resolution format: {resolution} (expected WxH, e.g. 1280x720)",
+                err=True,
+            )
+            raise typer.Exit(1)
+
+    try:
+        from trio_core.whip_relay import RelayError, WhipRelay
+    except ImportError as exc:
+        typer.echo(f"✗ Missing dependency: {exc}", err=True)
+        typer.echo("  Install with: pip install 'trio-edge[relay]'", err=True)
+        raise typer.Exit(1)
+
+    if not shutil.which("ffmpeg"):
+        typer.echo(
+            "✗ ffmpeg not found. Install with: apt install ffmpeg (Linux) or brew install ffmpeg (macOS)",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    relay_obj = WhipRelay(
+        source=source,
+        whip_url=whip_url,
+        bearer_token=token,
+        resolution=resolution_tuple,
+        framerate=framerate,
+    )
+
+    typer.echo(f"Relay: {source} -> {whip_url}")
+    typer.echo(f"Codec: H.264 | FPS: {framerate} | Resolution: {resolution or 'native'}")
+    typer.echo("Press Ctrl+C to stop.\n")
+
+    async def _run() -> None:
+        try:
+            await relay_obj.run()
+        finally:
+            await relay_obj.teardown()
+
+    try:
+        asyncio.run(_run())
+    except RelayError as exc:
+        typer.echo(f"\n✗ {exc}", err=True)
+        raise typer.Exit(1)
+    except KeyboardInterrupt:
+        typer.echo("\nStopping relay...")
+        typer.echo("Disconnected.")
+
+
 def _die_load_error(e: Exception, model: str) -> None:
     """Print a friendly error message for model loading failures and exit."""
     msg = str(e)
