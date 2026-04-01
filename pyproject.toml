@@ -3,14 +3,14 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "trio-core"
-version = "0.9.0"
-description = "Local VLM inference engine for video — Apple Silicon, NVIDIA, and CPU"
+name = "trio-edge"
+version = "1.0.0"
+description = "Open-source camera intelligence — ONVIF discovery, RTSP relay, YOLO detection, VLM scene understanding"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.12"
 authors = [{name = "Trio Team"}]
-keywords = ["vlm", "video", "inference", "vision-language-model", "apple-silicon", "trioclaw", "openclaw"]
+keywords = ["vlm", "video", "inference", "camera", "onvif", "rtsp", "yolo", "surveillance", "apple-silicon"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -32,26 +32,25 @@ dependencies = [
     "aiosqlite>=0.19",
     "onnxruntime>=1.17",
     "huggingface-hub>=0.20",
+    "httpx>=0.25",
 ]
 
 [project.urls]
-Homepage = "https://github.com/machinefi/trio-core"
-Repository = "https://github.com/machinefi/trio-core"
-Issues = "https://github.com/machinefi/trio-core/issues"
+Homepage = "https://github.com/machinefi/trio-edge"
+Repository = "https://github.com/machinefi/trio-edge"
+Issues = "https://github.com/machinefi/trio-edge/issues"
 
 [project.optional-dependencies]
 mlx = ["mlx>=0.16", "tokenizers>=0.19", "huggingface-hub", "safetensors", "jinja2"]
 mlx-vlm = ["mlx-vlm>=0.3.12"]
-transformers = ["transformers>=5.4", "torch", "torchvision", "accelerate", "qwen-vl-utils", "compressed-tensors"]
+cuda = ["transformers>=5.4", "torch", "torchvision", "accelerate", "qwen-vl-utils", "compressed-tensors"]
 webcam = ["opencv-python>=4.8"]
 claw = ["websockets>=13.0", "cryptography>=41.0"]
-console = ["google-genai>=1.0"]
-report = ["weasyprint>=60.0"]
-all = ["trio-core[mlx,transformers,webcam,claw,console]"]
+all = ["trio-edge[mlx,webcam,claw]"]
 dev = ["pytest", "pytest-asyncio", "pytest-timeout", "pytest-cov", "httpx"]
 
 [project.scripts]
-trio-core = "trio_core.cli:app"
+trio-edge = "trio_core.cli:app"
 trio = "trio_core.cli:app"
 
 [tool.hatch.build.targets.wheel]
