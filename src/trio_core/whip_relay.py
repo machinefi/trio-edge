@@ -9,7 +9,7 @@ import platform
 import shutil
 import subprocess
 from dataclasses import dataclass
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit, urlunsplit
 
 import aiohttp
 import av
@@ -40,6 +40,10 @@ class WhipNegotiationError(RelayError):
 
 class WhipAuthError(WhipNegotiationError):
     """Raised when the WHIP endpoint rejects authentication."""
+
+
+class WhipAnalysisError(RelayError):
+    """Raised when the analysis pipeline cannot be attached."""
 
 
 class _AnnexBAccessUnitBuffer:
@@ -431,6 +435,7 @@ class WhipRelay:
                 f"ICE connection failed (state: {self._pc.iceConnectionState})"
             )
 
+        await self._attach_analysis()
         logger.info("Connected; streaming H.264 video to %s", self.whip_url)
 
         while True:
@@ -508,6 +513,38 @@ class WhipRelay:
 
             answer = RTCSessionDescription(sdp=body, type="answer")
             await self._pc.setRemoteDescription(answer)
+
+    def _analysis_url(self) -> str:
+        if not self._session_url:
+            raise WhipAnalysisError("Cannot attach analysis before WHIP session is established")
+
+        parsed = urlsplit(self._session_url)
+        prefix, marker, session_id = parsed.path.rpartition("/whip/")
+        if not marker or not session_id:
+            raise WhipAnalysisError(f"Unexpected WHIP session URL: {self._session_url}")
+
+        path = f"{prefix}/sessions/{session_id}/analyze"
+        return urlunsplit((parsed.scheme, parsed.netloc, path, "", ""))
+
+    async def _attach_analysis(self) -> None:
+        analyze_url = self._analysis_url()
+        headers: dict[str, str] = {}
+        if self.bearer_token:
+            headers["Authorization"] = f"Bearer {self.bearer_token}"
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                analyze_url,
+                json={},
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                body = await resp.text()
+                if resp.status != 200:
+                    raise WhipAnalysisError(
+                        f"Analysis attach failed (HTTP {resp.status}): {body[:300]}"
+                    )
+        logger.info("Attached analysis pipeline: %s", analyze_url)
 
     async def teardown(self) -> None:
         session_url = self._session_url

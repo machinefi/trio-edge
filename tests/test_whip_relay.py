@@ -208,6 +208,10 @@ class _FakeClientSession:
         self._calls.append({"url": url, **kwargs})
         return _FakeRequestContext(self._responses.pop(0))
 
+    def delete(self, url: str, **kwargs):
+        self._calls.append({"url": url, **kwargs})
+        return _FakeRequestContext(self._responses.pop(0))
+
 
 @pytest.mark.asyncio
 async def test_negotiate_success_sets_remote_description(monkeypatch: pytest.MonkeyPatch):
@@ -274,3 +278,82 @@ async def test_negotiate_server_error_raises(monkeypatch: pytest.MonkeyPatch):
 
     with pytest.raises(relay_module.WhipNegotiationError, match="HTTP 503"):
         await relay._negotiate()
+
+
+@pytest.mark.asyncio
+async def test_attach_analysis_posts_to_session_endpoint(monkeypatch: pytest.MonkeyPatch):
+    relay_module = _install_relay_stubs(monkeypatch)
+    calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        relay_module.aiohttp,
+        "ClientSession",
+        lambda: _FakeClientSession([_FakeResponse(200, '{"attached": true}')], calls),
+    )
+
+    relay = relay_module.WhipRelay(
+        source="0",
+        whip_url="http://test:8000/api/stream/whip",
+        bearer_token="secret-token",
+    )
+    relay._session_url = "http://test:8000/api/stream/whip/session-abc123"
+
+    await relay._attach_analysis()
+
+    assert calls[0]["url"] == "http://test:8000/api/stream/sessions/session-abc123/analyze"
+    assert calls[0]["json"] == {}
+    assert calls[0]["headers"]["Authorization"] == "Bearer secret-token"
+
+
+@pytest.mark.asyncio
+async def test_run_attaches_analysis_after_connection(monkeypatch: pytest.MonkeyPatch):
+    relay_module = _install_relay_stubs(monkeypatch)
+    monkeypatch.setattr(relay_module, "detect_source_type", lambda source: "file")
+
+    class FakePeerConnection:
+        def __init__(self) -> None:
+            self.localDescription = None
+            self.iceGatheringState = "complete"
+            self.iceConnectionState = "connected"
+            self.connectionState = "closed"
+            self._handlers: dict[str, object] = {}
+
+        def addTransceiver(self, kind: str, direction: str) -> None:
+            return None
+
+        def addTrack(self, track) -> None:
+            return None
+
+        async def createOffer(self):
+            return types.SimpleNamespace(sdp="v=0\r\n", type="offer")
+
+        async def setLocalDescription(self, offer) -> None:
+            self.localDescription = offer
+
+        async def close(self) -> None:
+            return None
+
+        def on(self, event: str):
+            def register(callback):
+                self._handlers[event] = callback
+                if event == "iceconnectionstatechange":
+                    callback()
+                return callback
+
+            return register
+
+    fake_pc = FakePeerConnection()
+    monkeypatch.setattr(relay_module, "RTCPeerConnection", lambda: fake_pc)
+    monkeypatch.setattr(relay_module, "H264FfmpegTrack", lambda *args, **kwargs: object())
+
+    relay = relay_module.WhipRelay(source="video.mp4", whip_url="http://test:8000/api/stream/whip")
+    relay._wait_for_ice_gathering = AsyncMock()
+
+    async def fake_negotiate() -> None:
+        relay._session_url = "http://test:8000/api/stream/whip/session-abc123"
+
+    relay._negotiate = AsyncMock(side_effect=fake_negotiate)
+    relay._attach_analysis = AsyncMock()
+
+    await relay.run()
+
+    relay._attach_analysis.assert_awaited_once()
