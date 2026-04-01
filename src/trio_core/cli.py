@@ -913,5 +913,216 @@ def _load_claw_config(path: str) -> dict:
     return data
 
 
+@app.command()
+def discover(
+    timeout: int = typer.Option(5, "--timeout", "-t", help="Discovery timeout in seconds"),
+):
+    """Discover cameras on your network via ONVIF."""
+    import socket
+    import time
+    from urllib.parse import urlparse
+
+    typer.echo("Searching for cameras on your network (ONVIF)...\n")
+
+    # WS-Discovery multicast probe
+    probe = """<?xml version="1.0" encoding="UTF-8"?>
+<e:Envelope xmlns:e="http://www.w3.org/2003/05/soap-envelope"
+            xmlns:w="http://schemas.xmlsoap.org/ws/2004/08/addressing"
+            xmlns:d="http://schemas.xmlsoap.org/ws/2005/04/discovery"
+            xmlns:dn="http://www.onvif.org/ver10/network/wsdl">
+  <e:Header>
+    <w:MessageID>uuid:trio-edge-discover</w:MessageID>
+    <w:To>urn:schemas-xmlsoap-org:ws:2005:04:discovery</w:To>
+    <w:Action>http://schemas.xmlsoap.org/ws/2005/04/discovery/Probe</w:Action>
+  </e:Header>
+  <e:Body>
+    <d:Probe><d:Types>dn:NetworkVideoTransmitter</d:Types></d:Probe>
+  </e:Body>
+</e:Envelope>"""
+
+    addr = socket.getaddrinfo("239.255.255.250", 3702, socket.AF_INET, socket.SOCK_DGRAM)[0]
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.settimeout(timeout)
+    sock.sendto(probe.encode(), addr[4])
+
+    cameras = []
+    seen = set()
+    deadline = time.time() + timeout
+
+    while time.time() < deadline:
+        try:
+            data, (ip, _) = sock.recvfrom(8192)
+            if ip in seen:
+                continue
+            seen.add(ip)
+
+            resp = data.decode(errors="replace")
+            # Parse name from ONVIF scopes
+            name = f"Camera @ {ip}"
+            for part in resp.split():
+                if "/name/" in part:
+                    n = part.split("/name/")[-1].replace("%20", " ")
+                    if n:
+                        name = n
+                if "/hardware/" in part:
+                    hw = part.split("/hardware/")[-1].replace("%20", " ")
+                    if hw and "Camera @" in name:
+                        name = f"{hw} @ {ip}"
+
+            # Try common RTSP paths
+            rtsp_url = f"rtsp://{ip}:554/h264Preview_01_main"  # Reolink default
+            cameras.append({"ip": ip, "name": name, "rtsp": rtsp_url})
+        except socket.timeout:
+            break
+
+    sock.close()
+
+    if not cameras:
+        typer.echo("No cameras found. Make sure cameras are on the same subnet.")
+        typer.echo("You can manually specify: trio relay --rtsp rtsp://admin:pass@IP/stream")
+        raise typer.Exit(0)
+
+    typer.echo(f"Found {len(cameras)} camera(s):\n")
+    for i, c in enumerate(cameras):
+        typer.echo(f"  [{i + 1}] {c['name']} ({c['ip']})")
+        typer.echo(f"      RTSP: {c['rtsp']}")
+    typer.echo()
+
+
+@app.command()
+def relay(
+    rtsp: str = typer.Option(None, "--rtsp", "-r", help="RTSP URL of camera"),
+    cloud: str = typer.Option(None, "--cloud", "-c", help="Trio Cloud API URL (e.g. https://xxx.trycloudflare.com)"),
+    token: str = typer.Option("", "--token", "-t", help="Trio Cloud auth token"),
+    camera_id: str = typer.Option("", "--camera-id", help="Camera ID (auto-generated if empty)"),
+    fps: int = typer.Option(2, "--fps", help="Frames per second to capture"),
+    host: str = typer.Option(None, "--host", "-h", help="Camera IP (auto-discover RTSP)"),
+    user: str = typer.Option("admin", "--user", "-u", help="Camera username"),
+    password: str = typer.Option("", "--password", "-p", help="Camera password"),
+):
+    """Relay camera RTSP stream to Trio Cloud.
+
+    Discovers cameras via ONVIF, pulls RTSP, and pushes JPEG frames
+    to the Trio Cloud cortex API for AI analysis.
+
+    Examples:
+        trio relay --rtsp rtsp://admin:pass@192.168.1.100/stream --cloud https://xxx.trycloudflare.com
+        trio relay --host 192.168.1.100 -p mypass --cloud https://api.trio.ai
+    """
+    import base64
+    import os
+    import signal
+    import subprocess
+    import time
+
+    import httpx
+
+    # Resolve RTSP URL
+    if not rtsp and host:
+        from urllib.parse import quote
+        enc_pw = quote(password, safe="")
+        rtsp = f"rtsp://{user}:{enc_pw}@{host}:554/h264Preview_01_main"
+        typer.echo(f"Using RTSP: rtsp://{user}:***@{host}:554/...")
+
+    if not rtsp:
+        typer.echo("No camera specified. Run 'trio discover' first, then use --rtsp or --host.")
+        raise typer.Exit(1)
+
+    cloud_url = cloud or os.environ.get("TRIO_CLOUD_URL", "")
+    if not cloud_url:
+        typer.echo("No cloud URL. Use --cloud or set TRIO_CLOUD_URL.")
+        raise typer.Exit(1)
+
+    auth_token = token or os.environ.get("TRIO_CLOUD_TOKEN", "")
+
+    # Tailscale auto-proxy
+    from trio_core._rtsp_proxy import ensure_rtsp_url
+    rtsp = ensure_rtsp_url(rtsp)
+
+    # Generate camera ID from URL hash
+    if not camera_id:
+        camera_id = f"cam_{hash(rtsp) % 0xFFFFFFFF:08x}"
+
+    typer.echo(f"\n{'=' * 50}")
+    typer.echo(f"  TRIO EDGE — Camera Relay")
+    typer.echo(f"  Camera:  {camera_id}")
+    typer.echo(f"  Cloud:   {cloud_url}")
+    typer.echo(f"  FPS:     {fps}")
+    typer.echo(f"{'=' * 50}\n")
+    typer.echo("Streaming... (Ctrl+C to stop)\n")
+
+    # Start ffmpeg to capture JPEG frames
+    cmd = [
+        "ffmpeg", "-rtsp_transport", "tcp",
+        "-i", rtsp,
+        "-vf", f"fps={fps}",
+        "-f", "image2pipe", "-vcodec", "mjpeg",
+        "-q:v", "5", "-"
+    ]
+
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    client = httpx.Client(timeout=30)
+    ingest_url = f"{cloud_url.rstrip('/')}/api/stream/ingest"
+
+    frame_count = 0
+    error_count = 0
+
+    def _signal_handler(sig, frame):
+        typer.echo(f"\nStopped. {frame_count} frames sent, {error_count} errors.")
+        proc.kill()
+        raise typer.Exit(0)
+
+    signal.signal(signal.SIGINT, _signal_handler)
+    signal.signal(signal.SIGTERM, _signal_handler)
+
+    # Read JPEG frames (FFD8...FFD9 delimited)
+    buf = b""
+    while True:
+        chunk = proc.stdout.read(4096)
+        if not chunk:
+            typer.echo("Stream ended. Reconnecting in 5s...")
+            proc.kill()
+            time.sleep(5)
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            continue
+
+        buf += chunk
+
+        # Find JPEG frames
+        while True:
+            start = buf.find(b"\xff\xd8")
+            if start < 0:
+                buf = b""
+                break
+            end = buf.find(b"\xff\xd9", start + 2)
+            if end < 0:
+                buf = buf[start:]  # keep partial
+                break
+
+            jpeg = buf[start:end + 2]
+            buf = buf[end + 2:]
+
+            frame_count += 1
+            try:
+                headers = {"Content-Type": "application/json"}
+                if auth_token:
+                    headers["Authorization"] = f"Bearer {auth_token}"
+
+                resp = client.post(ingest_url, json={
+                    "camera_id": camera_id,
+                    "image_b64": base64.b64encode(jpeg).decode(),
+                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                    "seq": frame_count,
+                }, headers=headers)
+
+                if frame_count % 30 == 1:
+                    typer.echo(f"  [{time.strftime('%H:%M:%S')}] {frame_count} frames sent "
+                              f"({len(jpeg) / 1024:.0f}KB, {error_count} errors)")
+            except Exception:
+                error_count += 1
+                if error_count % 10 == 1:
+                    typer.echo(f"  Push error ({error_count} total)")
+
+
 if __name__ == "__main__":
     app()
