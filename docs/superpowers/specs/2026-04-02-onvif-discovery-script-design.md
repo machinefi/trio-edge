@@ -31,6 +31,7 @@ The script must:
 - Tolerate malformed responses by skipping them instead of aborting the scan.
 - Exit successfully when no cameras are found and print a clear no-results message.
 - Surface real socket or multicast setup failures as user-visible errors with a nonzero exit code.
+- Use a concrete default discovery timeout of `3` seconds.
 
 ## Approaches Considered
 
@@ -79,20 +80,24 @@ Use approach 1. The script will own the network probe, response parsing, dedupli
 
 The script will contain:
 - A probe payload builder or constant for WS-Discovery.
-- A network scan function that sends the multicast probe and collects responses until timeout.
-- A parser that extracts:
+- A `send_probe()` function that sends the WS-Discovery `Probe` envelope to multicast address `239.255.255.250:3702` over UDP.
+- A `collect_responses()` function that receives datagrams until the configured timeout expires.
+- A `parse_response()` function that extracts:
   - response IP
   - ONVIF XAddr URL
   - port
   - best-effort camera name from ONVIF scopes
-- A deduplication step keyed by `(ip, onvif_url)` so duplicate responses from the same endpoint do not create duplicate output rows.
-- Output formatting for human-readable and JSON modes.
+- A `discover_cameras()` coordinator that parses valid responses and deduplicates results by `(ip, onvif_url)` so duplicate responses from the same endpoint do not create duplicate output rows.
+- A `format_text()` function for human-readable output.
+- A `format_json()` function for machine-readable output.
 - A small `main()` entrypoint using `argparse`.
+
+The probe envelope should be a minimal WS-Discovery request for `dn:NetworkVideoTransmitter`, matching ONVIF camera discovery expectations without adding authentication or vendor-specific fields.
 
 ### Inputs
 
 Supported flags:
-- `--timeout <seconds>`: receive window for discovery responses. Default should be short enough for interactive use.
+- `--timeout <seconds>`: receive window for discovery responses. Default: `3`.
 - `--json`: emit JSON instead of human-readable output.
 
 ### Outputs
@@ -113,14 +118,15 @@ The script should use a small local dataclass, for example `DiscoveredCamera`, w
 - `name: str`
 - `ip: str`
 - `port: int`
-- `onvif_url: str | None`
+- `onvif_url: str`
 
 Parsing rules:
 - Extract the first HTTP or HTTPS XAddr from each response payload.
 - Derive `port` from the XAddr when present; otherwise fall back to `80`.
 - Prefer ONVIF scope names from `/name/`.
 - If no explicit name is present, fall back to `Camera @ <ip>`.
-- Ignore malformed payloads that do not expose a usable endpoint or meaningful ONVIF markers.
+- Ignore malformed payloads that do not expose a usable HTTP or HTTPS XAddr endpoint.
+- Ignore payloads that do not provide enough information to construct a valid `DiscoveredCamera`.
 
 ## Error Handling
 
@@ -139,9 +145,11 @@ Add focused tests that exercise the standalone script behavior without requiring
 - Deduplication across repeated responses from the same device.
 - Fallback naming when no scope name exists.
 - Empty scan result behavior.
+- Malformed response skipping.
+- Socket or multicast setup failure handling.
 - JSON output shape.
 
-Networking code should stay thin so tests can patch socket reads and feed synthetic payloads.
+Networking code should stay thin so tests can patch socket reads and feed synthetic payloads into `collect_responses()` and `parse_response()` independently.
 
 ## Integration Notes
 
