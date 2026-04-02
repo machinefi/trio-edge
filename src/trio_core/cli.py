@@ -711,7 +711,6 @@ def cam(
     import os
     import sys
 
-    from trio_core.onvif import discover_cameras, get_rtsp_uri
 
     os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
     os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
