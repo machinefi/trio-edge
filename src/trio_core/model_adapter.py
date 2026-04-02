@@ -188,7 +188,10 @@ class Qwen25VLAdapter(ModelAdapter):
     def apply_rope_at_layer(self, q, k, v, position_ids, layer, cache_offset=0):
         attn = layer.self_attn
         cos, sin = attn.rotary_emb(v, position_ids)
-        from trio_core.mlx_utils import apply_multimodal_rotary_pos_emb
+        try:
+            from mlx_vlm.models.qwen2_5_vl.language import apply_multimodal_rotary_pos_emb
+        except ImportError:
+            from trio_core.mlx_utils import apply_multimodal_rotary_pos_emb
 
         q, k = apply_multimodal_rotary_pos_emb(q, k, cos, sin, unqueeze_dim=1)
         return q, k
@@ -259,7 +262,10 @@ class Qwen3VLAdapter(ModelAdapter):
     def apply_rope_at_layer(self, q, k, v, position_ids, layer, cache_offset=0):
         attn = layer.self_attn
         cos, sin = attn.rotary_emb(v, position_ids)
-        from trio_core.mlx_utils import apply_multimodal_rotary_pos_emb
+        try:
+            from mlx_vlm.models.qwen3_vl.language import apply_multimodal_rotary_pos_emb
+        except ImportError:
+            from trio_core.mlx_utils import apply_multimodal_rotary_pos_emb
 
         q, k = apply_multimodal_rotary_pos_emb(q, k, cos, sin, unqueeze_dim=1)
         return q, k
@@ -307,7 +313,10 @@ class InternVLAdapter(ModelAdapter):
             output_hidden_states=True,
         )
         hs = hs[:, 1:, :]  # remove CLS token
-        from trio_core.mlx_utils import pixel_shuffle
+        try:
+            from mlx_vlm.models.base import pixel_shuffle
+        except ImportError:
+            from trio_core.mlx_utils import pixel_shuffle
 
         hs = pixel_shuffle(hs, shuffle_ratio=self._model.downsample_ratio)
         for layer in self._model.mlp1:

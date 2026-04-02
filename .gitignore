@@ -68,3 +68,6 @@ credentials*
 *.pem
 *.key
 .env.local
+
+.codex
+uv.lock

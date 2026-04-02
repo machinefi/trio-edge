@@ -8,6 +8,81 @@ pytest.importorskip("tokenizers")
 from PIL import Image
 
 
+class _FakeTokenizer:
+    def __init__(self):
+        self._ids = {
+            "<|image_pad|>": 11,
+            "<|video_pad|>": 12,
+            "<|vision_start|>": 13,
+            "<|vision_end|>": 14,
+            "<|im_start|>": 15,
+            "<|im_end|>": 16,
+        }
+        self._next_id = 100
+
+    def convert_tokens_to_ids(self, token: str) -> int | None:
+        return self._ids.get(token)
+
+    def _encode_one(self, text: str) -> list[int]:
+        ids: list[int] = []
+        i = 0
+        specials = sorted(self._ids, key=len, reverse=True)
+        while i < len(text):
+            for token in specials:
+                if text.startswith(token, i):
+                    ids.append(self._ids[token])
+                    i += len(token)
+                    break
+            else:
+                if not text[i].isspace():
+                    ids.append(self._next_id)
+                    self._next_id += 1
+                i += 1
+        return ids
+
+    def __call__(self, text, padding=False, return_attention_mask=False):
+        texts = [text] if isinstance(text, str) else list(text)
+        all_ids = [self._encode_one(item) for item in texts]
+        if padding:
+            max_len = max(len(ids) for ids in all_ids)
+            padded = []
+            masks = []
+            for ids in all_ids:
+                pad_len = max_len - len(ids)
+                padded.append(ids + [0] * pad_len)
+                masks.append([1] * len(ids) + [0] * pad_len)
+        else:
+            padded = all_ids
+            masks = [[1] * len(ids) for ids in all_ids]
+        result = {"input_ids": padded}
+        if return_attention_mask:
+            result["attention_mask"] = masks
+        return result
+
+
+def make_processor():
+    from trio_core.processors.qwen_vl import QwenVLProcessor
+
+    return QwenVLProcessor(
+        tokenizer=_FakeTokenizer(),
+        image_patch_size=16,
+        image_temporal_patch_size=2,
+        image_merge_size=2,
+        image_min_pixels=65536,
+        image_max_pixels=16777216,
+        image_mean=[0.5, 0.5, 0.5],
+        image_std=[0.5, 0.5, 0.5],
+        video_patch_size=16,
+        video_temporal_patch_size=2,
+        video_merge_size=2,
+        video_min_pixels=4096,
+        video_max_pixels=25165824,
+        video_mean=[0.5, 0.5, 0.5],
+        video_std=[0.5, 0.5, 0.5],
+        is_qwen3=True,
+    )
+
+
 # Test with a simple synthetic image
 def make_test_image(h=480, w=640):
     arr = np.random.randint(0, 256, (h, w, 3), dtype=np.uint8)
@@ -49,14 +124,7 @@ class TestQwenVLProcessor:
         assert w % 32 == 0
 
     def test_image_processing_shapes(self):
-        from pathlib import Path
-
-        import huggingface_hub
-
-        from trio_core.processors.qwen_vl import load_processor
-
-        model_path = Path(huggingface_hub.snapshot_download("mlx-community/Qwen3.5-2B-MLX-4bit"))
-        processor = load_processor(model_path)
+        processor = make_processor()
 
         img = make_test_image(480, 640)
         text = "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Describe this image.<|im_end|>\n<|im_start|>assistant\n"
@@ -74,14 +142,7 @@ class TestQwenVLProcessor:
         assert result["pixel_values"].shape[1] == embed_dim
 
     def test_video_processing_shapes(self):
-        from pathlib import Path
-
-        import huggingface_hub
-
-        from trio_core.processors.qwen_vl import load_processor
-
-        model_path = Path(huggingface_hub.snapshot_download("mlx-community/Qwen3.5-2B-MLX-4bit"))
-        processor = load_processor(model_path)
+        processor = make_processor()
 
         frames = make_test_frames(4, 480, 640)
         text = "<|im_start|>user\n<|vision_start|><|video_pad|><|vision_end|>Describe this video.<|im_end|>\n<|im_start|>assistant\n"
@@ -98,14 +159,7 @@ class TestQwenVLProcessor:
 
     def test_token_count_matches_grid(self):
         """Verify the number of pad tokens in input_ids matches grid_thw."""
-        from pathlib import Path
-
-        import huggingface_hub
-
-        from trio_core.processors.qwen_vl import load_processor
-
-        model_path = Path(huggingface_hub.snapshot_download("mlx-community/Qwen3.5-2B-MLX-4bit"))
-        processor = load_processor(model_path)
+        processor = make_processor()
 
         img = make_test_image(480, 640)
         text = "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Describe.<|im_end|>\n<|im_start|>assistant\n"
