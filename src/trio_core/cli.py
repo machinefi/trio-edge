@@ -641,6 +641,7 @@ def cam(
     rtsp_url = rtsp
     if rtsp_url:
         from trio_core._rtsp_proxy import ensure_rtsp_url
+
         rtsp_url = ensure_rtsp_url(rtsp_url)
     if not rtsp_url:
         if host:
@@ -678,6 +679,7 @@ def cam(
                 typer.echo("Failed to get RTSP URI.")
                 raise typer.Exit(1)
             from trio_core._rtsp_proxy import ensure_rtsp_url
+
             rtsp_url = ensure_rtsp_url(rtsp_url)
 
     if discover:
@@ -920,7 +922,6 @@ def discover(
     """Discover cameras on your network via ONVIF."""
     import socket
     import time
-    from urllib.parse import urlparse
 
     typer.echo("Searching for cameras on your network (ONVIF)...\n")
 
