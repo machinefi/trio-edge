@@ -169,7 +169,10 @@ def test_build_cmd_rtsp_uses_passthrough(monkeypatch: pytest.MonkeyPatch):
 def test_probe_rtsp_codec_detects_h264(monkeypatch: pytest.MonkeyPatch):
     relay = _install_relay_stubs(monkeypatch)
 
-    with patch("shutil.which", return_value="/usr/bin/ffprobe"), patch("subprocess.run") as mock_run:
+    with (
+        patch("shutil.which", return_value="/usr/bin/ffprobe"),
+        patch("subprocess.run") as mock_run,
+    ):
         mock_run.return_value = MagicMock(stdout="h264\n", stderr="", returncode=0)
         assert relay._probe_rtsp_codec("rtsp://camera/stream") == "h264"
 
@@ -177,7 +180,10 @@ def test_probe_rtsp_codec_detects_h264(monkeypatch: pytest.MonkeyPatch):
 def test_probe_rtsp_codec_empty_output_raises(monkeypatch: pytest.MonkeyPatch):
     relay = _install_relay_stubs(monkeypatch)
 
-    with patch("shutil.which", return_value="/usr/bin/ffprobe"), patch("subprocess.run") as mock_run:
+    with (
+        patch("shutil.which", return_value="/usr/bin/ffprobe"),
+        patch("subprocess.run") as mock_run,
+    ):
         mock_run.return_value = MagicMock(stdout="", stderr="connection refused", returncode=1)
         with pytest.raises(relay.SourceError, match="Cannot probe RTSP stream"):
             relay._probe_rtsp_codec("rtsp://camera/stream")
