@@ -143,6 +143,20 @@ def test_build_cmd_webcam_linux(monkeypatch: pytest.MonkeyPatch):
     assert "1280x720" in cmd
 
 
+def test_build_cmd_webcam_macos_sets_supported_pixel_format(monkeypatch: pytest.MonkeyPatch):
+    relay = _install_relay_stubs(monkeypatch)
+    monkeypatch.setattr(relay, "detect_source_type", lambda source: "webcam")
+
+    track = relay.H264FfmpegTrack("0", framerate=30)
+    with patch("platform.system", return_value="Darwin"):
+        cmd = track._build_ffmpeg_cmd()
+
+    assert "avfoundation" in cmd
+    assert "0:none" in cmd
+    assert "-pixel_format" in cmd
+    assert "nv12" in cmd
+
+
 def test_build_cmd_rtsp_uses_passthrough(monkeypatch: pytest.MonkeyPatch):
     relay = _install_relay_stubs(monkeypatch)
     monkeypatch.setattr(relay, "detect_source_type", lambda source: "rtsp")

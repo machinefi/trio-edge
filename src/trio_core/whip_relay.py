@@ -193,6 +193,8 @@ class H264FfmpegTrack(MediaStreamTrack):
                     *common,
                     "-f",
                     "avfoundation",
+                    "-pixel_format",
+                    "nv12",
                     "-framerate",
                     fps,
                     *resolution_args,
