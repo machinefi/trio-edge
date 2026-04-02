@@ -34,17 +34,19 @@ def test_discover_command_uses_shared_onvif_module(monkeypatch: pytest.MonkeyPat
     assert "RTSP:" not in result.output
 
 
-def test_cam_discover_lists_cameras_and_exits(monkeypatch: pytest.MonkeyPatch):
+def test_cam_interactive_camera_listing_error_on_agent(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(
         "trio_core.onvif.discover_cameras",
-        lambda timeout=5: [CameraInfo(name="Doorbell", ip="192.168.1.41", port=8899)],
+        lambda timeout=5: [
+            CameraInfo(name="Cam1", ip="192.168.1.41", port=8899),
+            CameraInfo(name="Cam2", ip="192.168.1.42", port=8899),
+        ],
     )
 
-    result = runner.invoke(app, ["cam", "--discover"])
+    result = runner.invoke(app, ["cam"])
 
-    assert result.exit_code == 0
-    assert "Found 1 camera(s)" in result.output
-    assert "[0] Doorbell  IP: 192.168.1.41:8899" in result.output
+    assert result.exit_code == 1
+    assert "Multiple cameras (2) found. Please specify one using --host <IP>" in result.output
 
 
 def test_cam_auto_discovery_uses_shared_helpers(monkeypatch: pytest.MonkeyPatch):
