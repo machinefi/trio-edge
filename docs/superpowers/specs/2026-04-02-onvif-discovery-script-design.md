@@ -80,25 +80,36 @@ Use approach 1. The script will own the network probe, response parsing, dedupli
 
 The script will contain:
 - A probe payload builder or constant for WS-Discovery.
-- A `send_probe()` function that sends the WS-Discovery `Probe` envelope to multicast address `239.255.255.250:3702` over UDP.
-- A `collect_responses()` function that receives datagrams until the configured timeout expires.
+- A `send_probe(sock: socket.socket) -> None` function that sends the WS-Discovery `Probe` envelope to multicast address `239.255.255.250:3702` over UDP.
+- A `collect_responses(sock: socket.socket, timeout: float) -> list[tuple[bytes, str]]` function that receives datagrams until the configured timeout expires and returns `(payload, source_ip)` pairs.
 - A `parse_response(payload: bytes, source_ip: str)` function that extracts:
   - response IP from the UDP sender tuple, not the payload
   - ONVIF XAddr URL
   - port
   - best-effort camera name from ONVIF scopes
-- A `discover_cameras()` coordinator that parses valid responses and deduplicates results by `(ip, onvif_url)` so duplicate responses from the same endpoint do not create duplicate output rows.
+- A `discover_cameras(timeout: float) -> list[DiscoveredCamera]` coordinator that parses valid responses and deduplicates results by `(ip, onvif_url)` so duplicate responses from the same endpoint do not create duplicate output rows.
 - A `format_text()` function for human-readable output.
 - A `format_json()` function for machine-readable output.
 - A small `main()` entrypoint using `argparse`.
 
 The probe envelope should be a minimal WS-Discovery request for `dn:NetworkVideoTransmitter`, matching ONVIF camera discovery expectations without adding authentication or vendor-specific fields.
 
+Helper contracts:
+- `send_probe()` either sends successfully or raises `OSError`.
+- `collect_responses()` returns every datagram received before timeout. A `socket.timeout` ends collection normally; any other `OSError` is fatal and should propagate.
+- `parse_response(payload: bytes, source_ip: str) -> DiscoveredCamera | None` returns `None` for malformed or unusable responses instead of raising for expected parse failures.
+- `discover_cameras()` returns a sorted list of normalized `DiscoveredCamera` objects and only propagates fatal socket/setup errors.
+
 ### Inputs
 
 Supported flags:
 - `--timeout <seconds>`: receive window for discovery responses. Default: `3`.
 - `--json`: emit JSON instead of human-readable output.
+
+Timeout validation:
+- Accept integer or floating-point seconds.
+- Reject values less than or equal to `0` as invalid user input.
+- Report invalid timeout values through `argparse` validation before any network activity starts.
 
 ### Outputs
 
@@ -122,6 +133,7 @@ Each camera block will be separated by a single blank line. Cameras will be sort
 If no cameras are found, print a clear message such as `No ONVIF cameras discovered.` and exit with status `0`.
 
 JSON output will emit a list of objects with the same fields. This is intended to make later comparison against CLI behavior straightforward.
+For an empty scan, JSON mode will print `[]` and exit with status `0`, with no extra text message.
 
 ## Parsing and Data Model
 
@@ -138,6 +150,7 @@ Parsing rules:
 - If no explicit name is present, fall back to `Camera @ <ip>`.
 - Ignore malformed payloads that do not expose a usable HTTP or HTTPS XAddr endpoint.
 - Ignore payloads that do not provide enough information to construct a valid `DiscoveredCamera`.
+- Do not require a specific ONVIF scope marker if the payload exposes a usable XAddr endpoint; some devices may omit friendly scopes while still responding to ONVIF discovery.
 
 Normalization rules:
 - Lowercase the XAddr scheme and hostname.
