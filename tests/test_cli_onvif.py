@@ -39,7 +39,7 @@ def test_cam_interactive_camera_listing_error_on_agent(monkeypatch: pytest.Monke
         "trio_core.onvif.discover_cameras",
         lambda timeout=5: [
             CameraInfo(name="Cam1", ip="192.168.1.41", port=8899),
-            CameraInfo(name="Cam2", ip="192.168.1.42", port=8899)
+            CameraInfo(name="Cam2", ip="192.168.1.42", port=8899),
         ],
     )
 

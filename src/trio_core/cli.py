@@ -626,7 +626,9 @@ def _resolve_rtsp_url(
 
         rtsp_url = get_rtsp_uri(host, resolved_port, user, password)
         if not rtsp_url:
-            typer.echo("Failed to get RTSP URI. Credentials may be incorrect or camera unsupported.")
+            typer.echo(
+                "Failed to get RTSP URI. Credentials may be incorrect or camera unsupported."
+            )
             raise typer.Exit(1)
         typer.echo(f"Using RTSP: {rtsp_url}")
         return ensure_rtsp_url(rtsp_url)
@@ -642,7 +644,9 @@ def _resolve_rtsp_url(
     c = cameras[0]
     if len(cameras) > 1:
         if not is_interactive:
-            typer.echo(f"Multiple cameras ({len(cameras)}) found. Please specify one using --host <IP>")
+            typer.echo(
+                f"Multiple cameras ({len(cameras)}) found. Please specify one using --host <IP>"
+            )
             raise typer.Exit(1)
 
         typer.echo(f"Found {len(cameras)} camera(s):\n")
@@ -710,7 +714,6 @@ def cam(
     """
     import os
     import sys
-
 
     os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
     os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
@@ -987,7 +990,9 @@ def relay(
     user: str = typer.Option("admin", "--user", "-u", help="Camera username"),
     password: str = typer.Option("", "--password", "-p", help="Camera password"),
     rtsp: str = typer.Option(None, "--rtsp", help="Direct RTSP URL (bypasses source)"),
-    discover: bool = typer.Option(False, "--discover", help="Interactively discover ONVIF cameras to use as source"),
+    discover: bool = typer.Option(
+        False, "--discover", help="Interactively discover ONVIF cameras to use as source"
+    ),
     token: str = typer.Option(None, "--token", "-t", help="Bearer token for WHIP authentication"),
     resolution: str = typer.Option(
         None, "--resolution", "-r", help="Video resolution WxH (e.g. 1280x720)"
