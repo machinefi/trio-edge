@@ -50,16 +50,8 @@ class CameraInfo:
 
 
 def discover_cameras(timeout: int = 5) -> list[CameraInfo]:
-    """Discover ONVIF cameras on the local network."""
-    try:
-        cameras = _discover_cameras_wsdiscovery(timeout)
-        if cameras:
-            return cameras
-        return _discover_cameras_probe(timeout)
-    except ImportError:
-        return _discover_cameras_probe(timeout)
-    except Exception:
-        return _discover_cameras_probe(timeout)
+    """Discover ONVIF cameras on the local network via WS-Discovery probe."""
+    return _discover_cameras_probe(timeout)
 
 
 def probe_camera(host: str, ports: list[int] | None = None, timeout: float = 3.0) -> CameraInfo | None:
@@ -95,7 +87,7 @@ def probe_camera(host: str, ports: list[int] | None = None, timeout: float = 3.0
                 port=parsed.port or port,
                 onvif_url=onvif_url,
                 scopes=None,
-                rtsp_url=_build_discovery_rtsp_uri(host),
+                rtsp_url=None,
             )
 
     return None
@@ -126,47 +118,6 @@ def get_rtsp_uri(
 def _candidate_ports(ports: list[int] | None) -> list[int]:
     ordered = ports or list(_COMMON_ONVIF_PORTS)
     return list(dict.fromkeys(ordered))
-
-
-def _discover_cameras_wsdiscovery(timeout: int) -> list[CameraInfo]:
-    from wsdiscovery.discovery import ThreadedWSDiscovery
-
-    wsd = ThreadedWSDiscovery()
-    wsd.start()
-    try:
-        services = wsd.searchServices(timeout=timeout)
-    finally:
-        wsd.stop()
-
-    cameras: list[CameraInfo] = []
-    seen: set[str] = set()
-    for svc in services:
-        scopes = [str(s) for s in svc.getScopes()]
-        if not any(_ONVIF_SCOPE in s or "NetworkVideoTransmitter" in s for s in scopes):
-            continue
-
-        xaddrs = svc.getXAddrs()
-        if not xaddrs:
-            continue
-
-        onvif_url = str(xaddrs[0])
-        parsed = urlparse(onvif_url)
-        if not parsed.hostname or parsed.hostname in seen:
-            continue
-
-        seen.add(parsed.hostname)
-        cameras.append(
-            CameraInfo(
-                name=_name_from_scopes(scopes, parsed.hostname),
-                ip=parsed.hostname,
-                port=parsed.port or 80,
-                onvif_url=onvif_url,
-                scopes=scopes,
-                rtsp_url=_build_discovery_rtsp_uri(parsed.hostname),
-            )
-        )
-
-    return cameras
 
 
 def _discover_cameras_probe(timeout: int) -> list[CameraInfo]:
@@ -321,7 +272,7 @@ def _camera_info_from_probe_response(response: str, ip: str) -> CameraInfo | Non
         port=port or 80,
         onvif_url=onvif_url,
         scopes=scopes or None,
-        rtsp_url=_build_discovery_rtsp_uri(ip),
+        rtsp_url=None,
     )
 
 

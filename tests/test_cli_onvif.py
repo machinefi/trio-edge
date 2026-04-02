@@ -23,7 +23,6 @@ def test_discover_command_uses_shared_onvif_module(monkeypatch: pytest.MonkeyPat
                 name="Garage",
                 ip="192.168.1.40",
                 port=8000,
-                rtsp_url="rtsp://192.168.1.40:554/h264Preview_01_main",
             )
         ],
     )
@@ -32,7 +31,7 @@ def test_discover_command_uses_shared_onvif_module(monkeypatch: pytest.MonkeyPat
 
     assert result.exit_code == 0
     assert "Garage (192.168.1.40)" in result.output
-    assert "RTSP: rtsp://192.168.1.40:554/h264Preview_01_main" in result.output
+    assert "RTSP:" not in result.output
 
 
 def test_cam_discover_lists_cameras_and_exits(monkeypatch: pytest.MonkeyPatch):

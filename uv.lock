@@ -2663,7 +2663,6 @@ all = [
     { name = "safetensors" },
     { name = "tokenizers" },
     { name = "websockets" },
-    { name = "wsdiscovery" },
 ]
 claw = [
     { name = "cryptography" },
@@ -2742,7 +2741,6 @@ requires-dist = [
     { name = "typer", specifier = ">=0.9" },
     { name = "uvicorn" },
     { name = "websockets", marker = "extra == 'claw'", specifier = ">=13.0" },
-    { name = "wsdiscovery", marker = "extra == 'all'" },
 ]
 provides-extras = ["mlx", "mlx-vlm", "cuda", "webcam", "claw", "relay", "all", "dev"]
 
@@ -2878,16 +2876,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/b3/8f/705086c9d734d3b66
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e1/07/c6fe3ad3e685340704d314d765b7912993bcb8dc198f0e7a89382d37974b/win32_setctime-1.2.0-py3-none-any.whl", hash = "sha256:95d644c4e708aba81dc3704a116d8cbc974d70b3bdb8be1d150e36be6e9d1390", size = 4083, upload-time = "2024-12-07T15:28:26.465Z" },
 ]
-
-[[package]]
-name = "wsdiscovery"
-version = "2.1.2"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "click" },
-    { name = "ifaddr" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/6c/81/c3e596d7c043a8b557feccb7f675d9bc4dbbcf2efcf08f4d30872a3fe429/WSDiscovery-2.1.2.tar.gz", hash = "sha256:ab816deff2db101be59830317e19b78a95e9146b2b0a747953345ae68d1d8b58", size = 23201, upload-time = "2025-01-24T08:45:12.395Z" }
 
 [[package]]
 name = "xxhash"

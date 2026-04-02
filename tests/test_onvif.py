@@ -39,7 +39,7 @@ def test_probe_camera_detects_onvif_service_from_capabilities_response(
         port=2020,
         onvif_url="http://192.168.1.50:2020/onvif/service",
         scopes=None,
-        rtsp_url="rtsp://192.168.1.50:554/h264Preview_01_main",
+        rtsp_url=None,
     )
     assert calls == ["http://192.168.1.50:8000/onvif/device_service"]
 
@@ -90,97 +90,11 @@ def test_probe_camera_returns_none_when_no_endpoint(monkeypatch: pytest.MonkeyPa
     assert onvif.probe_camera("192.168.1.70", ports=[8000]) is None
 
 
-def test_discover_cameras_falls_back_when_wsdiscovery_missing(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    fallback = [CameraInfo(name="Fallback", ip="192.168.1.20", port=80)]
+def test_discover_cameras_uses_probe_path(monkeypatch: pytest.MonkeyPatch):
+    cameras = [CameraInfo(name="Fallback", ip="192.168.1.21", port=2020)]
+    monkeypatch.setattr(onvif, "_discover_cameras_probe", lambda timeout: cameras)
 
-    def raise_import_error(timeout: int) -> list[CameraInfo]:
-        raise ImportError("WSDiscovery missing")
-
-    monkeypatch.setattr(onvif, "_discover_cameras_wsdiscovery", raise_import_error)
-    monkeypatch.setattr(onvif, "_discover_cameras_probe", lambda timeout: fallback)
-
-    assert discover_cameras() == fallback
-
-
-def test_discover_cameras_falls_back_when_wsdiscovery_errors(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    fallback = [CameraInfo(name="Probe", ip="192.168.1.30", port=80)]
-
-    def raise_runtime_error(timeout: int) -> list[CameraInfo]:
-        raise RuntimeError("broken discovery")
-
-    monkeypatch.setattr(onvif, "_discover_cameras_wsdiscovery", raise_runtime_error)
-    monkeypatch.setattr(onvif, "_discover_cameras_probe", lambda timeout: fallback)
-
-    assert discover_cameras() == fallback
-
-
-def test_discover_cameras_keeps_empty_wsdiscovery_result(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    fallback = [CameraInfo(name="Fallback", ip="192.168.1.21", port=2020)]
-    monkeypatch.setattr(onvif, "_discover_cameras_wsdiscovery", lambda timeout: [])
-    monkeypatch.setattr(onvif, "_discover_cameras_probe", lambda timeout: fallback)
-
-    assert discover_cameras() == fallback
-
-
-def test_discover_cameras_wsdiscovery_normalizes_camera_info(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    wsdiscovery_package = types.ModuleType("wsdiscovery")
-    discovery_module = types.ModuleType("wsdiscovery.discovery")
-
-    class FakeScope:
-        def __init__(self, value: str) -> None:
-            self._value = value
-
-        def __str__(self) -> str:
-            return self._value
-
-    class FakeService:
-        def getScopes(self):
-            return [
-                FakeScope("onvif://www.onvif.org/type/NetworkVideoTransmitter"),
-                FakeScope("onvif://www.onvif.org/name/Front%20Door"),
-            ]
-
-        def getXAddrs(self):
-            return ["http://192.168.1.10:8000/onvif/device_service"]
-
-    class ThreadedWSDiscovery:
-        def start(self) -> None:
-            return None
-
-        def stop(self) -> None:
-            return None
-
-        def searchServices(self, timeout: int):
-            return [FakeService()]
-
-    discovery_module.ThreadedWSDiscovery = ThreadedWSDiscovery
-    wsdiscovery_package.discovery = discovery_module
-    monkeypatch.setitem(sys.modules, "wsdiscovery", wsdiscovery_package)
-    monkeypatch.setitem(sys.modules, "wsdiscovery.discovery", discovery_module)
-
-    cameras = onvif._discover_cameras_wsdiscovery(timeout=2)
-
-    assert cameras == [
-        CameraInfo(
-            name="Front Door",
-            ip="192.168.1.10",
-            port=8000,
-            onvif_url="http://192.168.1.10:8000/onvif/device_service",
-            scopes=[
-                "onvif://www.onvif.org/type/NetworkVideoTransmitter",
-                "onvif://www.onvif.org/name/Front%20Door",
-            ],
-            rtsp_url="rtsp://192.168.1.10:554/h264Preview_01_main",
-        )
-    ]
+    assert discover_cameras(timeout=2) == cameras
 
 
 def test_discover_cameras_probe_deduplicates_by_ip(monkeypatch: pytest.MonkeyPatch):
@@ -240,9 +154,9 @@ def test_discover_cameras_probe_deduplicates_by_ip(monkeypatch: pytest.MonkeyPat
         port=9000,
         onvif_url="http://192.168.1.11:9000/onvif/device_service",
         scopes=["onvif://www.onvif.org/name/Back%20Gate"],
-        rtsp_url="rtsp://192.168.1.11:554/h264Preview_01_main",
+        rtsp_url=None,
     )
-    assert "@" not in (cameras[0].rtsp_url or "")
+    assert cameras[0].rtsp_url is None
 
 
 def test_probe_response_parser_extracts_real_xaddr_and_scopes():
@@ -278,7 +192,7 @@ def test_probe_response_parser_extracts_real_xaddr_and_scopes():
             "onvif://www.onvif.org/hardware/C120",
             "onvif://www.onvif.org/type/NetworkVideoTransmitter",
         ],
-        rtsp_url="rtsp://192.168.6.215:554/h264Preview_01_main",
+        rtsp_url=None,
     )
 
 
