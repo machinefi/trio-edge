@@ -594,6 +594,87 @@ def webcam(
         pass
 
 
+def _resolve_rtsp_url(
+    rtsp: str | None, host: str | None, port: int, user: str, password: str
+) -> str:
+    """Helper to resolve RTSP URL via explicit config or interactive discovery."""
+    import sys
+
+    from trio_core._rtsp_proxy import ensure_rtsp_url
+    from trio_core.onvif import discover_cameras, get_rtsp_uri
+
+    if rtsp:
+        return ensure_rtsp_url(rtsp)
+
+    is_interactive = sys.stdin.isatty()
+
+    if host:
+        resolved_port = port
+        typer.echo("Probing camera...")
+        for camera in discover_cameras(timeout=2):
+            if camera.ip == host:
+                resolved_port = camera.port
+                if camera.onvif_url:
+                    typer.echo(f"Detected ONVIF: {camera.onvif_url}")
+                break
+
+        if not password:
+            if not is_interactive:
+                typer.echo("Password required for ONVIF. Please provide it via --password")
+                raise typer.Exit(1)
+            password = typer.prompt(f"Password for ONVIF user '{user}'", hide_input=True)
+
+        rtsp_url = get_rtsp_uri(host, resolved_port, user, password)
+        if not rtsp_url:
+            typer.echo("Failed to get RTSP URI. Credentials may be incorrect or camera unsupported.")
+            raise typer.Exit(1)
+        typer.echo(f"Using RTSP: {rtsp_url}")
+        return ensure_rtsp_url(rtsp_url)
+
+    # Interactive camera selection (no host or rtsp provided)
+    typer.echo("Searching for ONVIF cameras on your network...\n")
+    cameras = discover_cameras(timeout=3)
+
+    if not cameras:
+        typer.echo("No ONVIF cameras found. Try specifying --host <IP> -p <pass>")
+        raise typer.Exit(1)
+
+    c = cameras[0]
+    if len(cameras) > 1:
+        if not is_interactive:
+            typer.echo(f"Multiple cameras ({len(cameras)}) found. Please specify one using --host <IP>")
+            raise typer.Exit(1)
+
+        typer.echo(f"Found {len(cameras)} camera(s):\n")
+        for i, cam in enumerate(cameras):
+            typer.echo(f"  [{i + 1}] {cam.name}  IP: {cam.ip}:{cam.port}")
+
+        try:
+            choice_str = typer.prompt("\nSelect a camera", default="1")
+            choice = int(choice_str) - 1
+            if choice < 0 or choice >= len(cameras):
+                raise ValueError()
+            c = cameras[choice]
+        except (ValueError, TypeError):
+            typer.echo("Invalid selection.")
+            raise typer.Exit(1)
+    else:
+        typer.echo(f"Found camera: {c.name} at {c.ip}:{c.port}")
+
+    if not password:
+        if not is_interactive:
+            typer.echo("Password required for ONVIF. Please provide it via --password")
+            raise typer.Exit(1)
+        password = typer.prompt(f"Password for ONVIF user '{user}'", hide_input=True)
+
+    rtsp_url = get_rtsp_uri(c.ip, c.port, user, password)
+    if not rtsp_url:
+        typer.echo("Failed to get RTSP URI. Credentials may be incorrect or camera unsupported.")
+        raise typer.Exit(1)
+
+    return ensure_rtsp_url(rtsp_url)
+
+
 @app.command()
 def cam(
     host: str = typer.Option(None, "--host", "-h", help="Camera IP address (skip discovery)"),
@@ -606,7 +687,6 @@ def cam(
     backend: str = typer.Option(None, "--backend", "-b", help="Force backend: mlx, transformers"),
     max_tokens: int = typer.Option(10, "--max-tokens", help="Max generation tokens"),
     resolution: int = typer.Option(240, "--resolution", help="Max resolution (lower=faster)"),
-    discover: bool = typer.Option(False, "--discover", help="Discover cameras and exit"),
     no_sound: bool = typer.Option(False, "--no-sound", help="Disable audio alerts"),
     count: bool = typer.Option(
         False, "--count", "-c", help="Count people, cars, dogs, cats (cumulative)"
@@ -622,7 +702,7 @@ def cam(
     live VLM analysis with a GUI preview window. Works through Tailscale.
 
     Examples:
-        trio cam --discover                                    # list cameras on LAN
+        trio cam                                               # interactive discovery & select
         trio cam --host 192.168.1.100 -p pass                  # known IP
         trio cam --rtsp "rtsp://admin:pass@IP:554/stream"      # direct RTSP
         trio cam -w "someone at the door" --host 192.168.1.100 -p pass
@@ -638,56 +718,8 @@ def cam(
     os.environ.setdefault("TRIO_COMPRESS_ENABLED", "1")
     os.environ.setdefault("TRIO_COMPRESS_RATIO", "0.5")
 
-    # Resolve RTSP URL (with Tailscale proxy auto-detection)
-    rtsp_url = rtsp
-    if rtsp_url:
-        from trio_core._rtsp_proxy import ensure_rtsp_url
-
-        rtsp_url = ensure_rtsp_url(rtsp_url)
-    if not rtsp_url:
-        if host:
-            resolved_port = port
-            for camera in discover_cameras():
-                if camera.ip == host:
-                    resolved_port = camera.port
-                    if camera.onvif_url:
-                        typer.echo(f"Detected ONVIF: {camera.onvif_url}")
-                    break
-            rtsp_url = get_rtsp_uri(host, resolved_port, user, password)
-            if not rtsp_url:
-                typer.echo("Failed to get RTSP URI.")
-                raise typer.Exit(1)
-            typer.echo(f"Using RTSP: {rtsp_url}")
-            from trio_core._rtsp_proxy import ensure_rtsp_url
-
-            rtsp_url = ensure_rtsp_url(rtsp_url)
-        else:
-            cameras = discover_cameras()
-            if not cameras:
-                typer.echo("No ONVIF cameras found. Try: trio cam --host <IP> -p <pass>")
-                raise typer.Exit(1)
-
-            typer.echo(f"\nFound {len(cameras)} camera(s):\n")
-            for i, c in enumerate(cameras):
-                typer.echo(f"  [{i}] {c.name}  IP: {c.ip}:{c.port}")
-            if discover:
-                return
-
-            if not password:
-                typer.echo("\nPassword required: trio cam --password <pass>")
-                raise typer.Exit(1)
-
-            c = cameras[0]
-            rtsp_url = get_rtsp_uri(c.ip, c.port, user, password)
-            if not rtsp_url:
-                typer.echo("Failed to get RTSP URI.")
-                raise typer.Exit(1)
-            from trio_core._rtsp_proxy import ensure_rtsp_url
-
-            rtsp_url = ensure_rtsp_url(rtsp_url)
-
-    if discover:
-        return
+    # Resolve RTSP URL using the unified helper
+    rtsp_url = _resolve_rtsp_url(rtsp, host, port, user, password)
 
     if not model:
         model = "mlx-community/Qwen3.5-2B-MLX-4bit"
@@ -951,6 +983,12 @@ def relay(
     source: str = typer.Option(
         "0", "--source", "-s", help="Video source: camera index, RTSP URL, or video file"
     ),
+    host: str = typer.Option(None, "--host", "-h", help="Camera IP address (skip discovery)"),
+    port: int = typer.Option(8000, "--port", help="ONVIF port (default: 8000)"),
+    user: str = typer.Option("admin", "--user", "-u", help="Camera username"),
+    password: str = typer.Option("", "--password", "-p", help="Camera password"),
+    rtsp: str = typer.Option(None, "--rtsp", help="Direct RTSP URL (bypasses source)"),
+    discover: bool = typer.Option(False, "--discover", help="Interactively discover ONVIF cameras to use as source"),
     token: str = typer.Option(None, "--token", "-t", help="Bearer token for WHIP authentication"),
     resolution: str = typer.Option(
         None, "--resolution", "-r", help="Video resolution WxH (e.g. 1280x720)"
@@ -992,15 +1030,19 @@ def relay(
         )
         raise typer.Exit(1)
 
+    actual_source = source
+    if discover or host or rtsp:
+        actual_source = _resolve_rtsp_url(rtsp, host, port, user, password)
+
     relay_obj = WhipRelay(
-        source=source,
+        source=actual_source,
         whip_url=whip_url,
         bearer_token=token,
         resolution=resolution_tuple,
         framerate=framerate,
     )
 
-    typer.echo(f"Relay: {source} -> {whip_url}")
+    typer.echo(f"Relay: {actual_source} -> {whip_url}")
     typer.echo(f"Codec: H.264 | FPS: {framerate} | Resolution: {resolution or 'native'}")
     typer.echo("Press Ctrl+C to stop.\n")
 
