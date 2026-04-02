@@ -54,7 +54,9 @@ def test_cam_auto_discovery_uses_shared_helpers(monkeypatch: pytest.MonkeyPatch)
     )
     monkeypatch.setattr(
         "trio_core.onvif.get_rtsp_uri",
-        lambda host, port, user, password, fallback=True: "rtsp://admin:secret@192.168.1.42:554/stream1",
+        lambda host, port, user, password, fallback=True: (
+            "rtsp://admin:secret@192.168.1.42:554/stream1"
+        ),
     )
     monkeypatch.setattr("trio_core._rtsp_proxy.ensure_rtsp_url", lambda url: url)
 
@@ -77,12 +79,14 @@ def test_cam_auto_discovery_uses_shared_helpers(monkeypatch: pytest.MonkeyPatch)
 def test_cam_known_host_probes_for_onvif_port(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(
         "trio_core.onvif.discover_cameras",
-        lambda timeout=5: [CameraInfo(
-            name="Known Host",
-            ip="192.168.1.42",
-            port=2020,
-            onvif_url="http://192.168.1.42:2020/onvif/service",
-        )],
+        lambda timeout=5: [
+            CameraInfo(
+                name="Known Host",
+                ip="192.168.1.42",
+                port=2020,
+                onvif_url="http://192.168.1.42:2020/onvif/service",
+            )
+        ],
     )
 
     captured = {}

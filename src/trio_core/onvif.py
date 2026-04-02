@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import re
-from urllib.parse import quote, urlparse, urlunsplit
-
 import xml.etree.ElementTree as ET
-
+from dataclasses import dataclass
+from urllib.parse import quote, urlparse, urlunsplit
 
 _ONVIF_SCOPE = "onvif://www.onvif.org"
 _DISCOVERY_PROBE = """<?xml version="1.0" encoding="UTF-8"?>

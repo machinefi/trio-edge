@@ -38,7 +38,6 @@ import numpy as np
 
 from trio_core.onvif import discover_cameras, get_rtsp_uri
 
-
 try:
     from trio_core._rtsp_proxy import ensure_rtsp_url, stop_proxy
 except ImportError:

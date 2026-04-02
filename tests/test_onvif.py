@@ -8,8 +8,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from trio_core.onvif import CameraInfo, discover_cameras, get_rtsp_uri
 import trio_core.onvif as onvif
+from trio_core.onvif import CameraInfo, discover_cameras, get_rtsp_uri
 
 
 def test_discover_cameras_uses_probe_path(monkeypatch: pytest.MonkeyPatch):
