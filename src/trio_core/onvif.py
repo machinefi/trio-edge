@@ -6,8 +6,13 @@ from dataclasses import dataclass
 import re
 from urllib.parse import quote, urlparse, urlunsplit
 
+import httpx
+import xml.etree.ElementTree as ET
+
 
 _ONVIF_SCOPE = "onvif://www.onvif.org"
+_COMMON_ONVIF_PORTS = (80, 8000, 8080, 8899, 2020)
+_COMMON_ONVIF_PATHS = ("/onvif/device_service", "/onvif/service", "/device_service")
 _DISCOVERY_PROBE = """<?xml version="1.0" encoding="UTF-8"?>
 <e:Envelope xmlns:e="http://www.w3.org/2003/05/soap-envelope"
             xmlns:w="http://schemas.xmlsoap.org/ws/2004/08/addressing"
@@ -22,7 +27,16 @@ _DISCOVERY_PROBE = """<?xml version="1.0" encoding="UTF-8"?>
     <d:Probe><d:Types>dn:NetworkVideoTransmitter</d:Types></d:Probe>
   </e:Body>
 </e:Envelope>"""
+_CAPABILITIES_PROBE = """<?xml version="1.0" encoding="utf-8"?>
+<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope">
+  <s:Body>
+    <tds:GetCapabilities xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+      <tds:Category>All</tds:Category>
+    </tds:GetCapabilities>
+  </s:Body>
+</s:Envelope>"""
 _XADDR_RE = re.compile(r"https?://[^\s<\"]+")
+_XADDR_ELEMENT_RE = re.compile(r"<(?:\w+:)?XAddr>\s*(https?://[^<]+)\s*</(?:\w+:)?XAddr>")
 
 
 @dataclass(slots=True)
@@ -38,11 +52,53 @@ class CameraInfo:
 def discover_cameras(timeout: int = 5) -> list[CameraInfo]:
     """Discover ONVIF cameras on the local network."""
     try:
-        return _discover_cameras_wsdiscovery(timeout)
+        cameras = _discover_cameras_wsdiscovery(timeout)
+        if cameras:
+            return cameras
+        return _discover_cameras_probe(timeout)
     except ImportError:
         return _discover_cameras_probe(timeout)
     except Exception:
         return _discover_cameras_probe(timeout)
+
+
+def probe_camera(host: str, ports: list[int] | None = None, timeout: float = 3.0) -> CameraInfo | None:
+    """Probe a known host for an ONVIF device service on common ports."""
+    candidates = _candidate_ports(ports)
+    for port in candidates:
+        for path in _COMMON_ONVIF_PATHS:
+            url = f"http://{host}:{port}{path}"
+            try:
+                response = httpx.post(
+                    url,
+                    content=_CAPABILITIES_PROBE,
+                    headers={"Content-Type": "application/soap+xml; charset=utf-8"},
+                    timeout=timeout,
+                    follow_redirects=True,
+                )
+            except httpx.HTTPError:
+                continue
+
+            if response.status_code != 200 or not response.text:
+                continue
+            if "http://www.onvif.org/ver10/device/wsdl" not in response.text:
+                continue
+
+            onvif_url = _xaddr_from_capabilities_response(response.text) or url
+            parsed = urlparse(onvif_url)
+            if not parsed.hostname:
+                continue
+
+            return CameraInfo(
+                name=f"Camera @ {host}",
+                ip=host,
+                port=parsed.port or port,
+                onvif_url=onvif_url,
+                scopes=None,
+                rtsp_url=_build_discovery_rtsp_uri(host),
+            )
+
+    return None
 
 
 def get_rtsp_uri(
@@ -65,6 +121,11 @@ def get_rtsp_uri(
     if fallback:
         return _build_fallback_rtsp_uri(host, user, password)
     return None
+
+
+def _candidate_ports(ports: list[int] | None) -> list[int]:
+    ordered = ports or list(_COMMON_ONVIF_PORTS)
+    return list(dict.fromkeys(ordered))
 
 
 def _discover_cameras_wsdiscovery(timeout: int) -> list[CameraInfo]:
@@ -134,19 +195,9 @@ def _discover_cameras_probe(timeout: int) -> list[CameraInfo]:
             seen.add(ip)
 
             response = data.decode(errors="replace")
-            scopes = _scopes_from_probe_response(response)
-            onvif_url = _xaddr_from_probe_response(response)
-            port = urlparse(onvif_url).port if onvif_url else None
-            cameras.append(
-                CameraInfo(
-                    name=_name_from_scopes(scopes, ip),
-                    ip=ip,
-                    port=port or 80,
-                    onvif_url=onvif_url,
-                    scopes=scopes or None,
-                    rtsp_url=_build_discovery_rtsp_uri(ip),
-                )
-            )
+            camera = _camera_info_from_probe_response(response, ip)
+            if camera is not None:
+                cameras.append(camera)
     finally:
         sock.close()
 
@@ -219,6 +270,12 @@ def _format_host_for_netloc(host: str) -> str:
 
 
 def _scopes_from_probe_response(response: str) -> list[str]:
+    probe_match = _probe_match_from_xml(response)
+    if probe_match is not None:
+        scopes_text = _child_text(probe_match, "Scopes")
+        if scopes_text:
+            return [part for part in scopes_text.split() if part]
+
     scopes = []
     for part in response.split():
         if _ONVIF_SCOPE in part or "/name/" in part or "/hardware/" in part:
@@ -227,10 +284,66 @@ def _scopes_from_probe_response(response: str) -> list[str]:
 
 
 def _xaddr_from_probe_response(response: str) -> str | None:
+    probe_match = _probe_match_from_xml(response)
+    if probe_match is not None:
+        xaddrs_text = _child_text(probe_match, "XAddrs")
+        if xaddrs_text:
+            for part in xaddrs_text.split():
+                parsed = urlparse(part)
+                if parsed.hostname:
+                    return part
+
     match = _XADDR_RE.search(response)
     if not match:
         return None
     return match.group(0)
+
+
+def _xaddr_from_capabilities_response(response: str) -> str | None:
+    match = _XADDR_ELEMENT_RE.search(response)
+    if match:
+        return match.group(1).strip()
+
+    for candidate in _XADDR_RE.findall(response):
+        parsed = urlparse(candidate)
+        if parsed.hostname and "onvif" in parsed.path:
+            return candidate
+    return None
+
+
+def _camera_info_from_probe_response(response: str, ip: str) -> CameraInfo | None:
+    scopes = _scopes_from_probe_response(response)
+    onvif_url = _xaddr_from_probe_response(response)
+    port = urlparse(onvif_url).port if onvif_url else None
+    return CameraInfo(
+        name=_name_from_scopes(scopes, ip),
+        ip=ip,
+        port=port or 80,
+        onvif_url=onvif_url,
+        scopes=scopes or None,
+        rtsp_url=_build_discovery_rtsp_uri(ip),
+    )
+
+
+def _probe_match_from_xml(response: str) -> ET.Element | None:
+    try:
+        root = ET.fromstring(response)
+    except ET.ParseError:
+        return None
+
+    for elem in root.iter():
+        if elem.tag.rsplit("}", 1)[-1] == "ProbeMatch":
+            return elem
+    return None
+
+
+def _child_text(parent: ET.Element, local_name: str) -> str | None:
+    for elem in parent.iter():
+        if elem.tag.rsplit("}", 1)[-1] == local_name:
+            text = (elem.text or "").strip()
+            if text:
+                return text
+    return None
 
 
 def _name_from_scopes(scopes: list[str] | None, ip: str) -> str:

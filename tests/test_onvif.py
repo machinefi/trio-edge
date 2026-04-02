@@ -12,6 +12,84 @@ from trio_core.onvif import CameraInfo, discover_cameras, get_rtsp_uri
 import trio_core.onvif as onvif
 
 
+def test_probe_camera_detects_onvif_service_from_capabilities_response(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    calls = []
+
+    class Response:
+        status_code = 200
+        text = """
+            <Envelope xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+              <tds:XAddr>http://192.168.1.50:2020/onvif/service</tds:XAddr>
+            </Envelope>
+        """
+
+    def fake_post(url: str, **kwargs):
+        calls.append(url)
+        return Response()
+
+    monkeypatch.setattr(onvif.httpx, "post", fake_post)
+
+    camera = onvif.probe_camera("192.168.1.50", ports=[8000, 2020])
+
+    assert camera == CameraInfo(
+        name="Camera @ 192.168.1.50",
+        ip="192.168.1.50",
+        port=2020,
+        onvif_url="http://192.168.1.50:2020/onvif/service",
+        scopes=None,
+        rtsp_url="rtsp://192.168.1.50:554/h264Preview_01_main",
+    )
+    assert calls == ["http://192.168.1.50:8000/onvif/device_service"]
+
+
+def test_probe_camera_tries_multiple_ports_and_paths(monkeypatch: pytest.MonkeyPatch):
+    calls = []
+
+    class Response:
+        def __init__(self, status_code: int, text: str) -> None:
+            self.status_code = status_code
+            self.text = text
+
+    def fake_post(url: str, **kwargs):
+        calls.append(url)
+        if url == "http://192.168.1.60:2020/onvif/service":
+            return Response(
+                200,
+                """
+                <Envelope xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+                  <tds:XAddr>http://192.168.1.60:2020/onvif/service</tds:XAddr>
+                </Envelope>
+                """,
+            )
+        return Response(404, "")
+
+    monkeypatch.setattr(onvif.httpx, "post", fake_post)
+
+    camera = onvif.probe_camera("192.168.1.60", ports=[8000, 2020])
+
+    assert camera is not None
+    assert camera.port == 2020
+    assert calls == [
+        "http://192.168.1.60:8000/onvif/device_service",
+        "http://192.168.1.60:8000/onvif/service",
+        "http://192.168.1.60:8000/device_service",
+        "http://192.168.1.60:2020/onvif/device_service",
+        "http://192.168.1.60:2020/onvif/service",
+    ]
+
+
+def test_probe_camera_returns_none_when_no_endpoint(monkeypatch: pytest.MonkeyPatch):
+    class Response:
+        status_code = 404
+        text = ""
+
+    monkeypatch.setattr(onvif.httpx, "post", lambda url, **kwargs: Response())
+
+    assert onvif.probe_camera("192.168.1.70", ports=[8000]) is None
+
+
 def test_discover_cameras_falls_back_when_wsdiscovery_missing(
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -43,14 +121,11 @@ def test_discover_cameras_falls_back_when_wsdiscovery_errors(
 def test_discover_cameras_keeps_empty_wsdiscovery_result(
     monkeypatch: pytest.MonkeyPatch,
 ):
+    fallback = [CameraInfo(name="Fallback", ip="192.168.1.21", port=2020)]
     monkeypatch.setattr(onvif, "_discover_cameras_wsdiscovery", lambda timeout: [])
+    monkeypatch.setattr(onvif, "_discover_cameras_probe", lambda timeout: fallback)
 
-    def fail_if_called(timeout: int) -> list[CameraInfo]:
-        raise AssertionError("probe fallback should not run on empty result")
-
-    monkeypatch.setattr(onvif, "_discover_cameras_probe", fail_if_called)
-
-    assert discover_cameras() == []
+    assert discover_cameras() == fallback
 
 
 def test_discover_cameras_wsdiscovery_normalizes_camera_info(
@@ -168,6 +243,43 @@ def test_discover_cameras_probe_deduplicates_by_ip(monkeypatch: pytest.MonkeyPat
         rtsp_url="rtsp://192.168.1.11:554/h264Preview_01_main",
     )
     assert "@" not in (cameras[0].rtsp_url or "")
+
+
+def test_probe_response_parser_extracts_real_xaddr_and_scopes():
+    response = """<?xml version="1.0" encoding="UTF-8"?>
+    <SOAP-ENV:Envelope xmlns:SOAP-ENV="http://www.w3.org/2003/05/soap-envelope"
+                       xmlns:wsa="http://schemas.xmlsoap.org/ws/2004/08/addressing"
+                       xmlns:wsdd="http://schemas.xmlsoap.org/ws/2005/04/discovery"
+                       xmlns:tdn="http://www.onvif.org/ver10/network/wsdl">
+      <SOAP-ENV:Body>
+        <wsdd:ProbeMatches>
+          <wsdd:ProbeMatch>
+            <wsdd:Types>tdn:NetworkVideoTransmitter</wsdd:Types>
+            <wsdd:Scopes>
+              onvif://www.onvif.org/name/C120
+              onvif://www.onvif.org/hardware/C120
+              onvif://www.onvif.org/type/NetworkVideoTransmitter
+            </wsdd:Scopes>
+            <wsdd:XAddrs>http://192.168.6.215:2020/onvif/device_service</wsdd:XAddrs>
+          </wsdd:ProbeMatch>
+        </wsdd:ProbeMatches>
+      </SOAP-ENV:Body>
+    </SOAP-ENV:Envelope>"""
+
+    camera = onvif._camera_info_from_probe_response(response, "192.168.6.215")
+
+    assert camera == CameraInfo(
+        name="C120",
+        ip="192.168.6.215",
+        port=2020,
+        onvif_url="http://192.168.6.215:2020/onvif/device_service",
+        scopes=[
+            "onvif://www.onvif.org/name/C120",
+            "onvif://www.onvif.org/hardware/C120",
+            "onvif://www.onvif.org/type/NetworkVideoTransmitter",
+        ],
+        rtsp_url="rtsp://192.168.6.215:554/h264Preview_01_main",
+    )
 
 
 def test_get_rtsp_uri_injects_caller_credentials(monkeypatch: pytest.MonkeyPatch):

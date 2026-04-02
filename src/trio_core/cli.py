@@ -631,7 +631,7 @@ def cam(
     import os
     import sys
 
-    from trio_core.onvif import discover_cameras, get_rtsp_uri
+    from trio_core.onvif import discover_cameras, get_rtsp_uri, probe_camera
 
     os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
     os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
@@ -646,7 +646,13 @@ def cam(
         rtsp_url = ensure_rtsp_url(rtsp_url)
     if not rtsp_url:
         if host:
-            rtsp_url = get_rtsp_uri(host, port, user, password)
+            resolved_port = port
+            probed = probe_camera(host, ports=[port, 80, 8000, 8080, 8899, 2020])
+            if probed:
+                resolved_port = probed.port
+                if probed.onvif_url:
+                    typer.echo(f"Detected ONVIF: {probed.onvif_url}")
+            rtsp_url = get_rtsp_uri(host, resolved_port, user, password)
             if not rtsp_url:
                 typer.echo("Failed to get RTSP URI.")
                 raise typer.Exit(1)
