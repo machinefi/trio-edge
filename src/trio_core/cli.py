@@ -630,7 +630,8 @@ def cam(
     """
     import os
     import sys
-    from urllib.parse import quote
+
+    from trio_core.onvif import discover_cameras, get_rtsp_uri
 
     os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
     os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
@@ -645,19 +646,22 @@ def cam(
         rtsp_url = ensure_rtsp_url(rtsp_url)
     if not rtsp_url:
         if host:
-            enc_pw = quote(password, safe="")
-            rtsp_url = f"rtsp://{user}:{enc_pw}@{host}:554/h264Preview_01_sub"
-            typer.echo(f"Using RTSP: {rtsp_url}")
-        else:
-            # Try ONVIF discovery
-            try:
-                sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "examples"))
-                from onvif_monitor import discover_cameras, get_rtsp_uri
-            except ImportError:
-                typer.echo("For auto-discovery: pip install WSDiscovery onvif-zeep")
-                typer.echo("Or use: trio cam --host <IP> --password <pass>")
+            resolved_port = port
+            for camera in discover_cameras():
+                if camera.ip == host:
+                    resolved_port = camera.port
+                    if camera.onvif_url:
+                        typer.echo(f"Detected ONVIF: {camera.onvif_url}")
+                    break
+            rtsp_url = get_rtsp_uri(host, resolved_port, user, password)
+            if not rtsp_url:
+                typer.echo("Failed to get RTSP URI.")
                 raise typer.Exit(1)
+            typer.echo(f"Using RTSP: {rtsp_url}")
+            from trio_core._rtsp_proxy import ensure_rtsp_url
 
+            rtsp_url = ensure_rtsp_url(rtsp_url)
+        else:
             cameras = discover_cameras()
             if not cameras:
                 typer.echo("No ONVIF cameras found. Try: trio cam --host <IP> -p <pass>")
@@ -665,7 +669,7 @@ def cam(
 
             typer.echo(f"\nFound {len(cameras)} camera(s):\n")
             for i, c in enumerate(cameras):
-                typer.echo(f"  [{i}] {c['name']}  IP: {c['ip']}:{c['port']}")
+                typer.echo(f"  [{i}] {c.name}  IP: {c.ip}:{c.port}")
             if discover:
                 return
 
@@ -674,7 +678,7 @@ def cam(
                 raise typer.Exit(1)
 
             c = cameras[0]
-            rtsp_url = get_rtsp_uri(c["ip"], c["port"], user, password)
+            rtsp_url = get_rtsp_uri(c.ip, c.port, user, password)
             if not rtsp_url:
                 typer.echo("Failed to get RTSP URI.")
                 raise typer.Exit(1)
@@ -920,63 +924,11 @@ def discover(
     timeout: int = typer.Option(5, "--timeout", "-t", help="Discovery timeout in seconds"),
 ):
     """Discover cameras on your network via ONVIF."""
-    import socket
-    import time
+    from trio_core.onvif import discover_cameras
 
     typer.echo("Searching for cameras on your network (ONVIF)...\n")
 
-    # WS-Discovery multicast probe
-    probe = """<?xml version="1.0" encoding="UTF-8"?>
-<e:Envelope xmlns:e="http://www.w3.org/2003/05/soap-envelope"
-            xmlns:w="http://schemas.xmlsoap.org/ws/2004/08/addressing"
-            xmlns:d="http://schemas.xmlsoap.org/ws/2005/04/discovery"
-            xmlns:dn="http://www.onvif.org/ver10/network/wsdl">
-  <e:Header>
-    <w:MessageID>uuid:trio-edge-discover</w:MessageID>
-    <w:To>urn:schemas-xmlsoap-org:ws:2005:04:discovery</w:To>
-    <w:Action>http://schemas.xmlsoap.org/ws/2005/04/discovery/Probe</w:Action>
-  </e:Header>
-  <e:Body>
-    <d:Probe><d:Types>dn:NetworkVideoTransmitter</d:Types></d:Probe>
-  </e:Body>
-</e:Envelope>"""
-
-    addr = socket.getaddrinfo("239.255.255.250", 3702, socket.AF_INET, socket.SOCK_DGRAM)[0]
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.settimeout(timeout)
-    sock.sendto(probe.encode(), addr[4])
-
-    cameras = []
-    seen = set()
-    deadline = time.time() + timeout
-
-    while time.time() < deadline:
-        try:
-            data, (ip, _) = sock.recvfrom(8192)
-            if ip in seen:
-                continue
-            seen.add(ip)
-
-            resp = data.decode(errors="replace")
-            # Parse name from ONVIF scopes
-            name = f"Camera @ {ip}"
-            for part in resp.split():
-                if "/name/" in part:
-                    n = part.split("/name/")[-1].replace("%20", " ")
-                    if n:
-                        name = n
-                if "/hardware/" in part:
-                    hw = part.split("/hardware/")[-1].replace("%20", " ")
-                    if hw and "Camera @" in name:
-                        name = f"{hw} @ {ip}"
-
-            # Try common RTSP paths
-            rtsp_url = f"rtsp://{ip}:554/h264Preview_01_main"  # Reolink default
-            cameras.append({"ip": ip, "name": name, "rtsp": rtsp_url})
-        except socket.timeout:
-            break
-
-    sock.close()
+    cameras = discover_cameras(timeout=timeout)
 
     if not cameras:
         typer.echo("No cameras found. Make sure cameras are on the same subnet.")
@@ -985,8 +937,9 @@ def discover(
 
     typer.echo(f"Found {len(cameras)} camera(s):\n")
     for i, c in enumerate(cameras):
-        typer.echo(f"  [{i + 1}] {c['name']} ({c['ip']})")
-        typer.echo(f"      RTSP: {c['rtsp']}")
+        typer.echo(f"  [{i + 1}] {c.name} ({c.ip})")
+        if c.rtsp_url:
+            typer.echo(f"      RTSP: {c.rtsp_url}")
     typer.echo()
 
 
