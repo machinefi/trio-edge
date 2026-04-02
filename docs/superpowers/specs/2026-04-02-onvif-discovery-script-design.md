@@ -82,8 +82,8 @@ The script will contain:
 - A probe payload builder or constant for WS-Discovery.
 - A `send_probe()` function that sends the WS-Discovery `Probe` envelope to multicast address `239.255.255.250:3702` over UDP.
 - A `collect_responses()` function that receives datagrams until the configured timeout expires.
-- A `parse_response()` function that extracts:
-  - response IP
+- A `parse_response(payload: bytes, source_ip: str)` function that extracts:
+  - response IP from the UDP sender tuple, not the payload
   - ONVIF XAddr URL
   - port
   - best-effort camera name from ONVIF scopes
@@ -108,6 +108,17 @@ Human-readable output will print one block per discovered camera with:
 - `port`
 - `onvif_url`
 
+The text format should be deterministic and stable:
+
+```text
+Name: <name>
+IP: <ip>
+Port: <port>
+ONVIF URL: <onvif_url>
+```
+
+Each camera block will be separated by a single blank line. Cameras will be sorted by `ip` and then `onvif_url` before formatting so repeated runs produce stable output ordering when the network returns the same results.
+
 If no cameras are found, print a clear message such as `No ONVIF cameras discovered.` and exit with status `0`.
 
 JSON output will emit a list of objects with the same fields. This is intended to make later comparison against CLI behavior straightforward.
@@ -121,12 +132,19 @@ The script should use a small local dataclass, for example `DiscoveredCamera`, w
 - `onvif_url: str`
 
 Parsing rules:
-- Extract the first HTTP or HTTPS XAddr from each response payload.
+- Extract XAddr candidates from each response payload and use the first normalized HTTP or HTTPS XAddr.
 - Derive `port` from the XAddr when present; otherwise fall back to `80`.
 - Prefer ONVIF scope names from `/name/`.
 - If no explicit name is present, fall back to `Camera @ <ip>`.
 - Ignore malformed payloads that do not expose a usable HTTP or HTTPS XAddr endpoint.
 - Ignore payloads that do not provide enough information to construct a valid `DiscoveredCamera`.
+
+Normalization rules:
+- Lowercase the XAddr scheme and hostname.
+- Remove an explicit default port of `80` for `http` and `443` for `https` when constructing the deduplication key.
+- Preserve the path, but treat an empty path as `/`.
+- Drop query string and fragment components for deduplication.
+- Preserve the original normalized XAddr string in output.
 
 ## Error Handling
 
@@ -135,6 +153,13 @@ Expected handling:
 - Duplicate device response: ignore duplicate and keep the first normalized result.
 - No devices discovered: successful exit with empty result indication.
 - Socket creation, multicast send, or receive setup failure: print the error and exit nonzero.
+
+Socket contract:
+- Create an IPv4 UDP socket.
+- Bind it to `("", 0)` so the operating system selects an ephemeral local port for replies.
+- Set the receive timeout to the configured timeout window.
+- Treat `socket.timeout` during receive as the normal end-of-scan condition once no more responses arrive.
+- Treat other `OSError` failures during setup, send, or receive as fatal scan errors.
 
 The script should not silently swallow setup failures. Network-level failures matter because they indicate the scan did not actually run correctly.
 
