@@ -6,13 +6,10 @@ from dataclasses import dataclass
 import re
 from urllib.parse import quote, urlparse, urlunsplit
 
-import httpx
 import xml.etree.ElementTree as ET
 
 
 _ONVIF_SCOPE = "onvif://www.onvif.org"
-_COMMON_ONVIF_PORTS = (80, 8000, 8080, 8899, 2020)
-_COMMON_ONVIF_PATHS = ("/onvif/device_service", "/onvif/service", "/device_service")
 _DISCOVERY_PROBE = """<?xml version="1.0" encoding="UTF-8"?>
 <e:Envelope xmlns:e="http://www.w3.org/2003/05/soap-envelope"
             xmlns:w="http://schemas.xmlsoap.org/ws/2004/08/addressing"
@@ -27,16 +24,7 @@ _DISCOVERY_PROBE = """<?xml version="1.0" encoding="UTF-8"?>
     <d:Probe><d:Types>dn:NetworkVideoTransmitter</d:Types></d:Probe>
   </e:Body>
 </e:Envelope>"""
-_CAPABILITIES_PROBE = """<?xml version="1.0" encoding="utf-8"?>
-<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope">
-  <s:Body>
-    <tds:GetCapabilities xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
-      <tds:Category>All</tds:Category>
-    </tds:GetCapabilities>
-  </s:Body>
-</s:Envelope>"""
 _XADDR_RE = re.compile(r"https?://[^\s<\"]+")
-_XADDR_ELEMENT_RE = re.compile(r"<(?:\w+:)?XAddr>\s*(https?://[^<]+)\s*</(?:\w+:)?XAddr>")
 
 
 @dataclass(slots=True)
@@ -52,45 +40,6 @@ class CameraInfo:
 def discover_cameras(timeout: int = 5) -> list[CameraInfo]:
     """Discover ONVIF cameras on the local network via WS-Discovery probe."""
     return _discover_cameras_probe(timeout)
-
-
-def probe_camera(host: str, ports: list[int] | None = None, timeout: float = 3.0) -> CameraInfo | None:
-    """Probe a known host for an ONVIF device service on common ports."""
-    candidates = _candidate_ports(ports)
-    for port in candidates:
-        for path in _COMMON_ONVIF_PATHS:
-            url = f"http://{host}:{port}{path}"
-            try:
-                response = httpx.post(
-                    url,
-                    content=_CAPABILITIES_PROBE,
-                    headers={"Content-Type": "application/soap+xml; charset=utf-8"},
-                    timeout=timeout,
-                    follow_redirects=True,
-                )
-            except httpx.HTTPError:
-                continue
-
-            if response.status_code != 200 or not response.text:
-                continue
-            if "http://www.onvif.org/ver10/device/wsdl" not in response.text:
-                continue
-
-            onvif_url = _xaddr_from_capabilities_response(response.text) or url
-            parsed = urlparse(onvif_url)
-            if not parsed.hostname:
-                continue
-
-            return CameraInfo(
-                name=f"Camera @ {host}",
-                ip=host,
-                port=parsed.port or port,
-                onvif_url=onvif_url,
-                scopes=None,
-                rtsp_url=None,
-            )
-
-    return None
 
 
 def get_rtsp_uri(
@@ -113,11 +62,6 @@ def get_rtsp_uri(
     if fallback:
         return _build_fallback_rtsp_uri(host, user, password)
     return None
-
-
-def _candidate_ports(ports: list[int] | None) -> list[int]:
-    ordered = ports or list(_COMMON_ONVIF_PORTS)
-    return list(dict.fromkeys(ordered))
 
 
 def _discover_cameras_probe(timeout: int) -> list[CameraInfo]:
@@ -175,10 +119,6 @@ def _get_onvif_rtsp_uri(host: str, port: int, user: str, password: str) -> str |
         }
     )
     return getattr(uri, "Uri", None)
-
-
-def _build_discovery_rtsp_uri(host: str, path: str = "/h264Preview_01_main") -> str:
-    return f"rtsp://{host}:554{path}"
 
 
 def _build_fallback_rtsp_uri(
@@ -248,18 +188,6 @@ def _xaddr_from_probe_response(response: str) -> str | None:
     if not match:
         return None
     return match.group(0)
-
-
-def _xaddr_from_capabilities_response(response: str) -> str | None:
-    match = _XADDR_ELEMENT_RE.search(response)
-    if match:
-        return match.group(1).strip()
-
-    for candidate in _XADDR_RE.findall(response):
-        parsed = urlparse(candidate)
-        if parsed.hostname and "onvif" in parsed.path:
-            return candidate
-    return None
 
 
 def _camera_info_from_probe_response(response: str, ip: str) -> CameraInfo | None:

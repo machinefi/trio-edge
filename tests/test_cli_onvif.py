@@ -76,13 +76,13 @@ def test_cam_auto_discovery_uses_shared_helpers(monkeypatch: pytest.MonkeyPatch)
 
 def test_cam_known_host_probes_for_onvif_port(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(
-        "trio_core.onvif.probe_camera",
-        lambda host, ports=None, timeout=3.0: CameraInfo(
+        "trio_core.onvif.discover_cameras",
+        lambda timeout=5: [CameraInfo(
             name="Known Host",
-            ip=host,
+            ip="192.168.1.42",
             port=2020,
-            onvif_url=f"http://{host}:2020/onvif/service",
-        ),
+            onvif_url="http://192.168.1.42:2020/onvif/service",
+        )],
     )
 
     captured = {}
