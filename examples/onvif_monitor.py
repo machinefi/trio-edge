@@ -22,7 +22,7 @@ Usage:
     python examples/onvif_monitor.py --host 192.168.1.100 --user admin --password pass
 
 Requires:
-    pip install trio-core[mlx] WSDiscovery onvif-zeep
+    pip install trio-edge[all]
     brew install ffmpeg
 """
 
@@ -33,115 +33,10 @@ import shutil
 import subprocess
 import sys
 import time
-from urllib.parse import quote, urlparse
 
 import numpy as np
 
-# ── ONVIF Discovery ─────────────────────────────────────────────────────────
-
-
-def discover_cameras(timeout: int = 5) -> list[dict]:
-    """Find ONVIF cameras on the local network via WS-Discovery."""
-    try:
-        from wsdiscovery.discovery import ThreadedWSDiscovery
-    except ImportError:
-        print("WSDiscovery not installed: pip install WSDiscovery")
-        return []
-
-    print(f"Scanning network for ONVIF cameras ({timeout}s)...")
-    wsd = ThreadedWSDiscovery()
-    wsd.start()
-
-    ONVIF_SCOPE = "onvif://www.onvif.org"
-    services = wsd.searchServices(timeout=timeout)
-    wsd.stop()
-
-    cameras = []
-    for svc in services:
-        scopes = [str(s) for s in svc.getScopes()]
-        if not any(ONVIF_SCOPE in s or "NetworkVideoTransmitter" in s for s in scopes):
-            continue
-
-        xaddrs = svc.getXAddrs()
-        if not xaddrs:
-            continue
-
-        addr = str(xaddrs[0])
-        parsed = urlparse(addr)
-
-        name = "Unknown"
-        for s in scopes:
-            if "/name/" in s:
-                name = s.split("/name/")[-1]
-                break
-            elif "/hardware/" in s:
-                name = s.split("/hardware/")[-1]
-                break
-
-        cameras.append(
-            {
-                "name": name,
-                "ip": parsed.hostname,
-                "port": parsed.port or 80,
-                "onvif_url": addr,
-                "scopes": scopes,
-            }
-        )
-
-    return cameras
-
-
-def get_rtsp_uri(host: str, port: int, user: str, password: str) -> str | None:
-    """Get RTSP stream URI from an ONVIF camera."""
-    try:
-        from onvif import ONVIFCamera
-    except ImportError:
-        print("onvif-zeep not installed: pip install onvif-zeep")
-        return None
-
-    print(f"Connecting to ONVIF device {host}:{port}...")
-    try:
-        cam = ONVIFCamera(host, port, user, password)
-        media = cam.create_media_service()
-        profiles = media.GetProfiles()
-
-        if not profiles:
-            print("  No media profiles found")
-            return None
-
-        profile = profiles[0]
-        stream_setup = {
-            "Stream": "RTP-Unicast",
-            "Transport": {"Protocol": "RTSP"},
-        }
-        uri_obj = media.GetStreamUri(
-            {
-                "StreamSetup": stream_setup,
-                "ProfileToken": profile.token,
-            }
-        )
-
-        rtsp_uri = uri_obj.Uri
-        print(f"  Profile: {profile.Name}")
-        print(f"  RTSP URI: {rtsp_uri}")
-
-        # Inject credentials into URI if not present
-        parsed = urlparse(rtsp_uri)
-        if not parsed.username and user:
-            enc_pw = quote(password, safe="")
-            rtsp_uri = rtsp_uri.replace(
-                f"{parsed.scheme}://",
-                f"{parsed.scheme}://{user}:{enc_pw}@",
-            )
-
-        return rtsp_uri
-
-    except Exception as e:
-        print(f"  ONVIF error: {e}")
-        enc_pw = quote(password, safe="")
-        fallback = f"rtsp://{user}:{enc_pw}@{host}:554/h264Preview_01_main"
-        print(f"  Trying Reolink fallback: {fallback}")
-        return fallback
+from trio_core.onvif import discover_cameras, get_rtsp_uri
 
 
 try:
@@ -428,9 +323,9 @@ examples:
 
     print(f"\nFound {len(cameras)} camera(s):\n")
     for i, cam in enumerate(cameras):
-        print(f"  [{i}] {cam['name']}")
-        print(f"      IP: {cam['ip']}:{cam['port']}")
-        print(f"      ONVIF: {cam['onvif_url']}")
+        print(f"  [{i}] {cam.name}")
+        print(f"      IP: {cam.ip}:{cam.port}")
+        print(f"      ONVIF: {cam.onvif_url}")
         print()
 
     if args.discover:
@@ -441,7 +336,7 @@ examples:
         print("Password required: --password <pass>")
         sys.exit(1)
 
-    rtsp_url = get_rtsp_uri(cam["ip"], cam["port"], args.user, args.password)
+    rtsp_url = get_rtsp_uri(cam.ip, cam.port, args.user, args.password)
     if not rtsp_url:
         print("Failed to get RTSP URI.")
         sys.exit(1)

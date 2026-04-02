@@ -47,7 +47,7 @@ cuda = ["transformers>=5.4", "torch", "torchvision", "accelerate", "qwen-vl-util
 webcam = ["opencv-python>=4.8"]
 claw = ["websockets>=13.0", "cryptography>=41.0"]
 relay = ["aiortc>=1.9", "aiohttp>=3.9", "av>=12.0"]
-all = ["trio-edge[mlx,webcam,claw,relay]"]
+all = ["trio-edge[mlx,webcam,claw,relay]", "WSDiscovery", "onvif-zeep"]
 dev = ["pytest", "pytest-asyncio", "pytest-timeout", "pytest-cov", "httpx"]
 
 [project.scripts]
