@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import platform
+import shutil
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+import httpx
+
 from trio_core.source_resolver import detect_source_type
 
 logger = logging.getLogger("trio.relay")
+_FFMPEG_READ_SIZE = 65536
 
 
 class RelayError(Exception):
@@ -55,8 +60,29 @@ class HttpIngestRelay:
     resolution: tuple[int, int] | None = None
     framerate: int = 30
 
+    def __post_init__(self) -> None:
+        self._process: asyncio.subprocess.Process | None = None
+
     def resolved_camera_id(self) -> str:
         return derive_camera_id(self.source, self.camera_id)
+
+    def _auth_headers(self, *, content_type: str | None = None) -> dict[str, str]:
+        headers = {"Authorization": f"Bearer {self.bearer_token}"}
+        if content_type is not None:
+            headers["Content-Type"] = content_type
+        return headers
+
+    def _camera_payload(self, camera_id: str) -> dict[str, object]:
+        return {
+            "id": camera_id,
+            "name": _camera_name_from_source(self.source),
+            "source_url": self.source,
+            "metadata": {
+                "managed_by": "trio-edge",
+                "ingest_transport": "http_mpegts",
+                "source_type": detect_source_type(self.source),
+            },
+        }
 
     def _build_ffmpeg_cmd(self) -> list[str]:
         source_type = detect_source_type(self.source)
@@ -173,3 +199,97 @@ class HttpIngestRelay:
             "mpegts",
             "pipe:1",
         ]
+
+    async def _register_camera(self, client: httpx.AsyncClient) -> str:
+        camera_id = self.resolved_camera_id()
+        response = await client.post(
+            _join_api_url(self.cloud_url, "/api/cameras"),
+            headers=self._auth_headers(),
+            json=self._camera_payload(camera_id),
+        )
+        if response.status_code not in (200, 201):
+            raise CameraRegistrationError(
+                f"Camera registration failed (HTTP {response.status_code}): {response.text[:200]}"
+            )
+
+        returned_id = response.json().get("id")
+        if returned_id != camera_id:
+            raise CameraRegistrationError(
+                f"Cloud camera registration did not honor requested camera_id '{camera_id}'"
+            )
+        return camera_id
+
+    async def _start_ffmpeg(self) -> None:
+        if not shutil.which("ffmpeg"):
+            raise SourceError(
+                "ffmpeg not found. Install with: apt install ffmpeg (Linux) or brew install ffmpeg (macOS)"
+            )
+        self._process = await asyncio.create_subprocess_exec(
+            *self._build_ffmpeg_cmd(),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+    async def _mpegts_body(self):
+        if self._process is None or self._process.stdout is None:
+            raise SourceError("ffmpeg process was not started")
+
+        while True:
+            chunk = await self._process.stdout.read(_FFMPEG_READ_SIZE)
+            if chunk:
+                yield chunk
+                continue
+
+            return_code = await self._process.wait()
+            if return_code != 0:
+                stderr = b""
+                if self._process.stderr is not None:
+                    stderr = await self._process.stderr.read()
+                raise SourceError(
+                    f"ffmpeg exited unexpectedly (code {return_code}): {stderr.decode(errors='replace')[:200]}"
+                )
+            break
+
+    async def run(self) -> None:
+        async with httpx.AsyncClient(timeout=None, follow_redirects=True) as client:
+            camera_id = await self._register_camera(client)
+            await self._start_ffmpeg()
+            try:
+                async with client.stream(
+                    "POST",
+                    _join_api_url(self.cloud_url, f"/api/stream/ingest/{camera_id}"),
+                    headers=self._auth_headers(content_type="video/mp2t"),
+                    content=self._mpegts_body(),
+                ) as response:
+                    if response.status_code not in (200, 201, 202, 204):
+                        body = await response.aread()
+                        raise IngestUploadError(
+                            f"HTTP ingest failed (HTTP {response.status_code}): {body.decode(errors='replace')[:200]}"
+                        )
+            finally:
+                await self.teardown()
+
+    async def teardown(self) -> None:
+        if self._process is None:
+            return
+        if self._process.returncode is None:
+            self._process.terminate()
+            try:
+                await asyncio.wait_for(self._process.wait(), timeout=3.0)
+            except asyncio.TimeoutError:
+                self._process.kill()
+                await self._process.wait()
+        self._process = None
+
+
+def _join_api_url(base_url: str, path: str) -> str:
+    return f"{base_url.rstrip('/')}{path}"
+
+
+def _camera_name_from_source(source: str) -> str:
+    source_type = detect_source_type(source)
+    if source_type == "rtsp":
+        return "Edge RTSP Camera"
+    if source_type == "webcam":
+        return f"Edge Webcam {source}"
+    return Path(source).name or "Edge File Camera"
