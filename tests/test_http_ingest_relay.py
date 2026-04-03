@@ -21,12 +21,17 @@ def _relay_module():
 
 
 def test_relay_command_help_mentions_cloud_http_ingest():
+    import re
+
     result = runner.invoke(app, ["relay", "--help"])
 
+    # Strip ANSI escape codes (colors/styling) from the output for robust matching
+    clean_output = re.sub(r"\x1b\[[0-9;]*[mG]", "", result.output)
+
     assert result.exit_code == 0
-    assert "--cloud" in result.output
-    assert "--camera-id" in result.output
-    assert "HTTP MPEG-TS" in result.output
+    assert "--cloud" in clean_output
+    assert "--camera-id" in clean_output
+    assert "HTTP MPEG-TS" in clean_output
 
 
 def test_relay_invalid_resolution_returns_error():
@@ -210,6 +215,7 @@ async def test_run_uploads_video_mp2t_to_server_returned_ingest_endpoint(
     fake_process.terminate = lambda: None
     fake_process.kill = lambda: None
 
+    monkeypatch.setattr(relay.shutil, "which", lambda _: "/usr/bin/ffmpeg")
     monkeypatch.setattr(
         relay.asyncio,
         "create_subprocess_exec",
