@@ -8,6 +8,8 @@ import shutil
 
 import typer
 
+from trio_core.http_ingest_relay import HttpIngestRelay, RelayError
+
 app = typer.Typer(
     name="trio",
     help="Local VLM inference engine — analyze images and video on your Mac",
@@ -977,13 +979,20 @@ def discover(
     typer.echo()
 
 
-@app.command()
+@app.command(help="HTTP MPEG-TS relay to Trio Cloud.")
 def relay(
-    whip_url: str = typer.Argument(
-        ..., help="WHIP ingest endpoint URL (e.g. http://cortex:8000/api/stream/whip)"
+    cloud: str = typer.Option(
+        ..., "--cloud", help="Trio Cloud base URL (e.g. https://api.trio.ai)"
     ),
     source: str = typer.Option(
-        "0", "--source", "-s", help="Video source: camera index, RTSP URL, or video file"
+        "0",
+        "--camera",
+        "--source",
+        "-s",
+        help="Video source: RTSP URL, camera index, or video file",
+    ),
+    camera_id: str = typer.Option(
+        None, "--camera-id", help="Override the derived camera identifier"
     ),
     host: str = typer.Option(None, "--host", "-h", help="Camera IP address (skip discovery)"),
     port: int = typer.Option(8000, "--port", help="ONVIF port (default: 8000)"),
@@ -993,7 +1002,9 @@ def relay(
     discover: bool = typer.Option(
         False, "--discover", help="Interactively discover ONVIF cameras to use as source"
     ),
-    token: str = typer.Option(None, "--token", "-t", help="Bearer token for WHIP authentication"),
+    token: str = typer.Option(
+        None, "--token", "-t", help="Bearer token for Trio Cloud authentication"
+    ),
     resolution: str = typer.Option(
         None, "--resolution", "-r", help="Video resolution WxH (e.g. 1280x720)"
     ),
@@ -1003,7 +1014,7 @@ def relay(
         False, "--json-logs", help="Structured JSON logging (or set TRIO_LOG_JSON=1)"
     ),
 ):
-    """Relay video from a webcam, RTSP camera, or file to a WHIP endpoint."""
+    """Relay video from a webcam, RTSP camera, or file to Trio Cloud via HTTP MPEG-TS."""
     import asyncio
 
     _setup_logging(verbose, json_logs=json_logs)
@@ -1020,13 +1031,6 @@ def relay(
             )
             raise typer.Exit(1)
 
-    try:
-        from trio_core.whip_relay import RelayError, WhipRelay
-    except ImportError as exc:
-        typer.echo(f"✗ Missing dependency: {exc}", err=True)
-        typer.echo("  Install with: pip install 'trio-edge[relay]'", err=True)
-        raise typer.Exit(1)
-
     if not shutil.which("ffmpeg"):
         typer.echo(
             "✗ ffmpeg not found. Install with: apt install ffmpeg (Linux) or brew install ffmpeg (macOS)",
@@ -1034,20 +1038,25 @@ def relay(
         )
         raise typer.Exit(1)
 
+    if not token:
+        typer.echo("✗ Bearer token required. Pass --token <TOKEN>", err=True)
+        raise typer.Exit(1)
+
     actual_source = source
     if discover or host or rtsp:
         actual_source = _resolve_rtsp_url(rtsp, host, port, user, password)
 
-    relay_obj = WhipRelay(
+    relay_obj = HttpIngestRelay(
         source=actual_source,
-        whip_url=whip_url,
+        cloud_url=cloud,
         bearer_token=token,
+        camera_id=camera_id,
         resolution=resolution_tuple,
         framerate=framerate,
     )
 
-    typer.echo(f"Relay: {actual_source} -> {whip_url}")
-    typer.echo(f"Codec: H.264 | FPS: {framerate} | Resolution: {resolution or 'native'}")
+    typer.echo(f"Relay: {actual_source} -> {cloud}")
+    typer.echo(f"Transport: HTTP MPEG-TS | FPS: {framerate} | Resolution: {resolution or 'native'}")
     typer.echo("Press Ctrl+C to stop.\n")
 
     async def _run() -> None:
