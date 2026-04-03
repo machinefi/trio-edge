@@ -82,7 +82,7 @@ trio relay --camera rtsp://admin:pass@192.168.1.100/stream \
 
 ### Mode 1: Cloud Relay (Trio Cloud customers)
 
-Trio Edge pulls RTSP from your camera and pushes JPEG frames to Trio Cloud. All AI processing (V-JEPA, VLM, entity tracking, insights) happens in the cloud.
+Trio Edge pulls RTSP or local video, registers a camera with Trio Cloud, and pushes HTTP MPEG-TS to the cloud ingest endpoint. All AI processing happens in the cloud.
 
 ```bash
 trio relay --camera rtsp://admin:pass@192.168.1.100/stream \
@@ -90,8 +90,8 @@ trio relay --camera rtsp://admin:pass@192.168.1.100/stream \
            --token YOUR_TOKEN
 ```
 
-**What Edge does:** RTSP pull → motion filter → JPEG compress → HTTPS push
-**What Cloud does:** YOLO → V-JEPA → VLM → Memory → Entity Tracking → Dashboard
+**What Edge does:** source capture → ffmpeg MPEG-TS mux → authenticated HTTP upload
+**What Cloud does:** session management → ingest → analysis → dashboard
 
 ### Mode 2: Local AI (open-source users)
 
