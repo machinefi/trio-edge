@@ -2512,8 +2512,8 @@ wheels = [
 ]
 
 [[package]]
-name = "trio-edge"
-version = "1.1.0"
+name = "trio-core"
+version = "1.1.2"
 source = { editable = "." }
 dependencies = [
     { name = "aiosqlite" },
@@ -2607,7 +2607,7 @@ requires-dist = [
     { name = "torch", marker = "extra == 'cuda'" },
     { name = "torchvision", marker = "extra == 'cuda'" },
     { name = "transformers", marker = "extra == 'cuda'", specifier = ">=5.4" },
-    { name = "trio-edge", extras = ["mlx", "webcam", "claw"], marker = "extra == 'all'" },
+    { name = "trio-core", extras = ["mlx", "webcam", "claw"], marker = "extra == 'all'" },
     { name = "typer", specifier = ">=0.9" },
     { name = "uvicorn" },
     { name = "websockets", marker = "extra == 'claw'", specifier = ">=13.0" },
