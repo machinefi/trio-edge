@@ -182,7 +182,9 @@ async def test_register_camera_accepts_server_generated_id(monkeypatch: pytest.M
 
 
 @pytest.mark.asyncio
-async def test_run_uploads_video_mp2t_to_server_returned_ingest_endpoint(monkeypatch: pytest.MonkeyPatch):
+async def test_run_uploads_video_mp2t_to_server_returned_ingest_endpoint(
+    monkeypatch: pytest.MonkeyPatch,
+):
     relay = _relay_module()
     calls: list[dict[str, object]] = []
     responses = [
