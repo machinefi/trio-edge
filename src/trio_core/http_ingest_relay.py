@@ -84,7 +84,16 @@ class HttpIngestRelay:
             },
         }
 
-    def _build_ffmpeg_cmd(self) -> list[str]:
+    def _http_output_args(self, ingest_url: str) -> list[str]:
+        return [
+            "-method",
+            "POST",
+            "-headers",
+            f"Authorization: Bearer {self.bearer_token}\r\nContent-Type: video/mp2t\r\n",
+            ingest_url,
+        ]
+
+    def _build_ffmpeg_cmd(self, output_args: list[str]) -> list[str]:
         source_type = detect_source_type(self.source)
         fps = str(self.framerate)
 
@@ -105,7 +114,7 @@ class HttpIngestRelay:
                 "-an",
                 "-f",
                 "mpegts",
-                "pipe:1",
+                *output_args,
             ]
 
         if source_type == "webcam":
@@ -138,7 +147,7 @@ class HttpIngestRelay:
                     "-an",
                     "-f",
                     "mpegts",
-                    "pipe:1",
+                    *output_args,
                 ]
             if system == "Darwin":
                 return [
@@ -165,7 +174,7 @@ class HttpIngestRelay:
                     "-an",
                     "-f",
                     "mpegts",
-                    "pipe:1",
+                    *output_args,
                 ]
             raise SourceError(f"Unsupported webcam platform: {system}")
 
@@ -197,7 +206,7 @@ class HttpIngestRelay:
             "-an",
             "-f",
             "mpegts",
-            "pipe:1",
+            *output_args,
         ]
 
     async def _register_camera(self, client: httpx.AsyncClient) -> str:
@@ -225,55 +234,35 @@ class HttpIngestRelay:
             )
         return returned_id
 
-    async def _start_ffmpeg(self) -> None:
+    async def _start_ffmpeg(self, output_args: list[str]) -> None:
         if not shutil.which("ffmpeg"):
             raise SourceError(
                 "ffmpeg not found. Install with: apt install ffmpeg (Linux) or brew install ffmpeg (macOS)"
             )
         self._process = await asyncio.create_subprocess_exec(
-            *self._build_ffmpeg_cmd(),
-            stdout=asyncio.subprocess.PIPE,
+            *self._build_ffmpeg_cmd(output_args),
             stderr=asyncio.subprocess.PIPE,
         )
 
-    async def _mpegts_body(self):
-        if self._process is None or self._process.stdout is None:
-            raise SourceError("ffmpeg process was not started")
+    async def run(self) -> None:
+        async with httpx.AsyncClient(timeout=None, follow_redirects=True) as client:
+            camera_id = await self._register_camera(client)
 
-        while True:
-            chunk = await self._process.stdout.read(_FFMPEG_READ_SIZE)
-            if chunk:
-                yield chunk
-                continue
-
+        ingest_url = _join_api_url(self.cloud_url, f"/api/stream/ingest/{camera_id}")
+        output_args = self._http_output_args(ingest_url)
+        await self._start_ffmpeg(output_args)
+        try:
+            assert self._process is not None
             return_code = await self._process.wait()
             if return_code != 0:
                 stderr = b""
                 if self._process.stderr is not None:
                     stderr = await self._process.stderr.read()
                 raise SourceError(
-                    f"ffmpeg exited unexpectedly (code {return_code}): {stderr.decode(errors='replace')[:200]}"
+                    f"ffmpeg exited (code {return_code}): {stderr.decode(errors='replace')[:200]}"
                 )
-            break
-
-    async def run(self) -> None:
-        async with httpx.AsyncClient(timeout=None, follow_redirects=True) as client:
-            camera_id = await self._register_camera(client)
-            await self._start_ffmpeg()
-            try:
-                async with client.stream(
-                    "POST",
-                    _join_api_url(self.cloud_url, f"/api/stream/ingest/{camera_id}"),
-                    headers=self._auth_headers(content_type="video/mp2t"),
-                    content=self._mpegts_body(),
-                ) as response:
-                    if response.status_code not in (200, 201, 202, 204):
-                        body = await response.aread()
-                        raise IngestUploadError(
-                            f"HTTP ingest failed (HTTP {response.status_code}): {body.decode(errors='replace')[:200]}"
-                        )
-            finally:
-                await self.teardown()
+        finally:
+            await self.teardown()
 
     async def teardown(self) -> None:
         if self._process is None:
