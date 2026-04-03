@@ -7,6 +7,7 @@ import logging
 import shutil
 
 import typer
+
 from trio_core.http_ingest_relay import HttpIngestRelay, RelayError
 
 app = typer.Typer(
