@@ -36,9 +36,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/machinefi/trio-edge"
-Repository = "https://github.com/machinefi/trio-edge"
-Issues = "https://github.com/machinefi/trio-edge/issues"
+Homepage = "https://github.com/machinefi/trio-core"
+Repository = "https://github.com/machinefi/trio-core"
+Issues = "https://github.com/machinefi/trio-core/issues"
 
 [project.optional-dependencies]
 mlx = ["mlx>=0.16", "tokenizers>=0.19", "huggingface-hub", "safetensors", "jinja2"]
@@ -47,11 +47,11 @@ cuda = ["transformers>=5.4", "torch", "torchvision", "accelerate", "qwen-vl-util
 webcam = ["opencv-python>=4.8"]
 claw = ["websockets>=13.0", "cryptography>=41.0"]
 relay = []
-all = ["trio-edge[mlx,webcam,claw]", "onvif-zeep"]
+all = ["trio-core[mlx,webcam,claw]", "onvif-zeep"]
 dev = ["pytest", "pytest-asyncio", "pytest-timeout", "pytest-cov", "httpx"]
 
 [project.scripts]
-trio-edge = "trio_core.cli:app"
+trio-core = "trio_core.cli:app"
 trio = "trio_core.cli:app"
 
 [tool.hatch.build.targets.wheel]
