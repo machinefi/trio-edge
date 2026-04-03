@@ -3,8 +3,8 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "trio-edge"
-version = "1.1.0"
+name = "trio-core"
+version = "1.1.1"
 description = "Open-source camera intelligence — ONVIF discovery, RTSP relay, YOLO detection, VLM scene understanding"
 readme = "README.md"
 license = "Apache-2.0"
