@@ -37,7 +37,7 @@ def test_relay_command_help_mentions_cloud_http_ingest():
 def test_relay_invalid_resolution_returns_error():
     result = runner.invoke(
         app,
-        ["relay", "--cloud", "https://api.trio.ai", "--resolution", "bad"],
+        ["relay", "--cloud", "https://trio-relay.machinefi.com", "--resolution", "bad"],
     )
 
     assert result.exit_code == 1
@@ -64,7 +64,7 @@ def test_build_ffmpeg_cmd_rtsp_uses_mpegts_copy(monkeypatch: pytest.MonkeyPatch)
     with patch("trio_core._rtsp_proxy.ensure_rtsp_url", return_value="rtsp://camera/stream"):
         cmd = relay.HttpIngestRelay(
             source="rtsp://camera/stream",
-            cloud_url="https://api.trio.ai",
+            cloud_url="https://trio-relay.machinefi.com",
             bearer_token="token",
         )._build_ffmpeg_cmd(["pipe:1"])
 
@@ -81,7 +81,7 @@ def test_build_ffmpeg_cmd_webcam_macos_uses_mpegts(monkeypatch: pytest.MonkeyPat
     with patch("platform.system", return_value="Darwin"):
         cmd = relay.HttpIngestRelay(
             source="0",
-            cloud_url="https://api.trio.ai",
+            cloud_url="https://trio-relay.machinefi.com",
             bearer_token="token",
             framerate=30,
         )._build_ffmpeg_cmd(["pipe:1"])
@@ -146,7 +146,7 @@ async def test_register_camera_posts_explicit_id_and_metadata(monkeypatch: pytes
 
     client = relay.HttpIngestRelay(
         source="rtsp://camera/stream",
-        cloud_url="https://api.trio.ai/",
+        cloud_url="https://trio-relay.machinefi.com/",
         bearer_token="token-123",
         camera_id="cam-123",
     )
@@ -155,7 +155,7 @@ async def test_register_camera_posts_explicit_id_and_metadata(monkeypatch: pytes
         returned = await client._register_camera(http_client)
 
     assert returned == "cam-123"
-    assert calls[0]["url"] == "https://api.trio.ai/api/cameras"
+    assert calls[0]["url"] == "https://trio-relay.machinefi.com/api/cameras"
     assert calls[0]["headers"]["Authorization"] == "Bearer token-123"
     assert calls[0]["json"]["id"] == "cam-123"
     assert calls[0]["json"]["metadata"]["ingest_transport"] == "http_mpegts"
@@ -175,7 +175,7 @@ async def test_register_camera_accepts_server_generated_id(monkeypatch: pytest.M
 
     client = relay.HttpIngestRelay(
         source="video.mp4",
-        cloud_url="https://api.trio.ai",
+        cloud_url="https://trio-relay.machinefi.com",
         bearer_token="token-123",
         camera_id="synthetic-id",
     )
@@ -220,7 +220,7 @@ async def test_run_launches_ffmpeg_with_ingest_url_and_auth(
 
     client = relay.HttpIngestRelay(
         source="video.mp4",
-        cloud_url="https://api.trio.ai",
+        cloud_url="https://trio-relay.machinefi.com",
         bearer_token="token-123",
         camera_id="preferred-id",
     )
@@ -229,7 +229,7 @@ async def test_run_launches_ffmpeg_with_ingest_url_and_auth(
 
     assert len(captured_cmd) == 1
     cmd = captured_cmd[0]
-    assert "https://api.trio.ai/api/stream/ingest/server-generated" in cmd
+    assert "https://trio-relay.machinefi.com/api/stream/ingest/server-generated" in cmd
     assert "-method" in cmd
     assert "POST" in cmd
     headers_idx = cmd.index("-headers")
@@ -262,7 +262,7 @@ def test_relay_cli_constructs_http_ingest_relay(monkeypatch: pytest.MonkeyPatch)
         [
             "relay",
             "--cloud",
-            "https://api.trio.ai",
+            "https://trio-relay.machinefi.com",
             "--camera",
             "rtsp://admin:pass@192.168.1.10/stream",
             "--token",
@@ -273,7 +273,7 @@ def test_relay_cli_constructs_http_ingest_relay(monkeypatch: pytest.MonkeyPatch)
     )
 
     assert result.exit_code == 0
-    assert captured["cloud_url"] == "https://api.trio.ai"
+    assert captured["cloud_url"] == "https://trio-relay.machinefi.com"
     assert captured["source"] == "rtsp://admin:pass@192.168.1.10/stream"
     assert captured["camera_id"] == "cam-123"
     assert captured["bearer_token"] == "token-123"

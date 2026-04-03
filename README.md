@@ -33,8 +33,8 @@
 
 Trio Core is the open-source camera agent for [Trio AI](https://trio.ai). It runs on your local network, discovers cameras via ONVIF, and either:
 
-1. **Relays frames to Trio Cloud** for full AI analysis (memory, entity tracking, dashboards)
-2. **Runs AI locally** with your own LLM (Claude, GPT, local Qwen) for standalone use
+1. **Relays video to Trio Cloud** for cloud ingest, analysis, and dashboards
+2. **Runs AI locally** for live monitoring, counting, and scene understanding on your own hardware
 
 ```
 ┌──────────────────────────────────────────────────────────┐
@@ -43,16 +43,17 @@ Trio Core is the open-source camera agent for [Trio AI](https://trio.ai). It run
 │  IP Camera ──RTSP──► Trio Core ──HTTPS──► Trio Cloud     │
 │                      (this repo)         (paid, $99/cam) │
 │                          │                               │
-│                          └── or use your own LLM         │
+│                          └── or run AI locally           │
 │                             (free, open source)          │
 └──────────────────────────────────────────────────────────┘
 ```
 
 **Core capabilities:**
-- **Discover** — Auto-find cameras on your network via ONVIF
-- **Relay** — Push RTSP frames to Trio Cloud over HTTPS (NAT-friendly)
-- **Detect** — YOLO v10n object detection (people, vehicles, 80 classes)
-- **Describe** — VLM scene descriptions with any LLM (local or cloud)
+- **Discover** — Auto-find cameras on your network via ONVIF and resolve RTSP URLs
+- **Monitor** — Live RTSP camera analysis with watch prompts, object counts, and event digests
+- **Relay** — Stream RTSP, webcam, or video-file sources to Trio Cloud over HTTP MPEG-TS
+- **Analyze** — Run scene understanding on images and videos from the CLI or API
+- **Serve** — Expose local inference APIs for detection and description
 - **Tailscale auto-proxy** — Works through Tailscale networks automatically
 
 ---
@@ -61,19 +62,22 @@ Trio Core is the open-source camera agent for [Trio AI](https://trio.ai). It run
 
 ```bash
 # Install
-pip install 'trio-core[mlx]'      # Apple Silicon
-pip install 'trio-core[cuda]'     # NVIDIA GPU
-pip install trio-core              # CPU-only
+pip install 'trio-core[mlx]'      # Apple Silicon local AI
+pip install 'trio-core[cuda]'     # NVIDIA GPU local AI
+pip install trio-core             # Discovery, relay, API
+
+# Check your setup
+trio doctor
 
 # Discover cameras on your network
 trio discover
 
-# Start watching a camera
+# Start local monitoring (Apple Silicon default)
 trio cam --rtsp rtsp://admin:pass@192.168.1.100/stream
 
 # Or relay to Trio Cloud
 trio relay --camera rtsp://admin:pass@192.168.1.100/stream \
-           --cloud https://api.trio.ai --token YOUR_TOKEN
+           --token YOUR_TOKEN
 ```
 
 ---
@@ -82,33 +86,34 @@ trio relay --camera rtsp://admin:pass@192.168.1.100/stream \
 
 ### Mode 1: Cloud Relay (Trio Cloud customers)
 
-Trio Core pulls RTSP or local video, registers a camera with Trio Cloud, and pushes HTTP MPEG-TS to the cloud ingest endpoint. All AI processing happens in the cloud.
+Trio Core takes an RTSP stream, webcam, or video file, registers a camera with Trio Cloud, and pushes HTTP MPEG-TS to the cloud ingest endpoint. All AI processing happens in the cloud.
 
 ```bash
 trio relay --camera rtsp://admin:pass@192.168.1.100/stream \
-           --cloud https://api.trio.ai \
            --token YOUR_TOKEN
 ```
 
-**What Edge does:** source capture → ffmpeg MPEG-TS mux → authenticated HTTP upload
 **What Cloud does:** session management → ingest → analysis → dashboard
 
 ### Mode 2: Local AI (open-source users)
 
-Run everything locally with your own LLM. No cloud needed, no subscription.
+Run everything locally on your own machine. No cloud needed, no subscription.
 
 ```bash
-# With local Qwen model (Apple Silicon)
+# Default local monitor (Apple Silicon)
 trio cam --rtsp rtsp://admin:pass@192.168.1.100/stream
 
-# With Claude API
-ANTHROPIC_API_KEY=sk-xxx trio cam --rtsp rtsp://... --llm claude
+# Count objects
+trio cam --rtsp rtsp://... --count
 
-# With OpenAI
-OPENAI_API_KEY=sk-xxx trio cam --rtsp rtsp://... --llm gpt-4o
+# Smart event digest
+trio cam --rtsp rtsp://... --digest
+
+# Analyze a saved image or video
+trio analyze photo.jpg -q "What's here?"
 ```
 
-**Note:** Local mode gives you real-time detection and descriptions, but no persistent memory, entity tracking, historical analytics, or dashboard. For those features, use [Trio Cloud](https://trio.ai).
+**Note:** Use `--model` and `--backend` to override the default local model selection. Local mode gives you real-time detection and descriptions, but no persistent memory, entity tracking, historical analytics, or dashboard. For those features, use [Trio Cloud](https://trio.ai).
 
 ---
 
@@ -148,29 +153,33 @@ trio cam --rtsp rtsp://... --count
 
 ### VLM Scene Description
 
-Supports multiple VLM backends:
+Supports multiple local AI configurations:
 
-| Backend | Command | Requirements |
-|---------|---------|-------------|
-| Local Qwen (MLX) | `trio cam --rtsp ...` | Apple Silicon, 4GB+ RAM |
-| Claude | `trio cam --llm claude` | `ANTHROPIC_API_KEY` |
-| GPT-4o | `trio cam --llm gpt-4o` | `OPENAI_API_KEY` |
-| Any OpenAI-compatible | `trio cam --llm-url http://...` | API endpoint |
+| Mode | Command | Notes |
+|------|---------|-------|
+| Default local monitor | `trio cam --rtsp ...` | Uses the built-in default model for live monitoring |
+| Custom local model | `trio cam --rtsp ... --model <MODEL_ID>` | Override the Hugging Face model ID |
+| Transformers backend | `trio analyze photo.jpg --backend transformers --model Qwen/Qwen2.5-VL-3B-Instruct` | CUDA or CPU |
+| Adapter / fine-tune | `trio cam --rtsp ... --adapter ./adapter_dir` | Load a LoRA adapter directory |
 
 ---
 
 ## CLI
 
 ```bash
-trio discover                          # Find cameras via ONVIF
-trio cam --rtsp rtsp://... --count     # Watch + count objects
-trio cam --host 192.168.1.100 -p pass  # Auto-discover + connect
-trio relay --camera rtsp://... --cloud https://api.trio.ai  # Cloud relay
-trio serve                             # Start inference API server
-trio analyze photo.jpg -q "What's here?"  # Analyze single image
-trio webcam -w "person at the door"    # Webcam with alerts
-trio doctor                            # Diagnose setup issues
-trio device                            # Show hardware info
+trio discover                                 # Find cameras via ONVIF
+trio cam --rtsp rtsp://... --count            # Live monitor + object counts
+trio cam --host 192.168.1.100 -p pass         # Resolve RTSP via ONVIF + monitor
+trio cam --rtsp rtsp://... --digest           # Event timeline with scene understanding
+trio relay --camera rtsp://... --token ...    # Relay to Trio Cloud
+trio relay --discover -p pass --token ...     # Discover a camera and relay it
+trio serve                                    # Start inference API server
+trio analyze photo.jpg -q "What's here?"      # Analyze a single image or video
+trio webcam -w "person at the door"           # Webcam monitor with alerts
+trio smoke                                    # End-to-end smoke test
+trio doctor                                   # Diagnose setup issues
+trio device                                   # Show hardware info
+trio claw --camera rtsp://... --gateway ws://127.0.0.1:18789  # OpenClaw node
 ```
 
 ---

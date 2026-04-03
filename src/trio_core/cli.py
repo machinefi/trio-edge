@@ -597,7 +597,7 @@ def webcam(
 
 
 def _resolve_rtsp_url(
-    rtsp: str | None, host: str | None, port: int, user: str, password: str
+    rtsp: str | None, host: str | None, port: int | None, user: str | None, password: str
 ) -> str:
     """Helper to resolve RTSP URL via explicit config or interactive discovery."""
     import sys
@@ -607,6 +607,10 @@ def _resolve_rtsp_url(
 
     if rtsp:
         return ensure_rtsp_url(rtsp)
+
+    # Use defaults if not provided via CLI
+    user = user or "admin"
+    port = port or 8000
 
     is_interactive = sys.stdin.isatty()
 
@@ -684,8 +688,8 @@ def _resolve_rtsp_url(
 @app.command()
 def cam(
     host: str = typer.Option(None, "--host", "-h", help="Camera IP address (skip discovery)"),
-    port: int = typer.Option(8000, "--port", help="ONVIF port (default: 8000)"),
-    user: str = typer.Option("admin", "--user", "-u", help="Camera username"),
+    port: int = typer.Option(None, "--port", help="ONVIF port"),
+    user: str = typer.Option(None, "--user", "-u", help="Camera username"),
     password: str = typer.Option("", "--password", "-p", help="Camera password"),
     rtsp: str = typer.Option(None, "--rtsp", help="Direct RTSP URL (skip discovery + ONVIF)"),
     watch: str = typer.Option(None, "--watch", "-w", help="Watch condition in natural language"),
@@ -982,7 +986,9 @@ def discover(
 @app.command(help="HTTP MPEG-TS relay to Trio Cloud.")
 def relay(
     cloud: str = typer.Option(
-        ..., "--cloud", help="Trio Cloud base URL (e.g. https://api.trio.ai)"
+        "https://trio-relay.machinefi.com",
+        "--cloud",
+        help="Trio Cloud base URL (e.g. https://trio-relay.machinefi.com)",
     ),
     source: str = typer.Option(
         "0",
@@ -995,8 +1001,8 @@ def relay(
         None, "--camera-id", help="Override the derived camera identifier"
     ),
     host: str = typer.Option(None, "--host", "-h", help="Camera IP address (skip discovery)"),
-    port: int = typer.Option(8000, "--port", help="ONVIF port (default: 8000)"),
-    user: str = typer.Option("admin", "--user", "-u", help="Camera username"),
+    port: int = typer.Option(None, "--port", help="ONVIF port"),
+    user: str = typer.Option(None, "--user", "-u", help="Camera username"),
     password: str = typer.Option("", "--password", "-p", help="Camera password"),
     rtsp: str = typer.Option(None, "--rtsp", help="Direct RTSP URL (bypasses source)"),
     discover: bool = typer.Option(
@@ -1005,7 +1011,7 @@ def relay(
     token: str = typer.Option(
         None, "--token", "-t", help="Bearer token for Trio Cloud authentication"
     ),
-    resolution: str = typer.Option(
+    resolution: str | None = typer.Option(
         None, "--resolution", "-r", help="Video resolution WxH (e.g. 1280x720)"
     ),
     framerate: int = typer.Option(30, "--framerate", "--fps", help="Target frame rate"),
