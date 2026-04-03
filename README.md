@@ -1,5 +1,5 @@
 <p align="center">
-  <h1 align="center">Trio Edge</h1>
+  <h1 align="center">Trio Core</h1>
   <p align="center">
     <strong>Open-source camera intelligence for your network</strong>
   </p>
@@ -10,10 +10,10 @@
 </p>
 
 <p align="center">
-  <a href="https://pypi.org/project/trio-edge/"><img src="https://img.shields.io/pypi/v/trio-edge?color=blue" alt="PyPI"></a>
-  <a href="https://pypi.org/project/trio-edge/"><img src="https://img.shields.io/pypi/pyversions/trio-edge" alt="Python"></a>
-  <a href="https://github.com/machinefi/trio-edge/blob/main/LICENSE"><img src="https://img.shields.io/github/license/machinefi/trio-edge" alt="License"></a>
-  <a href="https://github.com/machinefi/trio-edge/stargazers"><img src="https://img.shields.io/github/stars/machinefi/trio-edge?style=social" alt="Stars"></a>
+  <a href="https://pypi.org/project/trio-core/"><img src="https://img.shields.io/pypi/v/trio-core?color=blue" alt="PyPI"></a>
+  <a href="https://pypi.org/project/trio-core/"><img src="https://img.shields.io/pypi/pyversions/trio-core" alt="Python"></a>
+  <a href="https://github.com/machinefi/trio-core/blob/main/LICENSE"><img src="https://img.shields.io/github/license/machinefi/trio-core" alt="License"></a>
+  <a href="https://github.com/machinefi/trio-core/stargazers"><img src="https://img.shields.io/github/stars/machinefi/trio-core?style=social" alt="Stars"></a>
 </p>
 
 <p align="center">
@@ -29,9 +29,9 @@
 
 ---
 
-## What is Trio Edge?
+## What is Trio Core?
 
-Trio Edge is the open-source camera agent for [Trio AI](https://trio.ai). It runs on your local network, discovers cameras via ONVIF, and either:
+Trio Core is the open-source camera agent for [Trio AI](https://trio.ai). It runs on your local network, discovers cameras via ONVIF, and either:
 
 1. **Relays frames to Trio Cloud** for full AI analysis (memory, entity tracking, dashboards)
 2. **Runs AI locally** with your own LLM (Claude, GPT, local Qwen) for standalone use
@@ -40,7 +40,7 @@ Trio Edge is the open-source camera agent for [Trio AI](https://trio.ai). It run
 ┌──────────────────────────────────────────────────────────┐
 │  Your Network                                            │
 │                                                          │
-│  IP Camera ──RTSP──► Trio Edge ──HTTPS──► Trio Cloud     │
+│  IP Camera ──RTSP──► Trio Core ──HTTPS──► Trio Cloud     │
 │                      (this repo)         (paid, $99/cam) │
 │                          │                               │
 │                          └── or use your own LLM         │
@@ -61,9 +61,9 @@ Trio Edge is the open-source camera agent for [Trio AI](https://trio.ai). It run
 
 ```bash
 # Install
-pip install 'trio-edge[mlx]'      # Apple Silicon
-pip install 'trio-edge[cuda]'     # NVIDIA GPU
-pip install trio-edge              # CPU-only
+pip install 'trio-core[mlx]'      # Apple Silicon
+pip install 'trio-core[cuda]'     # NVIDIA GPU
+pip install trio-core              # CPU-only
 
 # Discover cameras on your network
 trio discover
@@ -82,7 +82,7 @@ trio relay --camera rtsp://admin:pass@192.168.1.100/stream \
 
 ### Mode 1: Cloud Relay (Trio Cloud customers)
 
-Trio Edge pulls RTSP or local video, registers a camera with Trio Cloud, and pushes HTTP MPEG-TS to the cloud ingest endpoint. All AI processing happens in the cloud.
+Trio Core pulls RTSP or local video, registers a camera with Trio Cloud, and pushes HTTP MPEG-TS to the cloud ingest endpoint. All AI processing happens in the cloud.
 
 ```bash
 trio relay --camera rtsp://admin:pass@192.168.1.100/stream \
@@ -127,7 +127,7 @@ trio discover
 
 ### Tailscale Auto-Proxy
 
-If you use Tailscale, Trio Edge automatically detects when the macOS network extension blocks camera access and creates a transparent TCP proxy:
+If you use Tailscale, Trio Core automatically detects when the macOS network extension blocks camera access and creates a transparent TCP proxy:
 
 ```
 trio cam --rtsp rtsp://admin:pass@192.168.1.100/stream
@@ -223,7 +223,7 @@ Combined: YOLO detects → crop → VLM describes each entity → full scene des
 ## Python SDK
 
 ```python
-from trio_edge import TrioCore, EngineConfig
+from trio_core import TrioCore, EngineConfig
 
 engine = TrioCore()
 engine.load()
@@ -254,7 +254,7 @@ Gemma 3n, SmolVLM2, Phi-4, FastVLM, and any model supported by mlx-vlm.
 ## Architecture
 
 ```
-                          Trio Edge
+                          Trio Core
                               |
               +---------------+---------------+
               |                               |
@@ -295,7 +295,7 @@ Edge sends ~50-100 KB/s per camera. No GPU needed on the edge device.
 | `TRIO_CLOUD_URL` | (none) | Trio Cloud API URL for relay mode |
 | `TRIO_CLOUD_TOKEN` | (none) | Trio Cloud auth token |
 
-See [`src/trio_edge/config.py`](src/trio_edge/config.py) for all options.
+See [`src/trio_core/config.py`](src/trio_core/config.py) for all options.
 
 ---
 
@@ -305,7 +305,7 @@ See [`src/trio_edge/config.py`](src/trio_edge/config.py) for all options.
 |---|---|
 | `trio discover` finds no cameras | Make sure cameras are on the same subnet. Some routers block multicast. |
 | Camera found but can't connect | Check username/password. Try `trio cam --rtsp rtsp://admin:pass@IP/stream` directly. |
-| Tailscale blocking camera access | Trio Edge auto-detects this and creates a proxy. If it doesn't work, try `trio doctor`. |
+| Tailscale blocking camera access | Trio Core auto-detects this and creates a proxy. If it doesn't work, try `trio doctor`. |
 | First run slow | Model download (~2-5 GB). Subsequent runs start instantly. |
 | Out of memory | Use a smaller model: `TRIO_MODEL=mlx-community/Qwen2.5-VL-3B-Instruct-4bit` |
 
