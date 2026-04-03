@@ -32,13 +32,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs: lint
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.12
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
           cache: pip
 
       - name: Install dependencies
@@ -51,20 +54,23 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-linux
+          name: coverage-linux-${{ matrix.python-version }}
           path: coverage.xml
 
   test-macos:
     runs-on: macos-14
     timeout-minutes: 5
     needs: lint
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.12
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
           cache: pip
 
       - name: Install dependencies
