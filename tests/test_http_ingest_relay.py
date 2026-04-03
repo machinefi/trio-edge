@@ -226,3 +226,47 @@ async def test_run_uploads_video_mp2t_to_ingest_endpoint(monkeypatch: pytest.Mon
     assert ingest_call["url"] == "https://api.trio.ai/api/stream/ingest/cam-123"
     assert ingest_call["headers"]["Authorization"] == "Bearer token-123"
     assert ingest_call["headers"]["Content-Type"] == "video/mp2t"
+
+
+def test_relay_cli_constructs_http_ingest_relay(monkeypatch: pytest.MonkeyPatch):
+    import trio_core.cli as cli
+
+    captured: dict[str, object] = {}
+
+    class FakeRelay:
+        def __init__(self, **kwargs) -> None:
+            captured.update(kwargs)
+
+        async def run(self) -> None:
+            captured["run_called"] = True
+
+        async def teardown(self) -> None:
+            captured["teardown_called"] = True
+
+    monkeypatch.setattr(cli.shutil, "which", lambda name: "/usr/bin/ffmpeg")
+    monkeypatch.setattr(cli, "_setup_logging", lambda *args, **kwargs: None)
+    monkeypatch.setattr(cli, "HttpIngestRelay", FakeRelay, raising=False)
+
+    result = runner.invoke(
+        app,
+        [
+            "relay",
+            "--cloud",
+            "https://api.trio.ai",
+            "--camera",
+            "rtsp://admin:pass@192.168.1.10/stream",
+            "--token",
+            "token-123",
+            "--camera-id",
+            "cam-123",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured["cloud_url"] == "https://api.trio.ai"
+    assert captured["source"] == "rtsp://admin:pass@192.168.1.10/stream"
+    assert captured["camera_id"] == "cam-123"
+    assert captured["bearer_token"] == "token-123"
+    assert captured["run_called"] is True
+    assert captured["teardown_called"] is True
+    assert "HTTP MPEG-TS" in result.output
