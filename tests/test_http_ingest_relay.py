@@ -84,3 +84,145 @@ def test_build_ffmpeg_cmd_webcam_macos_uses_mpegts(monkeypatch: pytest.MonkeyPat
     assert "avfoundation" in cmd
     assert "libx264" in cmd
     assert "mpegts" in cmd
+
+
+class _FakeResponse:
+    def __init__(self, status_code: int, json_body: dict | None = None, text: str = "") -> None:
+        self.status_code = status_code
+        self._json_body = json_body or {}
+        self.text = text
+
+    def json(self) -> dict:
+        return self._json_body
+
+
+class _FakeStreamContext:
+    def __init__(self, response: _FakeResponse, calls: list[dict[str, object]]) -> None:
+        self._response = response
+        self._calls = calls
+
+    async def __aenter__(self):
+        return self._response
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        return None
+
+
+class _FakeAsyncClient:
+    def __init__(self, responses: list[_FakeResponse], calls: list[dict[str, object]]) -> None:
+        self._responses = responses
+        self._calls = calls
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    async def post(self, url: str, **kwargs):
+        self._calls.append({"method": "POST", "url": url, **kwargs})
+        return self._responses.pop(0)
+
+    def stream(self, method: str, url: str, **kwargs):
+        self._calls.append({"method": method, "url": url, **kwargs})
+        return _FakeStreamContext(self._responses.pop(0), self._calls)
+
+
+@pytest.mark.asyncio
+async def test_register_camera_posts_explicit_id_and_metadata(monkeypatch: pytest.MonkeyPatch):
+    relay = _relay_module()
+    calls: list[dict[str, object]] = []
+    responses = [_FakeResponse(201, {"id": "cam-123"})]
+    monkeypatch.setattr(
+        relay.httpx,
+        "AsyncClient",
+        lambda **kwargs: _FakeAsyncClient(list(responses), calls),
+    )
+
+    client = relay.HttpIngestRelay(
+        source="rtsp://camera/stream",
+        cloud_url="https://api.trio.ai/",
+        bearer_token="token-123",
+        camera_id="cam-123",
+    )
+
+    async with relay.httpx.AsyncClient() as http_client:
+        returned = await client._register_camera(http_client)
+
+    assert returned == "cam-123"
+    assert calls[0]["url"] == "https://api.trio.ai/api/cameras"
+    assert calls[0]["headers"]["Authorization"] == "Bearer token-123"
+    assert calls[0]["json"]["id"] == "cam-123"
+    assert calls[0]["json"]["metadata"]["ingest_transport"] == "http_mpegts"
+    assert calls[0]["json"]["metadata"]["managed_by"] == "trio-edge"
+
+
+@pytest.mark.asyncio
+async def test_register_camera_rejects_server_id_mismatch(monkeypatch: pytest.MonkeyPatch):
+    relay = _relay_module()
+    calls: list[dict[str, object]] = []
+    responses = [_FakeResponse(201, {"id": "server-generated"})]
+    monkeypatch.setattr(
+        relay.httpx,
+        "AsyncClient",
+        lambda **kwargs: _FakeAsyncClient(list(responses), calls),
+    )
+
+    client = relay.HttpIngestRelay(
+        source="video.mp4",
+        cloud_url="https://api.trio.ai",
+        bearer_token="token-123",
+        camera_id="synthetic-id",
+    )
+
+    async with relay.httpx.AsyncClient() as http_client:
+        with pytest.raises(relay.CameraRegistrationError, match="did not honor requested camera_id"):
+            await client._register_camera(http_client)
+
+
+@pytest.mark.asyncio
+async def test_run_uploads_video_mp2t_to_ingest_endpoint(monkeypatch: pytest.MonkeyPatch):
+    relay = _relay_module()
+    calls: list[dict[str, object]] = []
+    responses = [
+        _FakeResponse(201, {"id": "cam-123"}),
+        _FakeResponse(204, {}),
+    ]
+    monkeypatch.setattr(
+        relay.httpx,
+        "AsyncClient",
+        lambda **kwargs: _FakeAsyncClient(list(responses), calls),
+    )
+    monkeypatch.setattr(relay, "detect_source_type", lambda source: "file")
+
+    fake_stdout = type("Stdout", (), {})()
+    fake_stdout.read = AsyncMock(side_effect=[b"\x47" * 188, b""])
+    fake_stderr = type("Stderr", (), {})()
+    fake_stderr.read = AsyncMock(return_value=b"")
+    fake_process = type("Process", (), {})()
+    fake_process.stdout = fake_stdout
+    fake_process.stderr = fake_stderr
+    fake_process.returncode = 0
+    fake_process.wait = AsyncMock(return_value=0)
+    fake_process.terminate = lambda: None
+    fake_process.kill = lambda: None
+
+    monkeypatch.setattr(
+        relay.asyncio,
+        "create_subprocess_exec",
+        AsyncMock(return_value=fake_process),
+    )
+
+    client = relay.HttpIngestRelay(
+        source="video.mp4",
+        cloud_url="https://api.trio.ai",
+        bearer_token="token-123",
+        camera_id="cam-123",
+    )
+
+    await client.run()
+
+    ingest_call = calls[1]
+    assert ingest_call["url"] == "https://api.trio.ai/api/stream/ingest/cam-123"
+    assert ingest_call["headers"]["Authorization"] == "Bearer token-123"
+    assert ingest_call["headers"]["Content-Type"] == "video/mp2t"
