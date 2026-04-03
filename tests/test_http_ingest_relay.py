@@ -158,7 +158,7 @@ async def test_register_camera_posts_explicit_id_and_metadata(monkeypatch: pytes
 
 
 @pytest.mark.asyncio
-async def test_register_camera_rejects_server_id_mismatch(monkeypatch: pytest.MonkeyPatch):
+async def test_register_camera_accepts_server_generated_id(monkeypatch: pytest.MonkeyPatch):
     relay = _relay_module()
     calls: list[dict[str, object]] = []
     responses = [_FakeResponse(201, {"id": "server-generated"})]
@@ -176,16 +176,17 @@ async def test_register_camera_rejects_server_id_mismatch(monkeypatch: pytest.Mo
     )
 
     async with relay.httpx.AsyncClient() as http_client:
-        with pytest.raises(relay.CameraRegistrationError, match="did not honor requested camera_id"):
-            await client._register_camera(http_client)
+        returned = await client._register_camera(http_client)
+
+    assert returned == "server-generated"
 
 
 @pytest.mark.asyncio
-async def test_run_uploads_video_mp2t_to_ingest_endpoint(monkeypatch: pytest.MonkeyPatch):
+async def test_run_uploads_video_mp2t_to_server_returned_ingest_endpoint(monkeypatch: pytest.MonkeyPatch):
     relay = _relay_module()
     calls: list[dict[str, object]] = []
     responses = [
-        _FakeResponse(201, {"id": "cam-123"}),
+        _FakeResponse(201, {"id": "server-generated"}),
         _FakeResponse(204, {}),
     ]
     monkeypatch.setattr(
@@ -217,13 +218,13 @@ async def test_run_uploads_video_mp2t_to_ingest_endpoint(monkeypatch: pytest.Mon
         source="video.mp4",
         cloud_url="https://api.trio.ai",
         bearer_token="token-123",
-        camera_id="cam-123",
+        camera_id="preferred-id",
     )
 
     await client.run()
 
     ingest_call = calls[1]
-    assert ingest_call["url"] == "https://api.trio.ai/api/stream/ingest/cam-123"
+    assert ingest_call["url"] == "https://api.trio.ai/api/stream/ingest/server-generated"
     assert ingest_call["headers"]["Authorization"] == "Bearer token-123"
     assert ingest_call["headers"]["Content-Type"] == "video/mp2t"
 

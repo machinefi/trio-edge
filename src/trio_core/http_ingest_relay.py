@@ -201,11 +201,11 @@ class HttpIngestRelay:
         ]
 
     async def _register_camera(self, client: httpx.AsyncClient) -> str:
-        camera_id = self.resolved_camera_id()
+        requested_camera_id = self.resolved_camera_id()
         response = await client.post(
             _join_api_url(self.cloud_url, "/api/cameras"),
             headers=self._auth_headers(),
-            json=self._camera_payload(camera_id),
+            json=self._camera_payload(requested_camera_id),
         )
         if response.status_code not in (200, 201):
             raise CameraRegistrationError(
@@ -213,11 +213,17 @@ class HttpIngestRelay:
             )
 
         returned_id = response.json().get("id")
-        if returned_id != camera_id:
+        if not returned_id:
             raise CameraRegistrationError(
-                f"Cloud camera registration did not honor requested camera_id '{camera_id}'"
+                "Camera registration succeeded but response did not include a camera id"
             )
-        return camera_id
+        if returned_id != requested_camera_id:
+            logger.info(
+                "Cloud assigned camera id %s instead of requested %s",
+                returned_id,
+                requested_camera_id,
+            )
+        return returned_id
 
     async def _start_ffmpeg(self) -> None:
         if not shutil.which("ffmpeg"):
