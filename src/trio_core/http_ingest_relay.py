@@ -67,7 +67,7 @@ class HttpIngestRelay:
         return derive_camera_id(self.source, self.camera_id)
 
     def _auth_headers(self, *, content_type: str | None = None) -> dict[str, str]:
-        headers = {"Authorization": f"Bearer {self.bearer_token}"}
+        headers = {"X-API-Key": self.bearer_token}
         if content_type is not None:
             headers["Content-Type"] = content_type
         return headers
@@ -89,7 +89,7 @@ class HttpIngestRelay:
             "-method",
             "POST",
             "-headers",
-            f"Authorization: Bearer {self.bearer_token}\r\nContent-Type: video/mp2t\r\n",
+            f"X-API-Key: {self.bearer_token}\r\nContent-Type: video/mp2t\r\n",
             ingest_url,
         ]
 
