@@ -106,30 +106,72 @@ def _get_onvif_rtsp_uri(host: str, port: int, user: str, password: str) -> str |
     if not profiles:
         return None
 
-    profile = profiles[0]
-    uri = media.GetStreamUri(
-        {
-            "StreamSetup": {
-                "Stream": "RTP-Unicast",
-                "Transport": {"Protocol": "RTSP"},
-            },
-            "ProfileToken": profile.token,
-        }
-    )
-    return getattr(uri, "Uri", None)
+    for profile in profiles:
+        uri = media.GetStreamUri(
+            {
+                "StreamSetup": {
+                    "Stream": "RTP-Unicast",
+                    "Transport": {"Protocol": "RTSP"},
+                },
+                "ProfileToken": profile.token,
+            }
+        )
+        uri_str = getattr(uri, "Uri", None) or getattr(uri, "uri", None)
+        if uri_str:
+            return uri_str
+    return None
+
+
+_FALLBACK_RTSP_PATHS = [
+    "/stream1",
+    "/h264Preview_01_main",
+    "/live/ch00_0",
+    "/cam/realmonitor?channel=1&subtype=0",
+    "/ISAPI/Streaming/Channels/101",
+]
 
 
 def _build_fallback_rtsp_uri(
     host: str,
     user: str,
     password: str,
-    path: str = "/h264Preview_01_main",
-) -> str:
-    host_part = _format_host_for_netloc(host)
-    userinfo = quote(user, safe="")
-    if password or user:
-        userinfo = f"{userinfo}:{quote(password, safe='')}@"
-    return f"rtsp://{userinfo}{host_part}:554{path}"
+) -> str | None:
+    probe_result = _probe_rtsp_paths(host, 554, user, password)
+    if probe_result:
+        host_part = _format_host_for_netloc(host)
+        userinfo = quote(user, safe="")
+        if password or user:
+            userinfo = f"{userinfo}:{quote(password, safe='')}@"
+        return f"rtsp://{userinfo}{host_part}:554{probe_result}"
+    return None
+
+
+def _probe_rtsp_paths(
+    host: str, port: int, user: str, password: str, timeout: float = 2.0
+) -> str | None:
+    import socket
+
+    for path in _FALLBACK_RTSP_PATHS:
+        try:
+            sock = socket.create_connection((host, port), timeout=timeout)
+            req = (
+                f"DESCRIBE rtsp://{host}:{port}{path} RTSP/1.0\r\n"
+                f"CSeq: 1\r\n"
+                f"Authorization: Digest "
+                f'username="{user}", realm="", nonce="", uri="rtsp://{host}:{port}{path}"\r\n'
+                f"Accept: application/sdp\r\n"
+                f"\r\n"
+            )
+            sock.sendall(req.encode())
+            resp = sock.recv(4096).decode(errors="replace")
+            sock.close()
+            if "200 OK" in resp or "302" in resp:
+                return path
+            if "401" in resp:
+                return path
+        except Exception:
+            continue
+    return _FALLBACK_RTSP_PATHS[0]
 
 
 def _inject_rtsp_credentials(url: str, user: str, password: str) -> str:
