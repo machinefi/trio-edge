@@ -78,3 +78,19 @@ jobs:
 
       - name: Run tests
         run: python -m pytest tests/ -v --timeout=30 --cov=trio_core --cov-report=term-missing
+
+  test-linux-all:
+    if: always()
+    needs: test-linux
+    runs-on: ubuntu-latest
+    steps:
+      - if: ${{ needs.test-linux.result != 'success' }}
+        run: exit 1
+
+  test-macos-all:
+    if: always()
+    needs: test-macos
+    runs-on: ubuntu-latest
+    steps:
+      - if: ${{ needs.test-macos.result != 'success' }}
+        run: exit 1
