@@ -118,6 +118,6 @@ def test_cam_known_host_probes_for_onvif_port(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_cli_no_longer_imports_onvif_example():
-    cli_text = Path("src/trio_core/cli.py").read_text()
+    cli_text = Path("src/trio_core/cli/cam.py").read_text()
 
     assert "onvif_monitor" not in cli_text
