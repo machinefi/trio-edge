@@ -156,7 +156,7 @@ async def test_register_camera_posts_explicit_id_and_metadata(monkeypatch: pytes
 
     assert returned == "cam-123"
     assert calls[0]["url"] == "https://trio-relay.machinefi.com/api/cameras"
-    assert calls[0]["headers"]["Authorization"] == "Bearer token-123"
+    assert calls[0]["headers"]["X-API-Key"] == "token-123"
     assert calls[0]["json"]["id"] == "cam-123"
     assert calls[0]["json"]["metadata"]["ingest_transport"] == "http_mpegts"
     assert calls[0]["json"]["metadata"]["managed_by"] == "trio-edge"
@@ -234,7 +234,7 @@ async def test_run_launches_ffmpeg_with_ingest_url_and_auth(
     assert "POST" in cmd
     headers_idx = cmd.index("-headers")
     headers_val = cmd[headers_idx + 1]
-    assert "Bearer token-123" in headers_val
+    assert "X-API-Key: token-123" in headers_val
     assert "video/mp2t" in headers_val
 
 
