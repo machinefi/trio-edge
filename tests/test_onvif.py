@@ -169,6 +169,7 @@ def test_get_rtsp_uri_uses_fallback_with_caller_credentials(
         raise RuntimeError("camera rejected login")
 
     monkeypatch.setattr(onvif, "_get_onvif_rtsp_uri", raise_runtime_error)
+    monkeypatch.setattr(onvif, "_probe_rtsp_paths", lambda *a, **kw: "/h264Preview_01_main")
 
     rtsp = get_rtsp_uri("192.168.1.17", 8000, "alice", "p@ss")
 
