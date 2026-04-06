@@ -860,7 +860,7 @@ class MLXBackend(BaseBackend):
 class TransformersBackend(BaseBackend):
     """VLM backend using HuggingFace Transformers on CUDA / CPU.
 
-    Supports any VLM loadable via AutoModelForVision2Seq, including:
+    Supports any VLM loadable via AutoModelForImageTextToText, including:
     Qwen2.5-VL, Qwen3-VL, Qwen3.5, Gemma 3, SmolVLM, Phi-4, InternVL, etc.
     """
 

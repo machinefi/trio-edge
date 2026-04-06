@@ -239,7 +239,7 @@ async def test_run_launches_ffmpeg_with_ingest_url_and_auth(
 
 
 def test_relay_cli_constructs_http_ingest_relay(monkeypatch: pytest.MonkeyPatch):
-    import trio_core.cli as cli
+    import trio_core.cli.relay as cli_relay
 
     captured: dict[str, object] = {}
 
@@ -253,9 +253,9 @@ def test_relay_cli_constructs_http_ingest_relay(monkeypatch: pytest.MonkeyPatch)
         async def teardown(self) -> None:
             captured["teardown_called"] = True
 
-    monkeypatch.setattr(cli.shutil, "which", lambda name: "/usr/bin/ffmpeg")
-    monkeypatch.setattr(cli, "_setup_logging", lambda *args, **kwargs: None)
-    monkeypatch.setattr(cli, "HttpIngestRelay", FakeRelay, raising=False)
+    monkeypatch.setattr(cli_relay.shutil, "which", lambda name: "/usr/bin/ffmpeg")
+    monkeypatch.setattr(cli_relay, "_setup_logging", lambda *args, **kwargs: None)
+    monkeypatch.setattr(cli_relay, "HttpIngestRelay", FakeRelay, raising=False)
 
     result = runner.invoke(
         app,

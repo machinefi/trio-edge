@@ -28,7 +28,7 @@ jobs:
       - name: Format check
         run: ruff format --check .
 
-  test-linux:
+  run-test-linux:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs: lint
@@ -57,7 +57,7 @@ jobs:
           name: coverage-linux-${{ matrix.python-version }}
           path: coverage.xml
 
-  test-macos:
+  run-test-macos:
     runs-on: macos-14
     timeout-minutes: 5
     needs: lint
@@ -78,3 +78,19 @@ jobs:
 
       - name: Run tests
         run: python -m pytest tests/ -v --timeout=30 --cov=trio_core --cov-report=term-missing
+
+  test-linux:
+    if: always()
+    needs: run-test-linux
+    runs-on: ubuntu-latest
+    steps:
+      - if: ${{ needs.run-test-linux.result != 'success' }}
+        run: exit 1
+
+  test-macos:
+    if: always()
+    needs: run-test-macos
+    runs-on: ubuntu-latest
+    steps:
+      - if: ${{ needs.run-test-macos.result != 'success' }}
+        run: exit 1
