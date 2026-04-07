@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from trio_core.cli._shared import _die_load_error, _setup_logging, app
+from trio_core.cli._shared import _die_load_error, _require_gpu, _setup_logging, app
 
 
 @app.command()
@@ -14,14 +14,17 @@ def bench(
     runs: int = typer.Option(3, "--runs", "-n", help="Number of runs"),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ):
-    """Benchmark inference speed."""
+    """Benchmark inference speed and hardware performance."""
     _setup_logging(verbose)
     from trio_core.config import EngineConfig
     from trio_core.engine import TrioCore
 
     config = EngineConfig()
-    if model:
-        config.model = model
+    if not model:
+        model, detected_backend = _require_gpu()
+        if not backend:
+            backend = detected_backend
+    config.model = model
 
     engine = TrioCore(config, backend=backend)
     typer.echo(f"Loading {config.model}...")
