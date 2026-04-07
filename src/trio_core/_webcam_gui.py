@@ -40,10 +40,30 @@ import shutil
 import subprocess
 import threading
 import time
+from dataclasses import dataclass
 from datetime import datetime
 
 import cv2
 import numpy as np
+
+
+@dataclass
+class WebcamGUIConfig:
+    """Structured config accepted by main() when called programmatically."""
+
+    source: str = "0"
+    prompt: str | None = None
+    watch: str | None = None
+    model: str | None = None
+    backend: str | None = None
+    max_tokens: int = 80
+    interval: float = 3.0
+    frames: int = 4
+    resolution: int | None = None
+    no_sound: bool = False
+    count: bool = False
+    digest: bool = False
+    adapter: str | None = None
 
 
 def _parse_counts(text):
@@ -269,49 +289,59 @@ def draw_overlay(
     return frame
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Webcam GUI with live VLM analysis")
-    parser.add_argument(
-        "--source", "-s", default="0", help="RTSP URL, video file, or camera index (default: 0)"
-    )
-    parser.add_argument(
-        "--prompt", "-p", default=None, help="Question to ask the VLM (auto-set in watch mode)"
-    )
-    parser.add_argument(
-        "--watch",
-        "-w",
-        default=None,
-        help="Watch condition in natural language, e.g. 'someone is at the door'",
-    )
-    parser.add_argument("--model", "-m", default=None, help="Model name (auto-detected if omitted)")
-    parser.add_argument("--backend", "-b", default=None, help="Force backend: mlx or transformers")
-    parser.add_argument("--max-tokens", type=int, default=80, help="Max generation tokens")
-    parser.add_argument(
-        "--interval", type=float, default=3.0, help="Seconds between VLM analyses (default: 3.0)"
-    )
-    parser.add_argument(
-        "--frames",
-        type=int,
-        default=4,
-        help="Number of frames per analysis for temporal understanding (default: 4)",
-    )
-    parser.add_argument(
-        "--resolution",
-        type=int,
-        default=None,
-        help="Max resolution for inference (e.g. 480, 360). Lower = faster.",
-    )
-    parser.add_argument("--no-sound", action="store_true", help="Disable audio alerts")
-    parser.add_argument(
-        "--count", action="store_true", help="Count people, cars, and dogs (cumulative)"
-    )
-    parser.add_argument(
-        "--digest",
-        action="store_true",
-        help="Smart event timeline — logs activities with scene understanding",
-    )
-    parser.add_argument("--adapter", default=None, help="LoRA adapter directory path")
-    args = parser.parse_args()
+def main(config: WebcamGUIConfig | None = None):
+    if config is not None:
+        args = config
+    else:
+        parser = argparse.ArgumentParser(description="Webcam GUI with live VLM analysis")
+        parser.add_argument(
+            "--source", "-s", default="0", help="RTSP URL, video file, or camera index (default: 0)"
+        )
+        parser.add_argument(
+            "--prompt", "-p", default=None, help="Question to ask the VLM (auto-set in watch mode)"
+        )
+        parser.add_argument(
+            "--watch",
+            "-w",
+            default=None,
+            help="Watch condition in natural language, e.g. 'someone is at the door'",
+        )
+        parser.add_argument(
+            "--model", "-m", default=None, help="Model name (auto-detected if omitted)"
+        )
+        parser.add_argument(
+            "--backend", "-b", default=None, help="Force backend: mlx or transformers"
+        )
+        parser.add_argument("--max-tokens", type=int, default=80, help="Max generation tokens")
+        parser.add_argument(
+            "--interval",
+            type=float,
+            default=3.0,
+            help="Seconds between VLM analyses (default: 3.0)",
+        )
+        parser.add_argument(
+            "--frames",
+            type=int,
+            default=4,
+            help="Number of frames per analysis for temporal understanding (default: 4)",
+        )
+        parser.add_argument(
+            "--resolution",
+            type=int,
+            default=None,
+            help="Max resolution for inference (e.g. 480, 360). Lower = faster.",
+        )
+        parser.add_argument("--no-sound", action="store_true", help="Disable audio alerts")
+        parser.add_argument(
+            "--count", action="store_true", help="Count people, cars, and dogs (cumulative)"
+        )
+        parser.add_argument(
+            "--digest",
+            action="store_true",
+            help="Smart event timeline — logs activities with scene understanding",
+        )
+        parser.add_argument("--adapter", default=None, help="LoRA adapter directory path")
+        args = parser.parse_args()
 
     watch_mode = args.watch is not None
     count_mode = args.count
