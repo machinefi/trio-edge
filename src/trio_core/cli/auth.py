@@ -47,9 +47,7 @@ def add(
     # --password was explicitly provided with a value → literal
     # --password was explicitly provided as '' → trigger prompt
     # --password not provided at all → treat as None (no source)
-    password_was_explicit = (
-        ctx.get_parameter_source("password") is not ParameterSource.DEFAULT
-    )
+    password_was_explicit = ctx.get_parameter_source("password") is not ParameterSource.DEFAULT
 
     try:
         if password_was_explicit and password == "":
