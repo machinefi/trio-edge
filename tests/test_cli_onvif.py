@@ -105,7 +105,7 @@ def test_cam_auto_discovery_uses_shared_helpers(monkeypatch: pytest.MonkeyPatch)
 
 
 def test_cam_known_host_probes_for_onvif_port(monkeypatch: pytest.MonkeyPatch):
-    captured_gui = _mock_common_runtime(monkeypatch)
+    _mock_common_runtime(monkeypatch)
     rtsp_captured: dict[str, object] = {}
 
     def fake_get_rtsp_uri(host, port, user, password, fallback=True):
