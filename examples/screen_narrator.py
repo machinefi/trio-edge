@@ -12,7 +12,7 @@ Usage:
 
 Requires:
     pip install opencv-python pyobjc-framework-Quartz
-    pip install 'trio-core[mlx]' or pip install 'trio-core[transformers]'
+    pip install 'trio-core[mlx]' or pip install 'trio-core[cuda]'
 
 Controls:
     q / ESC — quit

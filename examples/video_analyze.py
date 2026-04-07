@@ -6,7 +6,7 @@ Usage:
     python examples/video_analyze.py video.mp4 --prompt "Count the people visible"
     python examples/video_analyze.py video.mp4 --no-dedup --fps 4
 
-Requires: pip install 'trio-core[mlx]' or pip install 'trio-core[transformers]'
+Requires:     pip install 'trio-core[mlx]' or pip install 'trio-core[cuda]'
 """
 
 import argparse

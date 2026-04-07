@@ -7,7 +7,7 @@ Usage:
     python examples/stream_monitor.py 0 --condition "Is the door open?" --webhook https://webhook.site/xxx
 
 Requires:
-    pip install 'trio-core[mlx]' or pip install 'trio-core[transformers]'
+    pip install 'trio-core[mlx]' or pip install 'trio-core[cuda]'
     yt-dlp (for YouTube URLs)
 """
 

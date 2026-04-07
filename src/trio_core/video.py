@@ -447,14 +447,14 @@ def _import_cv2():
     except ImportError:
         raise ImportError(
             "opencv-python is required for stream/webcam capture. "
-            "Install it: pip install 'trio-core[webcam]'"
+            "Install it: pip install 'trio-core[mlx]' or 'trio-core[cuda]'"
         )
 
 
 class StreamCapture:
     """Continuous frame capture from a live stream (RTSP, YouTube, webcam).
 
-    Requires opencv-python: pip install 'trio-core[webcam]'
+    Requires opencv-python: pip install 'trio-core[mlx]' or 'trio-core[cuda]'
 
     Two modes:
         buffer=False (default): Keep only the latest frame. Best for real-time

@@ -6,7 +6,7 @@ Usage:
     python examples/webcam_to_text.py --prompt "Is anyone wearing glasses?"
     python examples/webcam_to_text.py --stride 60 --prompt "What objects are on the desk?"
 
-Requires: pip install 'trio-core[mlx]' or pip install 'trio-core[transformers]'
+Requires:     pip install 'trio-core[mlx]' or pip install 'trio-core[cuda]'
 """
 
 import argparse
