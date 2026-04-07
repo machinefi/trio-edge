@@ -31,7 +31,7 @@ def test_relay_command_help_mentions_cloud_http_ingest():
     assert result.exit_code == 0
     assert "--cloud" in clean_output
     assert "--camera-id" in clean_output
-    assert "HTTP MPEG-TS" in clean_output
+    assert "Trio Cloud" in clean_output
 
 
 def test_relay_invalid_resolution_returns_error():
@@ -263,7 +263,7 @@ def test_relay_cli_constructs_http_ingest_relay(monkeypatch: pytest.MonkeyPatch)
             "relay",
             "--cloud",
             "https://trio-relay.machinefi.com",
-            "--camera",
+            "--source",
             "rtsp://admin:pass@192.168.1.10/stream",
             "--token",
             "token-123",
