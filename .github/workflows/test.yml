@@ -74,7 +74,7 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install -e '.[dev,claw,mlx]' pytest-timeout pytest-cov
+        run: pip install -e '.[dev,claw,mlx,mlx-vlm]' pytest-timeout pytest-cov
 
       - name: Run tests
         run: python -m pytest tests/ -v --timeout=30 --cov=trio_core --cov-report=term-missing
