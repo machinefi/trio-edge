@@ -97,11 +97,17 @@ def test_auth_add_updates_existing_camera_from_password_env(
     assert camera.password == "env-secret"
 
 
+def _strip_ansi(text: str) -> str:
+    import re
+
+    return re.sub(r"\x1b\[[0-9;]*m", "", text)
+
+
 def test_auth_add_requires_host_option():
     result = runner.invoke(app, ["auth", "add", "front-door", "--password", "secret"])
 
     assert result.exit_code == 2
-    assert "Missing option '--host'" in result.output
+    assert "Missing option '--host'" in _strip_ansi(result.output)
 
 
 def test_auth_add_rejects_invalid_camera_name(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
