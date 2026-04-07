@@ -4,6 +4,15 @@ from __future__ import annotations
 
 import typer
 
+import trio_core.cli.analyze  # noqa: F401
+import trio_core.cli.auth  # noqa: F401
+import trio_core.cli.bench  # noqa: F401
+import trio_core.cli.cam  # noqa: F401
+import trio_core.cli.claw  # noqa: F401
+import trio_core.cli.discover  # noqa: F401
+import trio_core.cli.doctor  # noqa: F401
+import trio_core.cli.relay  # noqa: F401
+import trio_core.cli.serve  # noqa: F401
 from trio_core.cli._shared import _JSONFormatter, _version_callback, app  # noqa: F401
 
 
@@ -20,15 +29,6 @@ def main(
 ) -> None:
     pass
 
-
-import trio_core.cli.analyze  # noqa: E402, F401
-import trio_core.cli.bench  # noqa: E402, F401
-import trio_core.cli.cam  # noqa: E402, F401
-import trio_core.cli.claw  # noqa: E402, F401
-import trio_core.cli.discover  # noqa: E402, F401
-import trio_core.cli.doctor  # noqa: E402, F401
-import trio_core.cli.relay  # noqa: E402, F401
-import trio_core.cli.serve  # noqa: E402, F401
 
 if __name__ == "__main__":
     app()

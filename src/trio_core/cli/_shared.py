@@ -49,10 +49,11 @@ def _setup_logging(verbose: bool = False, json_logs: bool = False) -> None:
             format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
             datefmt="%H:%M:%S",
         )
+    os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
+    os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+
     if not verbose:
-        os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
         logging.getLogger("httpx").setLevel(logging.WARNING)
-        os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
 
 
 def _version_callback(value: bool):
