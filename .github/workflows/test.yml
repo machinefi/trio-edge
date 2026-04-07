@@ -45,36 +45,7 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install -e '.[dev,claw,webcam]' pytest-timeout pytest-cov
-
-      - name: Run tests
-        run: python -m pytest tests/ -v --timeout=30 --cov=trio_core --cov-report=term-missing --cov-report=xml
-
-      - name: Upload coverage
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-linux-${{ matrix.python-version }}
-          path: coverage.xml
-
-  run-test-macos:
-    runs-on: macos-14
-    timeout-minutes: 5
-    needs: lint
-    strategy:
-      matrix:
-        python-version: ["3.11", "3.12"]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-          cache: pip
-
-      - name: Install dependencies
-        run: pip install -e '.[dev,claw,webcam]' pytest-timeout pytest-cov
+        run: pip install -e '.[dev,claw,mlx]' pytest-timeout pytest-cov
 
       - name: Run tests
         run: python -m pytest tests/ -v --timeout=30 --cov=trio_core --cov-report=term-missing
