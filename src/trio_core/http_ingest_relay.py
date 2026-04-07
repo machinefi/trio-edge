@@ -7,8 +7,10 @@ import hashlib
 import logging
 import platform
 import shutil
+import sys
+import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import httpx
@@ -59,6 +61,8 @@ class HttpIngestRelay:
     camera_id: str | None = None
     resolution: tuple[int, int] | None = None
     framerate: int = 30
+    verbose: bool = False
+    _recent_errors: list[str] = field(default_factory=list, repr=False)
 
     def __post_init__(self) -> None:
         self._process: asyncio.subprocess.Process | None = None
@@ -93,18 +97,30 @@ class HttpIngestRelay:
             ingest_url,
         ]
 
+    def _base_ffmpeg_args(self) -> list[str]:
+        level = "info" if self.verbose else "error"
+        return [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            level,
+            "-nostdin",
+            "-stats_period",
+            "5",
+            "-progress",
+            "pipe:2",
+        ]
+
     def _build_ffmpeg_cmd(self, output_args: list[str]) -> list[str]:
         source_type = detect_source_type(self.source)
         fps = str(self.framerate)
+        base = self._base_ffmpeg_args()
 
         if source_type == "rtsp":
             from trio_core._rtsp_proxy import ensure_rtsp_url
 
             return [
-                "ffmpeg",
-                "-hide_banner",
-                "-loglevel",
-                "error",
+                *base,
                 "-rtsp_transport",
                 "tcp",
                 "-i",
@@ -122,11 +138,10 @@ class HttpIngestRelay:
             if self.resolution:
                 resolution_args = ["-video_size", f"{self.resolution[0]}x{self.resolution[1]}"]
 
-            common = ["ffmpeg", "-hide_banner", "-loglevel", "error"]
             system = platform.system()
             if system == "Linux":
                 return [
-                    *common,
+                    *base,
                     "-f",
                     "v4l2",
                     *resolution_args,
@@ -151,7 +166,7 @@ class HttpIngestRelay:
                 ]
             if system == "Darwin":
                 return [
-                    *common,
+                    *base,
                     "-f",
                     "avfoundation",
                     "-pixel_format",
@@ -182,10 +197,7 @@ class HttpIngestRelay:
             raise SourceError(f"Unsupported source type: {source_type} for '{self.source}'")
 
         return [
-            "ffmpeg",
-            "-hide_banner",
-            "-loglevel",
-            "error",
+            *base,
             "-re",
             "-stream_loop",
             "-1",
@@ -244,6 +256,65 @@ class HttpIngestRelay:
             stderr=asyncio.subprocess.PIPE,
         )
 
+    async def _monitor_progress(self) -> None:
+        assert self._process is not None
+        assert self._process.stderr is not None
+
+        prev_total_size = 0
+        prev_time = time.monotonic()
+        block: dict[str, str] = {}
+
+        while True:
+            line_bytes = await self._process.stderr.readline()
+            if not line_bytes:
+                break
+            line = line_bytes.decode(errors="replace").strip()
+            if not line:
+                continue
+
+            if self.verbose:
+                sys.stderr.write(line + "\n")
+                sys.stderr.flush()
+                continue
+
+            if "=" in line:
+                key, _, value = line.partition("=")
+                key = key.strip()
+                value = value.strip()
+                block[key] = value
+
+                if key == "progress" and value in ("continue", "end"):
+                    self._emit_progress(block, prev_total_size, prev_time)
+                    total_size_str = block.get("total_size", "0")
+                    prev_total_size = (
+                        int(total_size_str) if total_size_str not in ("", "N/A") else 0
+                    )
+                    prev_time = time.monotonic()
+                    block = {}
+            else:
+                self._recent_errors.append(line)
+                if len(self._recent_errors) > 20:
+                    self._recent_errors = self._recent_errors[-20:]
+                logger.warning("ffmpeg: %s", line)
+
+    def _emit_progress(self, block: dict[str, str], prev_total_size: int, prev_time: float) -> None:
+        total_size_str = block.get("total_size", "0")
+        total_size = int(total_size_str) if total_size_str not in ("", "N/A") else 0
+        speed = block.get("speed", "N/A")
+
+        now = time.monotonic()
+        elapsed = now - prev_time
+        size_delta = total_size - prev_total_size
+        rate_bps = size_delta / elapsed if elapsed > 0 else 0
+        rate_mbps = rate_bps * 8 / 1_000_000
+        total_mb = total_size / (1024 * 1024)
+
+        ts = time.strftime("%H:%M:%S")
+        sys.stdout.write(
+            f"[{ts}] \u2191 {rate_mbps:.1f} Mbps | {total_mb:.1f} MB sent | {speed} speed\n"
+        )
+        sys.stdout.flush()
+
     async def run(self) -> None:
         async with httpx.AsyncClient(timeout=None, follow_redirects=True) as client:
             camera_id = await self._register_camera(client)
@@ -251,17 +322,21 @@ class HttpIngestRelay:
         ingest_url = _join_api_url(self.cloud_url, f"/api/stream/ingest/{camera_id}")
         output_args = self._http_output_args(ingest_url)
         await self._start_ffmpeg(output_args)
+        assert self._process is not None
+
+        monitor_task = asyncio.create_task(self._monitor_progress())
         try:
-            assert self._process is not None
             return_code = await self._process.wait()
             if return_code != 0:
-                stderr = b""
-                if self._process.stderr is not None:
-                    stderr = await self._process.stderr.read()
-                raise SourceError(
-                    f"ffmpeg exited (code {return_code}): {stderr.decode(errors='replace')[:200]}"
-                )
+                recent = self._recent_errors[-5:]
+                detail = "\n  ".join(recent) if recent else f"exit code {return_code}"
+                raise SourceError(f"ffmpeg exited (code {return_code}):\n  {detail}")
         finally:
+            monitor_task.cancel()
+            try:
+                await monitor_task
+            except asyncio.CancelledError:
+                pass
             await self.teardown()
 
     async def teardown(self) -> None:

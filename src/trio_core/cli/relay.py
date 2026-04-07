@@ -39,15 +39,12 @@ def relay(
         None, "--resolution", "-r", help="Video resolution WxH (e.g. 1280x720)"
     ),
     fps: int = typer.Option(30, "--fps", help="Target frame rate"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Debug logging"),
-    json_logs: bool = typer.Option(
-        False, "--json-logs", help="Structured JSON logging (or set TRIO_LOG_JSON=1)"
-    ),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show raw FFmpeg stderr output"),
 ):
     """Relay video from a webcam, RTSP camera, or file to Trio Cloud via HTTP MPEG-TS."""
     import asyncio
 
-    _setup_logging(verbose, json_logs=json_logs)
+    _setup_logging(verbose)
 
     resolution_tuple = None
     if resolution:
@@ -83,6 +80,7 @@ def relay(
         camera_id=camera_id,
         resolution=resolution_tuple,
         framerate=fps,
+        verbose=verbose,
     )
 
     typer.echo(f"Relay: {actual_source} -> {cloud}")

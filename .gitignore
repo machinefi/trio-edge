@@ -71,5 +71,6 @@ credentials*
 .env.local
 
 .codex
+.sisyphus
 uv.lock
 .hypothesis
