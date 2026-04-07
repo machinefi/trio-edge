@@ -14,7 +14,7 @@ def serve(
         False, "--json-logs", help="Structured JSON logging (or set TRIO_LOG_JSON=1)"
     ),
 ):
-    """Start the inference server (YOLO + VLM)."""
+    """Start the local inference server and API."""
     _setup_logging(verbose, json_logs=json_logs)
     from trio_core.api.inference_server import main as run_server
 
