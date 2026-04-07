@@ -119,14 +119,29 @@ class HttpIngestRelay:
         if source_type == "rtsp":
             from trio_core._rtsp_proxy import ensure_rtsp_url
 
+            vf_parts: list[str] = []
+            if self.resolution:
+                vf_parts.append(f"scale={self.resolution[0]}:{self.resolution[1]}")
+            vf_parts.append(f"fps={self.framerate}")
+
             return [
                 *base,
                 "-rtsp_transport",
                 "tcp",
                 "-i",
                 ensure_rtsp_url(self.source),
+                "-vf",
+                ",".join(vf_parts),
                 "-c:v",
-                "copy",
+                "libx264",
+                "-preset",
+                "ultrafast",
+                "-tune",
+                "zerolatency",
+                "-profile:v",
+                "baseline",
+                "-g",
+                str(self.framerate * 2),
                 "-an",
                 "-f",
                 "mpegts",

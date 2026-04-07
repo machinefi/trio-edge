@@ -36,9 +36,9 @@ def relay(
         None, "--token", "-t", help="Bearer token for Trio Cloud authentication"
     ),
     resolution: str | None = typer.Option(
-        None, "--resolution", "-r", help="Video resolution WxH (e.g. 1280x720)"
+        "1280x720", "--resolution", "-r", help="Video resolution WxH (e.g. 1280x720)"
     ),
-    fps: int = typer.Option(30, "--fps", help="Target frame rate"),
+    fps: int = typer.Option(1, "--fps", help="Target frame rate"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show raw FFmpeg stderr output"),
 ):
     """Relay video from a webcam, RTSP camera, or file to Trio Cloud via HTTP MPEG-TS."""
@@ -84,7 +84,7 @@ def relay(
     )
 
     typer.echo(f"Relay: {actual_source} -> {cloud}")
-    typer.echo(f"Transport: HTTP MPEG-TS | FPS: {fps} | Resolution: {resolution or 'native'}")
+    typer.echo(f"Transport: HTTP MPEG-TS | FPS: {fps} | Resolution: {resolution}")
     typer.echo("Press Ctrl+C to stop.\n")
 
     async def _run() -> None:
