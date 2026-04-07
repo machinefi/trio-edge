@@ -62,17 +62,6 @@ class TestRecommendModel:
         info = DeviceInfo("transformers", "CPU", "cpu", 0, 0)
         model = recommend_model(info)
         assert "2B" in model
-
-    def test_cuda_low_memory(self):
-        info = DeviceInfo("transformers", "RTX 3060", "cuda", 12.0, 0)
-        model = recommend_model(info)
-        assert "2B" in model
-        assert "cyankiwi" in model
-
-    def test_cpu_fallback(self):
-        info = DeviceInfo("transformers", "CPU", "cpu", 0, 0)
-        model = recommend_model(info)
-        assert "2B" in model
         assert "cyankiwi" in model
 
     def test_cuda_low_memory(self):
