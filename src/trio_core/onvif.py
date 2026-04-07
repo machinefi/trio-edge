@@ -36,8 +36,15 @@ class CameraInfo:
 
 
 def discover_cameras(timeout: int = 5) -> list[CameraInfo]:
-    """Discover ONVIF cameras on the local network via WS-Discovery probe."""
-    return _discover_cameras_probe(timeout)
+    """Discover ONVIF cameras on the local network.
+
+    First tries WS-Discovery (UDP multicast). If that finds nothing, falls back
+    to a direct TCP subnet scan probing common ONVIF ports.
+    """
+    cameras = _discover_cameras_probe(timeout)
+    if cameras:
+        return cameras
+    return _discover_cameras_subnet_scan(timeout)
 
 
 def get_rtsp_uri(
@@ -60,6 +67,103 @@ def get_rtsp_uri(
     if fallback:
         return _build_fallback_rtsp_uri(host, user, password)
     return None
+
+
+_ONVIF_PORTS = [2020, 8000, 80, 8080]
+
+
+def _get_local_subnet() -> str | None:
+    """Return the local subnet prefix (e.g. '192.168.1') or None."""
+    import socket
+
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ".".join(ip.split(".")[:3])
+    except Exception:
+        return None
+
+
+def _probe_onvif_host(ip: str, timeout: float = 1.0) -> CameraInfo | None:
+    """Check if a host has an ONVIF service on common ports via TCP connect."""
+    import socket
+
+    # First check if RTSP port 554 is open — real cameras have this
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(timeout)
+        if s.connect_ex((ip, 554)) != 0:
+            s.close()
+            return None
+        s.close()
+    except Exception:
+        return None
+
+    for port in _ONVIF_PORTS:
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(timeout)
+            result = s.connect_ex((ip, port))
+            s.close()
+            if result != 0:
+                continue
+            rtsp_path = _probe_rtsp_paths(ip, 554, "", "", timeout=timeout)
+            if rtsp_path is None:
+                continue
+            return CameraInfo(
+                name=f"Camera @ {ip}",
+                ip=ip,
+                port=port,
+                onvif_url=f"http://{ip}:{port}/onvif/device_service",
+                rtsp_url=f"rtsp://{ip}:554{rtsp_path}",
+            )
+        except Exception:
+            continue
+    return None
+
+
+def _discover_cameras_subnet_scan(timeout: int) -> list[CameraInfo]:
+    """Scan the local subnet for ONVIF cameras via direct TCP probe."""
+    import concurrent.futures
+
+    subnet = _get_local_subnet()
+    if not subnet:
+        return []
+
+    cameras: list[CameraInfo] = []
+    per_host_timeout = min(1.0, timeout / 10)
+    ips = [f"{subnet}.{i}" for i in range(1, 255)]
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=50) as executor:
+        futures = {executor.submit(_probe_onvif_host, ip, per_host_timeout): ip for ip in ips}
+        try:
+            for future in concurrent.futures.as_completed(futures, timeout=max(timeout, 15)):
+                try:
+                    result = future.result()
+                    if result is not None:
+                        cameras.append(result)
+                except Exception:
+                    continue
+        except TimeoutError:
+            pass
+
+    # Filter out the local machine
+    local_subnet = _get_local_subnet()
+    if local_subnet:
+        import socket
+
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            local_ip = s.getsockname()[0]
+            s.close()
+            cameras = [c for c in cameras if c.ip != local_ip]
+        except Exception:
+            pass
+
+    return cameras
 
 
 def _discover_cameras_probe(timeout: int) -> list[CameraInfo]:
