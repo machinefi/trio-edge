@@ -61,6 +61,10 @@ def test_cam_auto_discovery_uses_shared_helpers(monkeypatch: pytest.MonkeyPatch)
         ),
     )
     monkeypatch.setattr("trio_core._rtsp_proxy.ensure_rtsp_url", lambda url: url)
+    monkeypatch.setattr(
+        "trio_core.cli.cam._require_gpu",
+        lambda: ("test-model", "test-backend"),
+    )
 
     captured = {}
     webcam_gui = types.ModuleType("trio_core._webcam_gui")
@@ -80,6 +84,18 @@ def test_cam_auto_discovery_uses_shared_helpers(monkeypatch: pytest.MonkeyPatch)
 
 def test_cam_known_host_probes_for_onvif_port(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(
+        "trio_core.cli.cam._require_gpu",
+        lambda: ("test-model", "test-backend"),
+    )
+
+    captured = {}
+
+    def fake_get_rtsp_uri(host, port, user, password, fallback=True):
+        captured["host"] = host
+        captured["port"] = port
+        return "rtsp://admin:secret@192.168.1.42:554/stream1"
+
+    monkeypatch.setattr(
         "trio_core.onvif.discover_cameras",
         lambda timeout=5: [
             CameraInfo(
@@ -90,14 +106,6 @@ def test_cam_known_host_probes_for_onvif_port(monkeypatch: pytest.MonkeyPatch):
             )
         ],
     )
-
-    captured = {}
-
-    def fake_get_rtsp_uri(host, port, user, password, fallback=True):
-        captured["host"] = host
-        captured["port"] = port
-        return "rtsp://admin:secret@192.168.1.42:554/stream1"
-
     monkeypatch.setattr("trio_core.onvif.get_rtsp_uri", fake_get_rtsp_uri)
     monkeypatch.setattr("trio_core._rtsp_proxy.ensure_rtsp_url", lambda url: url)
 

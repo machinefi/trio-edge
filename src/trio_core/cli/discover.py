@@ -9,7 +9,7 @@ from trio_core.cli._shared import app
 def discover(
     timeout: int = typer.Option(5, "--timeout", "-t", help="Discovery timeout in seconds"),
 ):
-    """Discover cameras on your network via ONVIF."""
+    """Scan the network for ONVIF-compatible cameras."""
     from trio_core.onvif import discover_cameras
 
     typer.echo("Searching for cameras on your network (ONVIF)...\n")

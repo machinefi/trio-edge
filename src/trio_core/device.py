@@ -186,14 +186,12 @@ def recommend_model(info: DeviceInfo) -> str:
     """Recommend a default model based on detected hardware."""
     if info.backend == "mlx":
         if info.memory_gb >= 32:
-            return "mlx-community/Qwen2.5-VL-7B-Instruct-4bit"
-        return "mlx-community/Qwen2.5-VL-3B-Instruct-4bit"
+            return "mlx-community/Qwen3-VL-8B-Instruct-4bit"
+        return "mlx-community/Qwen3.5-2B-MLX-4bit"
 
-    # Transformers (CUDA or CPU)
     if info.accelerator == "cuda":
         if info.memory_gb >= 16:
-            return "Qwen/Qwen2.5-VL-7B-Instruct"
-        return "Qwen/Qwen2.5-VL-3B-Instruct"
+            return "Qwen/Qwen3-VL-8B-Instruct-AWQ"
+        return "cyankiwi/Qwen3.5-2B-AWQ-4bit"
 
-    # CPU — smallest model
-    return "Qwen/Qwen2.5-VL-3B-Instruct"
+    return "cyankiwi/Qwen3.5-2B-AWQ-4bit"

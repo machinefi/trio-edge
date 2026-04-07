@@ -4,7 +4,7 @@ import json
 
 import typer
 
-from trio_core.cli._shared import _die_load_error, _setup_logging, app
+from trio_core.cli._shared import _die_load_error, _require_gpu, _setup_logging, app
 
 
 @app.command()
@@ -24,14 +24,17 @@ def analyze(
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output with metrics"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Debug logging"),
 ):
-    """Analyze an image or video."""
+    """Run a natural language query against an image or video file."""
     _setup_logging(verbose)
     from trio_core.config import EngineConfig
     from trio_core.engine import TrioCore
 
     config = EngineConfig()
-    if model:
-        config.model = model
+    if not model:
+        model, detected_backend = _require_gpu()
+        if not backend:
+            backend = detected_backend
+    config.model = model
     if adapter:
         config.adapter_path = adapter
 

@@ -73,10 +73,10 @@ trio doctor
 trio discover
 
 # Start local monitoring (Apple Silicon default)
-trio cam --rtsp rtsp://admin:pass@192.168.1.100/stream
+trio cam --source rtsp://admin:pass@192.168.1.100/stream
 
 # Or relay to Trio Cloud
-trio relay --camera rtsp://admin:pass@192.168.1.100/stream \
+trio relay --source rtsp://admin:pass@192.168.1.100/stream \
            --token YOUR_TOKEN
 ```
 
@@ -89,7 +89,7 @@ trio relay --camera rtsp://admin:pass@192.168.1.100/stream \
 Trio Core takes an RTSP stream, webcam, or video file, registers a camera with Trio Cloud, and pushes HTTP MPEG-TS to the cloud ingest endpoint. All AI processing happens in the cloud.
 
 ```bash
-trio relay --camera rtsp://admin:pass@192.168.1.100/stream \
+trio relay --source rtsp://admin:pass@192.168.1.100/stream \
            --token YOUR_TOKEN
 ```
 
@@ -101,13 +101,13 @@ Run everything locally on your own machine. No cloud needed, no subscription.
 
 ```bash
 # Default local monitor (Apple Silicon)
-trio cam --rtsp rtsp://admin:pass@192.168.1.100/stream
+trio cam --source rtsp://admin:pass@192.168.1.100/stream
 
 # Count objects
-trio cam --rtsp rtsp://... --count
+trio cam --source rtsp://... --count
 
 # Smart event digest
-trio cam --rtsp rtsp://... --digest
+trio cam --source rtsp://... --digest
 
 # Analyze a saved image or video
 trio analyze photo.jpg -q "What's here?"
@@ -135,7 +135,7 @@ trio discover
 If you use Tailscale, Trio Core automatically detects when the macOS network extension blocks camera access and creates a transparent TCP proxy:
 
 ```
-trio cam --rtsp rtsp://admin:pass@192.168.1.100/stream
+trio cam --source rtsp://admin:pass@192.168.1.100/stream
 # Tailscale detected — starting TCP proxy via system Python...
 # Proxy: 127.0.0.1:15554 → 192.168.1.100:554
 # (continues normally, user sees no difference)
@@ -146,7 +146,7 @@ trio cam --rtsp rtsp://admin:pass@192.168.1.100/stream
 Built-in YOLOv10n (ONNX, 9MB) with tiled detection for accuracy:
 
 ```bash
-trio cam --rtsp rtsp://... --count
+trio cam --source rtsp://... --count
 # [14:23:46] People: 3, Vehicles: 2
 # [14:24:12] People: 5, Vehicles: 2 (+2 people)
 ```
@@ -157,10 +157,10 @@ Supports multiple local AI configurations:
 
 | Mode | Command | Notes |
 |------|---------|-------|
-| Default local monitor | `trio cam --rtsp ...` | Uses the built-in default model for live monitoring |
-| Custom local model | `trio cam --rtsp ... --model <MODEL_ID>` | Override the Hugging Face model ID |
+| Default local monitor | `trio cam --source rtsp://...` | Uses the built-in default model for live monitoring |
+| Custom local model | `trio cam --source rtsp://... --model <MODEL_ID>` | Override the Hugging Face model ID |
 | Transformers backend | `trio analyze photo.jpg --backend transformers --model Qwen/Qwen2.5-VL-3B-Instruct` | CUDA or CPU |
-| Adapter / fine-tune | `trio cam --rtsp ... --adapter ./adapter_dir` | Load a LoRA adapter directory |
+| Adapter / fine-tune | `trio cam --source rtsp://... --adapter ./adapter_dir` | Load a LoRA adapter directory |
 
 ---
 
@@ -168,17 +168,16 @@ Supports multiple local AI configurations:
 
 ```bash
 trio discover                                 # Find cameras via ONVIF
-trio cam --rtsp rtsp://... --count            # Live monitor + object counts
+trio cam --source rtsp://... --count            # Live monitor + object counts
 trio cam --host 192.168.1.100 -p pass         # Resolve RTSP via ONVIF + monitor
-trio cam --rtsp rtsp://... --digest           # Event timeline with scene understanding
-trio relay --camera rtsp://... --token ...    # Relay to Trio Cloud
+trio cam --source 0 -w "person at the door"   # Local webcam monitor with alerts
+trio cam --source rtsp://... --digest           # Event timeline with scene understanding
+trio relay --source rtsp://... --token ...    # Relay to Trio Cloud
 trio relay --discover -p pass --token ...     # Discover a camera and relay it
 trio serve                                    # Start inference API server
 trio analyze photo.jpg -q "What's here?"      # Analyze a single image or video
-trio webcam -w "person at the door"           # Webcam monitor with alerts
-trio smoke                                    # End-to-end smoke test
-trio doctor                                   # Diagnose setup issues
-trio device                                   # Show hardware info
+trio bench video.mp4                          # Benchmark inference speed
+trio doctor                                   # System check, hardware info, model rec
 trio claw --camera rtsp://... --gateway ws://127.0.0.1:18789  # OpenClaw node
 ```
 
@@ -245,14 +244,16 @@ print(result.text)
 
 ## Supported Models
 
-### Tier 1 — Full optimization (native loading + visual token compression + KV reuse)
+### Default models (auto-selected by hardware)
 
-| Model | Params | 4-bit VRAM | Best for |
+| Hardware | Model | Quantization | VRAM |
 |---|---|---|---|
-| Qwen3-VL-8B | 8B | ~5GB | **Recommended** — best accuracy |
-| Qwen2.5-VL-3B | 3B | ~2GB | Fast, lightweight |
-| Qwen3.5 | 0.8-9B | 0.5-5G | Flexible range |
-| InternVL3 | 1-2B | 1-1.6G | Tiny devices |
+| Apple Silicon (≥32GB) | Qwen3-VL-8B | MLX 4-bit | ~5GB |
+| Apple Silicon (<32GB) | Qwen3.5-2B | MLX 4-bit | ~2GB |
+| NVIDIA GPU (≥16GB) | Qwen3-VL-8B | AWQ 4-bit | ~5GB |
+| NVIDIA GPU (<16GB) | Qwen3.5-2B | AWQ 4-bit | ~2GB |
+
+> No GPU? trio-core requires Apple Silicon or NVIDIA GPU. Run `trio doctor` to check.
 
 ### Tier 2 — Inference only (via mlx-vlm)
 
@@ -313,7 +314,7 @@ See [`src/trio_core/config.py`](src/trio_core/config.py) for all options.
 | Problem | Solution |
 |---|---|
 | `trio discover` finds no cameras | Make sure cameras are on the same subnet. Some routers block multicast. |
-| Camera found but can't connect | Check username/password. Try `trio cam --rtsp rtsp://admin:pass@IP/stream` directly. |
+| Camera found but can't connect | Check username/password. Try `trio cam --source rtsp://admin:pass@IP/stream` directly. |
 | Tailscale blocking camera access | Trio Core auto-detects this and creates a proxy. If it doesn't work, try `trio doctor`. |
 | First run slow | Model download (~2-5 GB). Subsequent runs start instantly. |
 | Out of memory | Use a smaller model: `TRIO_MODEL=mlx-community/Qwen2.5-VL-3B-Instruct-4bit` |

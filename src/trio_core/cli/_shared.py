@@ -8,8 +8,9 @@ import typer
 
 app = typer.Typer(
     name="trio",
-    help="Local VLM inference engine — analyze images and video on your Mac",
+    help="Local VLM inference engine for image and video analysis",
     no_args_is_help=True,
+    context_settings={"help_option_names": ["--help", "-h"]},
 )
 
 
@@ -60,6 +61,21 @@ def _version_callback(value: bool):
 
         typer.echo(f"trio-core {__version__}")
         raise typer.Exit()
+
+
+def _require_gpu() -> tuple[str, str]:
+    """Detect hardware and return (model, backend). Exit on CPU-only."""
+    from trio_core.device import detect_device, recommend_model
+
+    info = detect_device()
+    model = recommend_model(info)
+
+    if info.accelerator == "cpu":
+        typer.echo("✗ No GPU detected. trio-core requires Apple Silicon or NVIDIA GPU.", err=True)
+        typer.echo("  Run: trio doctor", err=True)
+        raise typer.Exit(1)
+
+    return model, info.backend
 
 
 def _die_load_error(e: Exception, model: str) -> None:

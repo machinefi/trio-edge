@@ -9,7 +9,7 @@ from trio_core.cli._shared import app
 
 @app.command()
 def doctor():
-    """Check that everything is ready to run."""
+    """Verify dependencies, hardware, and model readiness."""
     from trio_core import __version__
     from trio_core.device import detect_device, recommend_model
 
@@ -22,6 +22,8 @@ def doctor():
     info = detect_device()
     model = recommend_model(info)
     typer.echo(f"Hardware:  {info.device_name} ({info.memory_gb:.0f}GB, {info.accelerator})")
+    if info.compute_units:
+        typer.echo(f"GPU cores: {info.compute_units}")
     typer.echo(f"Backend:   {info.backend}")
     typer.echo(f"Model:     {model}")
 
@@ -49,7 +51,7 @@ def doctor():
             cuda = torch.cuda.is_available()
             typer.echo(f"torch:     ✓ {torch.__version__} (CUDA={cuda})")
         except ImportError:
-            typer.echo("torch:     ✗ not installed → pip install 'trio-core[transformers]'")
+            typer.echo("torch:     ✗ not installed → pip install 'trio-core[cuda]'")
             all_ok = False
 
     # Optional deps
@@ -59,7 +61,7 @@ def doctor():
         typer.echo(f"opencv:    ✓ {cv2.__version__} (webcam support)")
     except ImportError:
         typer.echo(
-            "opencv:    - not installed (optional, for webcam: pip install 'trio-core[webcam]')"
+            "opencv:    - not installed (optional, for webcam: pip install 'trio-core[mlx]' or 'trio-core[cuda]')"
         )
 
     try:

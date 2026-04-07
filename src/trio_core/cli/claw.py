@@ -49,7 +49,7 @@ def claw(
         None, "--config", help="YAML config file (alternative to CLI flags)"
     ),
 ):
-    """Connect trio-core as an OpenClaw node (replaces TrioClaw).
+    """Connect as an OpenClaw node for distributed inference.
 
     First-time setup:
         trio claw --pair --gateway ws://host:18789 --token <gateway-secret>

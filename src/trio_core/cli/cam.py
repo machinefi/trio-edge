@@ -2,22 +2,16 @@ from __future__ import annotations
 
 import typer
 
-from trio_core.cli._shared import app
+from trio_core.cli._shared import _require_gpu, app
 
 
-def _resolve_rtsp_url(
-    rtsp: str | None, host: str | None, port: int | None, user: str | None, password: str
-) -> str:
-    """Helper to resolve RTSP URL via explicit config or interactive discovery."""
+def _resolve_rtsp_url(host: str | None, port: int | None, user: str | None, password: str) -> str:
+    """Helper to resolve RTSP URL via ONVIF discovery."""
     import sys
 
     from trio_core._rtsp_proxy import ensure_rtsp_url
     from trio_core.onvif import discover_cameras, get_rtsp_uri
 
-    if rtsp:
-        return ensure_rtsp_url(rtsp)
-
-    # Use defaults if not provided via CLI
     user = user or "admin"
     port = port or 8000
 
@@ -96,11 +90,13 @@ def _resolve_rtsp_url(
 
 @app.command()
 def cam(
-    host: str = typer.Option(None, "--host", "-h", help="Camera IP address (skip discovery)"),
+    source: str = typer.Option(
+        None, "--source", "-s", help="Camera index, RTSP URL, or video file (skip ONVIF)"
+    ),
+    host: str = typer.Option(None, "--host", help="Camera IP address (skip discovery)"),
     port: int = typer.Option(None, "--port", help="ONVIF port"),
     user: str = typer.Option(None, "--user", "-u", help="Camera username"),
     password: str = typer.Option("", "--password", "-p", help="Camera password"),
-    rtsp: str = typer.Option(None, "--rtsp", help="Direct RTSP URL (skip discovery + ONVIF)"),
     watch: str = typer.Option(None, "--watch", "-w", help="Watch condition in natural language"),
     model: str = typer.Option(None, "--model", "-m", help="Override model"),
     backend: str = typer.Option(None, "--backend", "-b", help="Force backend: mlx, transformers"),
@@ -115,17 +111,18 @@ def cam(
     ),
     adapter: str = typer.Option(None, "--adapter", "-a", help="LoRA adapter directory path"),
 ):
-    """IP camera monitor with ONVIF discovery and AI analysis.
+    """Monitor a live camera feed with AI-powered analysis.
 
-    Auto-discovers ONVIF cameras on the LAN, connects via RTSP, and runs
-    live VLM analysis with a GUI preview window. Works through Tailscale.
+    Connects to cameras via ONVIF/RTSP or a local webcam, then runs live
+    VLM analysis with a GUI preview window. Works through Tailscale.
 
     Examples:
-        trio cam                                               # interactive discovery & select
-        trio cam --host 192.168.1.100 -p pass                  # known IP
-        trio cam --rtsp "rtsp://admin:pass@IP:554/stream"      # direct RTSP
-        trio cam -w "someone at the door" --host 192.168.1.100 -p pass
-        trio cam --rtsp "rtsp://..." --count                   # count objects
+        trio cam                                               # interactive ONVIF discovery
+        trio cam --host 192.168.1.100 -p pass                  # known camera IP
+        trio cam --source rtsp://admin:pass@IP:554/stream      # direct RTSP
+        trio cam --source 0                                    # local webcam
+        trio cam -w "someone at the door" --source 0           # webcam with alert
+        trio cam --source rtsp://... --count                   # count objects
     """
     import os
     import sys
@@ -135,11 +132,15 @@ def cam(
     os.environ.setdefault("TRIO_COMPRESS_ENABLED", "1")
     os.environ.setdefault("TRIO_COMPRESS_RATIO", "0.5")
 
-    # Resolve RTSP URL using the unified helper
-    rtsp_url = _resolve_rtsp_url(rtsp, host, port, user, password)
+    if source and not host:
+        video_source = source
+    else:
+        video_source = _resolve_rtsp_url(host, port, user, password)
 
     if not model:
-        model = "mlx-community/Qwen3.5-2B-MLX-4bit"
+        model, detected_backend = _require_gpu()
+        if not backend:
+            backend = detected_backend
 
     # Structured modes need more tokens
     if count and max_tokens < 40:
@@ -147,12 +148,12 @@ def cam(
     if digest and max_tokens < 30:
         max_tokens = 30
 
-    # Launch webcam GUI with RTSP source
+    # Launch webcam GUI with resolved source
     n_frames = "3" if digest else "1"
     sys.argv = [
         "webcam_gui",
         "--source",
-        rtsp_url,
+        video_source,
         "--frames",
         n_frames,
         "--max-tokens",

@@ -42,13 +42,12 @@ Repository = "https://github.com/machinefi/trio-core"
 Issues = "https://github.com/machinefi/trio-core/issues"
 
 [project.optional-dependencies]
-mlx = ["mlx>=0.16", "tokenizers>=0.19", "huggingface-hub", "safetensors", "jinja2"]
+mlx = ["mlx>=0.16", "tokenizers>=0.19", "huggingface-hub", "safetensors", "jinja2", "opencv-python>=4.8"]
 mlx-vlm = ["mlx-vlm>=0.3.12"]
-cuda = ["transformers>=5.4", "torch", "torchvision", "accelerate", "qwen-vl-utils", "compressed-tensors"]
-webcam = ["opencv-python>=4.8"]
+cuda = ["transformers>=5.4", "torch", "torchvision", "accelerate", "qwen-vl-utils", "compressed-tensors", "opencv-python>=4.8"]
 claw = ["websockets>=13.0", "cryptography>=41.0"]
 relay = []
-all = ["trio-core[mlx,webcam,claw]", "onvif-zeep"]
+all = ["trio-core[mlx,claw]", "onvif-zeep"]
 dev = ["pytest", "pytest-asyncio", "pytest-timeout", "pytest-cov", "httpx"]
 
 [project.scripts]
