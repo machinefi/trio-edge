@@ -66,7 +66,7 @@ def test_discover_command_uses_shared_onvif_module(monkeypatch: pytest.MonkeyPat
     result = runner.invoke(app, ["discover", "--timeout", "2"])
 
     assert result.exit_code == 0
-    assert "Garage (192.168.1.40)" in result.output
+    assert "Garage (192.168.1.40:8000)" in result.output
     assert "RTSP:" not in result.output
 
 

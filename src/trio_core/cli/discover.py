@@ -18,12 +18,12 @@ def discover(
 
     if not cameras:
         typer.echo("No cameras found. Make sure cameras are on the same subnet.")
-        typer.echo("You can manually specify: trio relay --rtsp rtsp://admin:pass@IP/stream")
+        typer.echo("You can manually specify: trio cam -s rtsp://admin:pass@IP/stream")
         raise typer.Exit(0)
 
     typer.echo(f"Found {len(cameras)} camera(s):\n")
     for i, c in enumerate(cameras):
-        typer.echo(f"  [{i + 1}] {c.name} ({c.ip})")
+        typer.echo(f"  [{i + 1}] {c.name} ({c.ip}:{c.port})")
         if c.rtsp_url:
             typer.echo(f"      RTSP: {c.rtsp_url}")
     typer.echo()
