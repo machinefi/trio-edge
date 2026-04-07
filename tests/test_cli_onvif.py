@@ -61,6 +61,10 @@ def test_cam_auto_discovery_uses_shared_helpers(monkeypatch: pytest.MonkeyPatch)
         ),
     )
     monkeypatch.setattr("trio_core._rtsp_proxy.ensure_rtsp_url", lambda url: url)
+    monkeypatch.setattr(
+        "trio_core.cli._shared._require_gpu",
+        lambda: ("test-model", "test-backend"),
+    )
 
     captured = {}
     webcam_gui = types.ModuleType("trio_core._webcam_gui")
@@ -100,6 +104,10 @@ def test_cam_known_host_probes_for_onvif_port(monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr("trio_core.onvif.get_rtsp_uri", fake_get_rtsp_uri)
     monkeypatch.setattr("trio_core._rtsp_proxy.ensure_rtsp_url", lambda url: url)
+    monkeypatch.setattr(
+        "trio_core.cli._shared._require_gpu",
+        lambda: ("test-model", "test-backend"),
+    )
 
     webcam_gui = types.ModuleType("trio_core._webcam_gui")
 
