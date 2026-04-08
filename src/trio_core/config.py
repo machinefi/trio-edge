@@ -108,6 +108,22 @@ class EngineConfig(BaseSettings):
         "Set to False to use explicit config only.",
     )
 
+    # Remote VLM (OpenAI-compatible Chat API)
+    remote_vlm_url: str | None = Field(
+        default=None,
+        description="Base URL for remote VLM API (OpenAI-compatible). "
+        "When set, routes all VLM inference to this API instead of local GPU. "
+        "e.g. https://dashscope.aliyuncs.com/compatible-mode/v1",
+    )
+    remote_vlm_api_key: str | None = Field(
+        default=None,
+        description="API key for remote VLM service (e.g. DashScope API key)",
+    )
+    remote_vlm_model: str = Field(
+        default="qwen-vl-plus",
+        description="Model name for remote VLM API (e.g. qwen-vl-plus, qwen-vl-max)",
+    )
+
     # Cache (Phase 2)
     cache_enabled: bool = Field(default=False, description="Enable video cache")
     cache_max_entries: int = Field(default=50, description="Max cache entries")

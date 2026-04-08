@@ -1,6 +1,6 @@
 """Tests for trio_core.backends — backend abstraction."""
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 
@@ -125,3 +125,175 @@ class TestBaseBackendHealth:
         assert h["backend"] == "mlx"
         assert h["loaded"] is False
         assert h["device"] == "M3"
+
+
+class TestRemoteHTTPBackend:
+    def test_init_sets_device_info(self):
+        from trio_core.remote_backend import RemoteHTTPBackend
+
+        b = RemoteHTTPBackend(
+            url="https://api.example.com/v1", api_key="sk-test", model="qwen-vl-plus"
+        )
+        assert b.backend_name == "remote"
+        assert b.model_name == "qwen-vl-plus"
+        assert b.device_info.backend == "remote"
+        assert b.device_info.device_name == "Remote API"
+        assert b.device_info.accelerator == "remote"
+        assert not b.loaded
+
+    def test_load_creates_client(self):
+        import sys
+
+        from trio_core.remote_backend import RemoteHTTPBackend
+
+        mock_client = MagicMock()
+        mock_openai_mod = MagicMock()
+        mock_openai_mod.OpenAI.return_value = mock_client
+
+        b = RemoteHTTPBackend(url="https://api.example.com/v1", api_key="sk-test")
+        with patch.dict(sys.modules, {"openai": mock_openai_mod}):
+            b.load()
+
+        mock_openai_mod.OpenAI.assert_called_once_with(
+            base_url="https://api.example.com/v1",
+            api_key="sk-test",
+        )
+        assert b.loaded
+        assert b._client is mock_client
+
+    def test_load_with_no_api_key(self):
+        import sys
+
+        from trio_core.remote_backend import RemoteHTTPBackend
+
+        mock_openai_mod = MagicMock()
+
+        b = RemoteHTTPBackend(url="https://api.example.com/v1")
+        with patch.dict(sys.modules, {"openai": mock_openai_mod}):
+            b.load()
+
+        mock_openai_mod.OpenAI.assert_called_once_with(
+            base_url="https://api.example.com/v1",
+            api_key="unused",
+        )
+
+    def test_generate_builds_correct_messages(self):
+        from trio_core.remote_backend import RemoteHTTPBackend
+
+        b = RemoteHTTPBackend(url="https://api.example.com/v1", model="qwen-vl-plus")
+        mock_client = MagicMock()
+        mock_usage = MagicMock()
+        mock_usage.prompt_tokens = 50
+        mock_usage.completion_tokens = 20
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "A cat on a mat"
+        mock_response.usage = mock_usage
+        mock_client.chat.completions.create.return_value = mock_response
+
+        b._client = mock_client
+        b._loaded = True
+
+        frames = np.random.rand(2, 3, 64, 64).astype(np.float32)
+        result = b.generate(frames, "describe this", max_tokens=256, temperature=0.1)
+
+        assert result.text == "A cat on a mat"
+        assert result.prompt_tokens == 50
+        assert result.completion_tokens == 20
+        assert result.generation_tps > 0
+
+        call_kwargs = mock_client.chat.completions.create.call_args
+        assert call_kwargs.kwargs["model"] == "qwen-vl-plus"
+        assert call_kwargs.kwargs["max_tokens"] == 256
+        assert call_kwargs.kwargs["temperature"] == 0.1
+
+        messages = call_kwargs.kwargs["messages"]
+        assert len(messages) == 1
+        assert messages[0]["role"] == "user"
+        content = messages[0]["content"]
+        image_blocks = [c for c in content if c["type"] == "image_url"]
+        text_blocks = [c for c in content if c["type"] == "text"]
+        assert len(image_blocks) == 2  # 2 frames → 2 image_url entries
+        assert len(text_blocks) == 1
+        assert text_blocks[0]["text"] == "describe this"
+
+    def test_generate_handles_empty_content(self):
+        from trio_core.remote_backend import RemoteHTTPBackend
+
+        b = RemoteHTTPBackend(url="https://api.example.com/v1")
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = None
+        mock_response.usage = None
+        MagicMock().chat.completions.create.return_value = mock_response
+
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = mock_response
+        b._client = mock_client
+        b._loaded = True
+
+        frames = np.random.rand(1, 3, 64, 64).astype(np.float32)
+        result = b.generate(frames, "test")
+
+        assert result.text == ""
+        assert result.prompt_tokens == 0
+        assert result.completion_tokens == 0
+
+    def test_generate_handles_missing_usage(self):
+        from trio_core.remote_backend import RemoteHTTPBackend
+
+        b = RemoteHTTPBackend(url="https://api.example.com/v1")
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "hello"
+        mock_response.usage = None
+
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = mock_response
+        b._client = mock_client
+        b._loaded = True
+
+        frames = np.random.rand(1, 3, 64, 64).astype(np.float32)
+        result = b.generate(frames, "test")
+
+        assert result.text == "hello"
+        assert result.prompt_tokens == 0
+        assert result.completion_tokens == 0
+
+    def test_stream_generate_wraps_generate(self):
+        from trio_core.remote_backend import RemoteHTTPBackend
+
+        b = RemoteHTTPBackend(url="https://api.example.com/v1")
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "streamed text"
+        mock_usage = MagicMock()
+        mock_usage.prompt_tokens = 10
+        mock_usage.completion_tokens = 5
+        mock_response.usage = mock_usage
+
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = mock_response
+        b._client = mock_client
+        b._loaded = True
+
+        frames = np.random.rand(1, 3, 64, 64).astype(np.float32)
+        chunks = list(b.stream_generate(frames, "test", max_tokens=100))
+
+        assert len(chunks) == 1
+        assert chunks[0].text == "streamed text"
+        assert chunks[0].finished is True
+        assert chunks[0].prompt_tokens == 10
+        assert chunks[0].completion_tokens == 5
+
+    def test_health(self):
+        from trio_core.remote_backend import RemoteHTTPBackend
+
+        b = RemoteHTTPBackend(url="https://api.example.com/v1", model="qwen-vl-plus")
+        h = b.health()
+        assert h["backend"] == "remote"
+        assert h["model"] == "qwen-vl-plus"
+        assert h["loaded"] is False
+        assert h["device"] == "Remote API"
+        assert h["accelerator"] == "remote"
+        assert h["memory_gb"] == 0

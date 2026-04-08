@@ -164,6 +164,48 @@ class TestLoadIdempotency:
         mock_backend.load.assert_called_once()
 
 
+class TestRemoteLoadPath:
+    """When config.remote_vlm_url is set, load() bypasses resolve_backend entirely."""
+
+    @patch("trio_core.engine.resolve_backend")
+    def test_remote_url_creates_remote_backend(self, mock_resolve):
+        config = EngineConfig(
+            remote_vlm_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            remote_vlm_api_key="sk-test",
+            remote_vlm_model="qwen-vl-plus",
+        )
+        engine = TrioCore(config)
+
+        with patch("trio_core.remote_backend.RemoteHTTPBackend") as MockBackend:
+            mock_instance = MagicMock()
+            mock_instance.backend_name = "remote"
+            MockBackend.return_value = mock_instance
+            engine.load()
+
+        MockBackend.assert_called_once_with(
+            url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            api_key="sk-test",
+            model="qwen-vl-plus",
+        )
+        mock_instance.load.assert_called_once()
+        assert engine._loaded
+        mock_resolve.assert_not_called()
+
+    @patch("trio_core.engine.resolve_backend")
+    def test_no_remote_url_falls_through_to_resolve_backend(self, mock_resolve):
+        mock_backend = MagicMock()
+        mock_backend.backend_name = "mlx"
+        mock_backend.device_info.device_name = "Apple M3"
+        mock_resolve.return_value = mock_backend
+
+        config = EngineConfig()
+        assert config.remote_vlm_url is None
+        engine = TrioCore(config)
+        engine.load()
+
+        mock_resolve.assert_called_once()
+
+
 class TestBackendSwap:
     """Backend swap logic in resolve_backend: ToMe-only."""
 
