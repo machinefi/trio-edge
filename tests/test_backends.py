@@ -143,6 +143,7 @@ class TestRemoteHTTPBackend:
 
     def test_load_creates_client(self):
         import sys
+
         from trio_core.remote_backend import RemoteHTTPBackend
 
         mock_client = MagicMock()
@@ -162,6 +163,7 @@ class TestRemoteHTTPBackend:
 
     def test_load_with_no_api_key(self):
         import sys
+
         from trio_core.remote_backend import RemoteHTTPBackend
 
         mock_openai_mod = MagicMock()
