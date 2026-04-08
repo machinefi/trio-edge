@@ -67,10 +67,6 @@ def claw(
     vision/camera commands directly — no intermediate Go binary needed.
     """
     import asyncio
-    import os
-
-    os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
-    os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
 
     # Load config file if provided (CLI flags override config values)
     cfg = {}

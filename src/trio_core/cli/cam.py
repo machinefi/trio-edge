@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import typer
+from click.core import ParameterSource
 
-from trio_core.cli._shared import _require_gpu, app
+from trio_core.auth_store import AuthStore
+from trio_core.cli._shared import _require_gpu, _setup_logging, app
 
 
 def _resolve_rtsp_url(host: str | None, port: int | None, user: str | None, password: str) -> str:
@@ -39,7 +41,7 @@ def _resolve_rtsp_url(host: str | None, port: int | None, user: str | None, pass
                 "Failed to get RTSP URI. Credentials may be incorrect or camera unsupported."
             )
             raise typer.Exit(1)
-        typer.echo(f"Using RTSP: {rtsp_url}")
+        typer.echo(f"Using RTSP: {_mask_rtsp_credentials(rtsp_url)}")
         return ensure_rtsp_url(rtsp_url)
 
     # Interactive camera selection (no host or rtsp provided)
@@ -88,11 +90,28 @@ def _resolve_rtsp_url(host: str | None, port: int | None, user: str | None, pass
     return ensure_rtsp_url(rtsp_url)
 
 
+def _mask_rtsp_credentials(url: str) -> str:
+    """Replace userinfo in a URL with *** for safe display."""
+    from urllib.parse import urlparse, urlunsplit
+
+    parsed = urlparse(url)
+    if not parsed.username:
+        return url
+    host = parsed.hostname or ""
+    host_part = f"[{host}]" if ":" in host and not host.startswith("[") else host
+    netloc = f"***:***@{host_part}"
+    if parsed.port:
+        netloc = f"{netloc}:{parsed.port}"
+    return urlunsplit((parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment))
+
+
 @app.command()
 def cam(
+    ctx: typer.Context,
     source: str = typer.Option(
         None, "--source", "-s", help="Camera index, RTSP URL, or video file (skip ONVIF)"
     ),
+    camera: str = typer.Option(None, "--camera", help="Camera name from trio auth registry"),
     host: str = typer.Option(None, "--host", help="Camera IP address (skip discovery)"),
     port: int = typer.Option(None, "--port", help="ONVIF port"),
     user: str = typer.Option(None, "--user", "-u", help="Camera username"),
@@ -125,14 +144,46 @@ def cam(
         trio cam --source rtsp://... --count                   # count objects
     """
     import os
-    import sys
 
-    os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
-    os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+    _setup_logging(verbose=False)
+
     os.environ.setdefault("TRIO_COMPRESS_ENABLED", "1")
     os.environ.setdefault("TRIO_COMPRESS_RATIO", "0.5")
 
-    if source and not host:
+    if camera:
+        conflicting_flags: list[str] = []
+        if source is not None:
+            conflicting_flags.append("--source")
+        if host is not None:
+            conflicting_flags.append("--host")
+        if user is not None:
+            conflicting_flags.append("--user")
+        if port is not None:
+            conflicting_flags.append("--port")
+        if ctx.get_parameter_source("password") is not ParameterSource.DEFAULT:
+            conflicting_flags.append("--password")
+
+        if conflicting_flags:
+            if len(conflicting_flags) == 1:
+                conflicts = conflicting_flags[0]
+            elif len(conflicting_flags) == 2:
+                conflicts = " or ".join(conflicting_flags)
+            else:
+                conflicts = ", ".join(conflicting_flags[:-1]) + f", or {conflicting_flags[-1]}"
+
+            typer.echo(
+                f"--camera cannot be used with {conflicts}",
+                err=True,
+            )
+            raise typer.Exit(1)
+
+        entry = AuthStore().get_camera(camera)
+        if not entry:
+            typer.echo(f"Camera '{camera}' not found in registry. Use `trio auth add`.", err=True)
+            raise typer.Exit(1)
+
+        video_source = _resolve_rtsp_url(entry.host, entry.port, entry.user, entry.password)
+    elif source and not host:
         video_source = source
     else:
         video_source = _resolve_rtsp_url(host, port, user, password)
@@ -142,45 +193,29 @@ def cam(
         if not backend:
             backend = detected_backend
 
-    # Structured modes need more tokens
     if count and max_tokens < 40:
         max_tokens = 40
     if digest and max_tokens < 30:
         max_tokens = 30
 
-    # Launch webcam GUI with resolved source
-    n_frames = "3" if digest else "1"
-    sys.argv = [
-        "webcam_gui",
-        "--source",
-        video_source,
-        "--frames",
-        n_frames,
-        "--max-tokens",
-        str(max_tokens),
-        "--interval",
-        "0",
-        "--resolution",
-        str(resolution),
-        "--model",
-        model,
-    ]
-    if watch:
-        sys.argv += ["--watch", watch]
-    if backend:
-        sys.argv += ["--backend", backend]
-    if no_sound:
-        sys.argv += ["--no-sound"]
-    if count:
-        sys.argv += ["--count"]
-    if digest:
-        sys.argv += ["--digest"]
-    if adapter:
-        sys.argv += ["--adapter", adapter]
+    from trio_core._webcam_gui import WebcamGUIConfig, main
+
+    gui_config = WebcamGUIConfig(
+        source=video_source,
+        watch=watch,
+        model=model,
+        backend=backend,
+        max_tokens=max_tokens,
+        interval=0,
+        frames=3 if digest else 1,
+        resolution=resolution,
+        no_sound=no_sound,
+        count=count,
+        digest=digest,
+        adapter=adapter,
+    )
 
     try:
-        from trio_core._webcam_gui import main
-
-        main()
+        main(config=gui_config)
     except KeyboardInterrupt:
         pass

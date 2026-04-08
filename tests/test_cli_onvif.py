@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import types
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,41 @@ from trio_core.cli import app
 from trio_core.onvif import CameraInfo
 
 runner = CliRunner()
+
+
+@dataclass
+class _FakeWebcamGUIConfig:
+    source: str
+    watch: str | None = None
+    model: str | None = None
+    backend: str | None = None
+    max_tokens: int = 10
+    interval: int = 0
+    frames: int = 1
+    resolution: int = 240
+    no_sound: bool = False
+    count: bool = False
+    digest: bool = False
+    adapter: str | None = None
+
+
+def _install_gui_module(monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
+    captured: dict[str, object] = {}
+    webcam_gui = types.ModuleType("trio_core._webcam_gui")
+    webcam_gui.WebcamGUIConfig = _FakeWebcamGUIConfig
+
+    def fake_main(*, config):
+        captured["config"] = config
+
+    webcam_gui.main = fake_main
+    monkeypatch.setitem(sys.modules, "trio_core._webcam_gui", webcam_gui)
+    return captured
+
+
+def _mock_common_runtime(monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
+    monkeypatch.setattr("trio_core.cli.cam._require_gpu", lambda: ("test-model", "test-backend"))
+    monkeypatch.setattr("trio_core._rtsp_proxy.ensure_rtsp_url", lambda url: url)
+    return _install_gui_module(monkeypatch)
 
 
 def test_discover_command_uses_shared_onvif_module(monkeypatch: pytest.MonkeyPatch):
@@ -30,7 +66,7 @@ def test_discover_command_uses_shared_onvif_module(monkeypatch: pytest.MonkeyPat
     result = runner.invoke(app, ["discover", "--timeout", "2"])
 
     assert result.exit_code == 0
-    assert "Garage (192.168.1.40)" in result.output
+    assert "Garage (192.168.1.40:8000)" in result.output
     assert "RTSP:" not in result.output
 
 
@@ -50,6 +86,7 @@ def test_cam_interactive_camera_listing_error_on_agent(monkeypatch: pytest.Monke
 
 
 def test_cam_auto_discovery_uses_shared_helpers(monkeypatch: pytest.MonkeyPatch):
+    captured = _mock_common_runtime(monkeypatch)
     monkeypatch.setattr(
         "trio_core.onvif.discover_cameras",
         lambda timeout=5: [CameraInfo(name="Porch", ip="192.168.1.42", port=8000)],
@@ -60,39 +97,20 @@ def test_cam_auto_discovery_uses_shared_helpers(monkeypatch: pytest.MonkeyPatch)
             "rtsp://admin:secret@192.168.1.42:554/stream1"
         ),
     )
-    monkeypatch.setattr("trio_core._rtsp_proxy.ensure_rtsp_url", lambda url: url)
-    monkeypatch.setattr(
-        "trio_core.cli.cam._require_gpu",
-        lambda: ("test-model", "test-backend"),
-    )
-
-    captured = {}
-    webcam_gui = types.ModuleType("trio_core._webcam_gui")
-
-    def fake_main():
-        captured["argv"] = list(sys.argv)
-
-    webcam_gui.main = fake_main
-    monkeypatch.setitem(sys.modules, "trio_core._webcam_gui", webcam_gui)
 
     result = runner.invoke(app, ["cam", "--password", "secret"])
 
     assert result.exit_code == 0
-    assert captured["argv"][0] == "webcam_gui"
-    assert "rtsp://admin:secret@192.168.1.42:554/stream1" in captured["argv"]
+    assert captured["config"].source == "rtsp://admin:secret@192.168.1.42:554/stream1"
 
 
 def test_cam_known_host_probes_for_onvif_port(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(
-        "trio_core.cli.cam._require_gpu",
-        lambda: ("test-model", "test-backend"),
-    )
-
-    captured = {}
+    _mock_common_runtime(monkeypatch)
+    rtsp_captured: dict[str, object] = {}
 
     def fake_get_rtsp_uri(host, port, user, password, fallback=True):
-        captured["host"] = host
-        captured["port"] = port
+        rtsp_captured["host"] = host
+        rtsp_captured["port"] = port
         return "rtsp://admin:secret@192.168.1.42:554/stream1"
 
     monkeypatch.setattr(
@@ -107,21 +125,12 @@ def test_cam_known_host_probes_for_onvif_port(monkeypatch: pytest.MonkeyPatch):
         ],
     )
     monkeypatch.setattr("trio_core.onvif.get_rtsp_uri", fake_get_rtsp_uri)
-    monkeypatch.setattr("trio_core._rtsp_proxy.ensure_rtsp_url", lambda url: url)
-
-    webcam_gui = types.ModuleType("trio_core._webcam_gui")
-
-    def fake_main():
-        captured["argv"] = list(sys.argv)
-
-    webcam_gui.main = fake_main
-    monkeypatch.setitem(sys.modules, "trio_core._webcam_gui", webcam_gui)
 
     result = runner.invoke(app, ["cam", "--host", "192.168.1.42", "--password", "secret"])
 
     assert result.exit_code == 0
-    assert captured["host"] == "192.168.1.42"
-    assert captured["port"] == 2020
+    assert rtsp_captured["host"] == "192.168.1.42"
+    assert rtsp_captured["port"] == 2020
     assert "Detected ONVIF: http://192.168.1.42:2020/onvif/service" in result.output
 
 
