@@ -167,6 +167,27 @@ class TrioCore(CallbackMixin):
         # Apply benchmark-proven optimizations from model profile
         self._apply_auto_optimize()
 
+        # Remote VLM: bypass local backend when remote URL is configured
+        if self.config.remote_vlm_url:
+            from trio_core.remote_backend import RemoteHTTPBackend
+
+            backend = RemoteHTTPBackend(
+                url=self.config.remote_vlm_url,
+                api_key=self.config.remote_vlm_api_key,
+                model=self.config.remote_vlm_model,
+            )
+            self._backend = backend
+            self._backend.load()
+            self._loaded = True
+            logger.info(
+                "Engine ready (remote): backend=%s, url=%s, model=%s",
+                self._backend.backend_name,
+                self.config.remote_vlm_url,
+                self.config.remote_vlm_model,
+            )
+            self.run_callbacks("on_engine_load")
+            return
+
         backend = resolve_backend(self.config, backend_override=self._backend_override)
         self._backend = backend
         self._backend.load()
