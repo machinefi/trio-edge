@@ -29,7 +29,7 @@ venv/
 *.so
 
 # Model files (large binaries)
-models/
+/models/
 *.safetensors
 adapters/*
 !adapters/surveillance-qwen35-2b/
