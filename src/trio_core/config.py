@@ -6,6 +6,13 @@ from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
+def _default_model() -> str:
+    """Return the recommended model for the current hardware."""
+    from trio_core.device import detect_device, recommend_model
+
+    return recommend_model(detect_device())
+
+
 class EngineConfig(BaseSettings):
     """TrioCore configuration. All fields can be set via TRIO_ env vars."""
 
@@ -13,7 +20,7 @@ class EngineConfig(BaseSettings):
 
     # Model
     model: str = Field(
-        default="mlx-community/Qwen3.5-2B-MLX-4bit",
+        default_factory=_default_model,
         description="HuggingFace model ID or local path",
     )
     adapter_path: str | None = Field(
