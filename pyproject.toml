@@ -22,6 +22,9 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
+    "opencv-python>=4.8",
+    "torch",
+    "transformers",
     "numpy",
     "Pillow>=9.0",
     "fastapi>=0.104",

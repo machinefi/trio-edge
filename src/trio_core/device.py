@@ -191,7 +191,7 @@ def recommend_model(info: DeviceInfo) -> str:
 
     if info.accelerator == "cuda":
         if info.memory_gb >= 16:
-            return "Qwen/Qwen3-VL-8B-Instruct"
+            return "Qwen/Qwen3-VL-4B-Instruct"
         return "Qwen/Qwen3-VL-2B-Instruct"
 
     return "Qwen/Qwen3-VL-2B-Instruct"
