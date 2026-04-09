@@ -61,7 +61,9 @@ Trio Core is the open-source camera agent for [Trio AI](https://trio.ai). It run
 ## Quick Start
 
 ```bash
-# Install
+# If Python is managed by Homebrew and pip reports an "externally managed environment",
+# create a venv first:
+# python3 -m venv .venv && source .venv/bin/activate
 pip install 'trio-core[mlx]'      # Apple Silicon local AI
 pip install 'trio-core[cuda]'     # NVIDIA GPU local AI
 pip install trio-core             # Discovery, relay, API
