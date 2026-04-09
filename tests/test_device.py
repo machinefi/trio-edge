@@ -14,7 +14,6 @@ from trio_core.device import (
     _detect_apple_silicon,
     _detect_nvidia,
     detect_device,
-    recommend_model,
 )
 
 
