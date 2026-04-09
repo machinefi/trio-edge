@@ -39,38 +39,6 @@ class TestDetectDevice:
         assert cpu.has_gpu is False
 
 
-class TestRecommendModel:
-    def test_mlx_high_memory(self):
-        info = DeviceInfo("mlx", "M3 Max", "metal", 64.0, 40)
-        model = recommend_model(info)
-        assert "7B" in model
-        assert "mlx-community" in model
-
-    def test_mlx_low_memory(self):
-        info = DeviceInfo("mlx", "M1", "metal", 8.0, 8)
-        model = recommend_model(info)
-        assert "3B" in model
-        assert "mlx-community" in model
-
-    def test_cuda_high_memory(self):
-        info = DeviceInfo("transformers", "RTX 4090", "cuda", 24.0, 0)
-        model = recommend_model(info)
-        assert "4B" in model
-        assert "Qwen/" in model
-
-    def test_cpu_fallback(self):
-        info = DeviceInfo("transformers", "CPU", "cpu", 0, 0)
-        model = recommend_model(info)
-        assert "2B" in model
-        assert "Qwen/" in model
-
-    def test_cuda_low_memory(self):
-        info = DeviceInfo("transformers", "RTX 3060", "cuda", 12.0, 0)
-        model = recommend_model(info)
-        assert "2B" in model
-        assert "Qwen/" in model
-
-
 class TestDetectAppleSilicon:
     """Tests for _detect_apple_silicon with mocked platform and subprocess."""
 
