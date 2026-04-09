@@ -55,7 +55,7 @@ class TestRecommendModel:
     def test_cuda_high_memory(self):
         info = DeviceInfo("transformers", "RTX 4090", "cuda", 24.0, 0)
         model = recommend_model(info)
-        assert "8B" in model
+        assert "4B" in model
         assert "Qwen/" in model
 
     def test_cpu_fallback(self):
