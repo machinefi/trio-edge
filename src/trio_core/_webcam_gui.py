@@ -862,8 +862,20 @@ def main(config: WebcamGUIConfig | None = None):
         if cap:
             cap.release()
         if ffmpeg_proc:
+            # Close pipes first so ffmpeg doesn't block on a full stdout buffer
+            # (the RTSP raw-video pipe produces ~27 MB/s, and once the read loop
+            # stops the OS pipe buffer fills in <1 ms, blocking ffmpeg's write and
+            # preventing it from handling SIGTERM).
+            if ffmpeg_proc.stdout:
+                ffmpeg_proc.stdout.close()
+            if ffmpeg_proc.stderr:
+                ffmpeg_proc.stderr.close()
             ffmpeg_proc.terminate()
-            ffmpeg_proc.wait(timeout=5)
+            try:
+                ffmpeg_proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                ffmpeg_proc.kill()
+                ffmpeg_proc.wait()
         cv2.destroyAllWindows()
 
         if events:
