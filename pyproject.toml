@@ -35,6 +35,8 @@ dependencies = [
     "huggingface-hub>=0.20",
     "httpx>=0.25",
     "openai>=1.0",
+    "websockets>=13.0",
+    "cryptography>=41.0",
 ]
 
 [project.urls]
@@ -71,6 +73,10 @@ ignore = ["E501", "E402", "E702"]
 asyncio_mode = "auto"
 timeout = 30
 pythonpath = ["tests"]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
 
 [tool.coverage.run]
 source = ["trio_core"]
