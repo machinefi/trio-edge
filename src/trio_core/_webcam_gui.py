@@ -863,7 +863,11 @@ def main(config: WebcamGUIConfig | None = None):
             cap.release()
         if ffmpeg_proc:
             ffmpeg_proc.terminate()
-            ffmpeg_proc.wait(timeout=5)
+            try:
+                ffmpeg_proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                ffmpeg_proc.kill()
+                ffmpeg_proc.wait()
         cv2.destroyAllWindows()
 
         if events:

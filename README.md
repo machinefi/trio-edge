@@ -323,6 +323,16 @@ Run `trio doctor` to diagnose most issues.
 
 ---
 
+## Tested Cameras
+
+| Camera | ONVIF Port | Discovery | RTSP | Relay | Notes |
+|--------|-----------|-----------|------|-------|-------|
+| TP-Link Tapo C120 | 2020 | Subnet scan* | stream1 (2560x1440), stream2 (640x360) | Tested | WS-Discovery not supported; use `--host` or subnet scan fallback |
+
+\* WS-Discovery (UDP multicast) does not find this camera. The subnet scan fallback probes ONVIF ports directly.
+
+---
+
 ## License
 
 Apache 2.0 — see [LICENSE](LICENSE).
