@@ -22,6 +22,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
+    "opencv-python>=4.8",
     "numpy",
     "Pillow>=9.0",
     "fastapi>=0.104",
@@ -37,6 +38,7 @@ dependencies = [
     "openai>=1.0",
     "websockets>=13.0",
     "cryptography>=41.0",
+    "opencv-python-headless>=4.8",
 ]
 
 [project.urls]
