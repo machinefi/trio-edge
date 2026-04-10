@@ -38,8 +38,11 @@ def relay(
     resolution: str | None = typer.Option(
         None, "--resolution", "-r", help="Video resolution WxH (e.g. 1280x720)"
     ),
-    fps: int = typer.Option(30, "--fps", help="Target frame rate"),
+    fps: int = typer.Option(1, "--fps", help="Target frame rate"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show raw FFmpeg stderr output"),
+    json_output: bool = typer.Option(
+        False, "--json", help="Emit NDJSON progress to stderr for machine consumption"
+    ),
 ):
     """Relay video from a webcam, RTSP camera, or file to Trio Cloud via HTTP MPEG-TS."""
     import asyncio
@@ -82,25 +85,43 @@ def relay(
         framerate=fps,
         verbose=verbose,
         segment_duration=10.0,
+        json_mode=json_output,
     )
 
-    typer.echo(f"Relay: {actual_source} -> {cloud}")
-    typer.echo(
-        f"Transport: HTTP MPEG-TS (segmented 10s) | FPS: {fps} | Resolution: {resolution or 'native'}"
-    )
-    typer.echo("Press Ctrl+C to stop.\n")
+    if not json_output:
+        typer.echo(f"Relay: {actual_source} -> {cloud}")
+        typer.echo(
+            f"Transport: HTTP MPEG-TS (segmented 10s) | FPS: {fps} | Resolution: {resolution or 'native'}"
+        )
+        typer.echo("Press Ctrl+C to stop.\n")
 
     async def _run() -> None:
+        loop = asyncio.get_running_loop()
+        main_task = asyncio.create_task(relay_obj.run())
+        shutdown_triggered = False
+
+        def _on_sigint() -> None:
+            nonlocal shutdown_triggered
+            shutdown_triggered = True
+            main_task.cancel()
+
+        import signal
+
+        loop.add_signal_handler(signal.SIGINT, _on_sigint)
         try:
-            await relay_obj.run()
+            await main_task
+        except asyncio.CancelledError:
+            pass
         finally:
+            if shutdown_triggered:
+                typer.echo("\nStopping relay...")
+            loop.remove_signal_handler(signal.SIGINT)
             await relay_obj.teardown()
+            if shutdown_triggered:
+                typer.echo("Disconnected.")
 
     try:
         asyncio.run(_run())
     except RelayError as exc:
         typer.echo(f"\n✗ {exc}", err=True)
         raise typer.Exit(1)
-    except KeyboardInterrupt:
-        typer.echo("\nStopping relay...")
-        typer.echo("Disconnected.")

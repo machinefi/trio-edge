@@ -57,7 +57,7 @@ def test_derive_camera_id_is_deterministic(monkeypatch: pytest.MonkeyPatch):
     assert len(cam_a) == 36
 
 
-def test_build_ffmpeg_cmd_rtsp_uses_mpegts_copy(monkeypatch: pytest.MonkeyPatch):
+def test_build_ffmpeg_cmd_rtsp_applies_output_fps(monkeypatch: pytest.MonkeyPatch):
     relay = _relay_module()
     monkeypatch.setattr(relay, "detect_source_type", lambda source: "rtsp")
 
@@ -66,11 +66,14 @@ def test_build_ffmpeg_cmd_rtsp_uses_mpegts_copy(monkeypatch: pytest.MonkeyPatch)
             source="rtsp://camera/stream",
             cloud_url="https://trio-relay.machinefi.com",
             bearer_token="token",
+            framerate=15,
         )._build_ffmpeg_cmd()
 
     assert "-f" in cmd
     assert "mpegts" in cmd
-    assert "copy" in cmd
+    assert "libx264" in cmd
+    assert "-r" in cmd
+    assert cmd[cmd.index("-r") + 1] == "15"
     assert "pipe:1" in cmd
     assert "h264_mp4toannexb" not in " ".join(cmd)
 
@@ -144,7 +147,6 @@ async def test_register_camera_posts_explicit_id_and_metadata(monkeypatch: pytes
     relay = _relay_module()
     calls: list[dict[str, object]] = []
     responses = [
-        _FakeResponse(404),
         _FakeResponse(201, {"id": "cam-123"}),
     ]
     monkeypatch.setattr(
@@ -164,9 +166,9 @@ async def test_register_camera_posts_explicit_id_and_metadata(monkeypatch: pytes
         returned = await client._register_camera(http_client)
 
     assert returned == "cam-123"
-    get_call = [c for c in calls if c["method"] == "GET"][0]
-    assert get_call["url"] == "https://trio-relay.machinefi.com/api/cameras/cam-123"
-    post_call = [c for c in calls if c["method"] == "POST"][0]
+    assert len(calls) == 1
+    post_call = calls[0]
+    assert post_call["method"] == "POST"
     assert post_call["url"] == "https://trio-relay.machinefi.com/api/cameras"
     assert post_call["headers"]["X-API-Key"] == "token-123"
     assert post_call["json"]["id"] == "cam-123"
@@ -179,7 +181,6 @@ async def test_register_camera_accepts_server_generated_id(monkeypatch: pytest.M
     relay = _relay_module()
     calls: list[dict[str, object]] = []
     responses = [
-        _FakeResponse(404),
         _FakeResponse(201, {"id": "server-generated"}),
     ]
     monkeypatch.setattr(
@@ -199,10 +200,12 @@ async def test_register_camera_accepts_server_generated_id(monkeypatch: pytest.M
         returned = await client._register_camera(http_client)
 
     assert returned == "server-generated"
+    assert len(calls) == 1
+    assert calls[0]["method"] == "POST"
 
 
 @pytest.mark.asyncio
-async def test_register_camera_skips_post_when_camera_exists(monkeypatch: pytest.MonkeyPatch):
+async def test_register_camera_returns_existing_on_200(monkeypatch: pytest.MonkeyPatch):
     relay = _relay_module()
     calls: list[dict[str, object]] = []
     responses = [
@@ -226,9 +229,7 @@ async def test_register_camera_skips_post_when_camera_exists(monkeypatch: pytest
 
     assert returned == "cam-123"
     assert len(calls) == 1
-    assert calls[0]["method"] == "GET"
-    assert calls[0]["url"] == "https://trio-relay.machinefi.com/api/cameras/cam-123"
-    assert not any(c["method"] == "POST" for c in calls)
+    assert calls[0]["method"] == "POST"
 
 
 @pytest.mark.asyncio
