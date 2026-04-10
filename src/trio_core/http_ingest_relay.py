@@ -21,6 +21,27 @@ logger = logging.getLogger("trio.relay")
 _FFMPEG_READ_SIZE = 65536
 
 
+async def _read_until_timeout(
+    stdout: asyncio.StreamReader, duration_seconds: float, chunk_size: int = 65536
+) -> bytes:
+    buf = bytearray()
+    deadline = time.monotonic() + duration_seconds
+
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        try:
+            data = await asyncio.wait_for(stdout.read(chunk_size), timeout=remaining)
+        except asyncio.TimeoutError:
+            break
+        if not data:
+            break
+        buf.extend(data)
+
+    return bytes(buf)
+
+
 class RelayError(Exception):
     """Base exception for relay errors."""
 
@@ -62,6 +83,7 @@ class HttpIngestRelay:
     resolution: tuple[int, int] | None = None
     framerate: int = 30
     verbose: bool = False
+    segment_duration: float = 10.0
     _recent_errors: list[str] = field(default_factory=list, repr=False)
 
     def __post_init__(self) -> None:
@@ -88,15 +110,6 @@ class HttpIngestRelay:
             },
         }
 
-    def _http_output_args(self, ingest_url: str) -> list[str]:
-        return [
-            "-method",
-            "POST",
-            "-headers",
-            f"X-API-Key: {self.bearer_token}\r\nContent-Type: video/mp2t\r\n",
-            ingest_url,
-        ]
-
     def _base_ffmpeg_args(self) -> list[str]:
         level = "info" if self.verbose else "error"
         return [
@@ -111,7 +124,7 @@ class HttpIngestRelay:
             "pipe:2",
         ]
 
-    def _build_ffmpeg_cmd(self, output_args: list[str]) -> list[str]:
+    def _build_ffmpeg_cmd(self) -> list[str]:
         source_type = detect_source_type(self.source)
         fps = str(self.framerate)
         base = self._base_ffmpeg_args()
@@ -130,7 +143,7 @@ class HttpIngestRelay:
                 "-an",
                 "-f",
                 "mpegts",
-                *output_args,
+                "pipe:1",
             ]
 
         if source_type == "webcam":
@@ -162,7 +175,7 @@ class HttpIngestRelay:
                     "-an",
                     "-f",
                     "mpegts",
-                    *output_args,
+                    "pipe:1",
                 ]
             if system == "Darwin":
                 return [
@@ -189,7 +202,7 @@ class HttpIngestRelay:
                     "-an",
                     "-f",
                     "mpegts",
-                    *output_args,
+                    "pipe:1",
                 ]
             raise SourceError(f"Unsupported webcam platform: {system}")
 
@@ -218,11 +231,26 @@ class HttpIngestRelay:
             "-an",
             "-f",
             "mpegts",
-            *output_args,
+            "pipe:1",
         ]
 
     async def _register_camera(self, client: httpx.AsyncClient) -> str:
         requested_camera_id = self.resolved_camera_id()
+
+        # Check if camera already exists (skip re-registration)
+        try:
+            check_url = _join_api_url(self.cloud_url, f"/api/cameras/{requested_camera_id}")
+            check_resp = await client.get(check_url, headers=self._auth_headers())
+            if check_resp.status_code == 200:
+                existing_id = check_resp.json().get("id")
+                if existing_id:
+                    logger.info("Camera %s already registered, skipping registration", existing_id)
+                    return existing_id
+        except Exception:
+            # GET check failed — fall through to POST (non-blocking)
+            logger.debug("Camera existence check failed, proceeding with registration")
+
+        # Existing POST logic
         response = await client.post(
             _join_api_url(self.cloud_url, "/api/cameras"),
             headers=self._auth_headers(),
@@ -246,13 +274,14 @@ class HttpIngestRelay:
             )
         return returned_id
 
-    async def _start_ffmpeg(self, output_args: list[str]) -> None:
+    async def _start_ffmpeg(self) -> None:
         if not shutil.which("ffmpeg"):
             raise SourceError(
                 "ffmpeg not found. Install with: apt install ffmpeg (Linux) or brew install ffmpeg (macOS)"
             )
         self._process = await asyncio.create_subprocess_exec(
-            *self._build_ffmpeg_cmd(output_args),
+            *self._build_ffmpeg_cmd(),
+            stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
 
@@ -316,16 +345,58 @@ class HttpIngestRelay:
         sys.stdout.flush()
 
     async def run(self) -> None:
-        async with httpx.AsyncClient(timeout=None, follow_redirects=True) as client:
-            camera_id = await self._register_camera(client)
+        async with httpx.AsyncClient(timeout=None, follow_redirects=True) as reg_client:
+            camera_id = await self._register_camera(reg_client)
 
         ingest_url = _join_api_url(self.cloud_url, f"/api/stream/ingest/{camera_id}")
-        output_args = self._http_output_args(ingest_url)
-        await self._start_ffmpeg(output_args)
+        headers = self._auth_headers(content_type="video/mp2t")
+
+        await self._start_ffmpeg()
         assert self._process is not None
+        assert self._process.stdout is not None
 
         monitor_task = asyncio.create_task(self._monitor_progress())
+
+        seg_num = 0
+        ok_count = 0
+        fail_count = 0
         try:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(connect=10.0, write=30.0, read=30.0, pool=10.0),
+                follow_redirects=True,
+            ) as client:
+                while True:
+                    chunk = await _read_until_timeout(self._process.stdout, self.segment_duration)
+                    if not chunk:
+                        break
+
+                    seg_num += 1
+                    seg_start = time.monotonic()
+                    try:
+                        resp = await client.post(ingest_url, content=chunk, headers=headers)
+                        elapsed = time.monotonic() - seg_start
+                        if resp.status_code == 204:
+                            ok_count += 1
+                            size_kb = len(chunk) / 1024
+                            ts = time.strftime("%H:%M:%S")
+                            sys.stdout.write(
+                                f"[{ts}] seg #{seg_num} OK {elapsed:.1f}s "
+                                f"{size_kb:.0f}KB [ok={ok_count} fail={fail_count}]\n"
+                            )
+                            sys.stdout.flush()
+                        else:
+                            fail_count += 1
+                            logger.error(
+                                "Ingest POST failed: HTTP %s for seg #%d",
+                                resp.status_code,
+                                seg_num,
+                            )
+                            break
+                    except httpx.TransportError as exc:
+                        fail_count += 1
+                        logger.error("Ingest POST transport error for seg #%d: %s", seg_num, exc)
+                        break
+
             return_code = await self._process.wait()
             if return_code != 0:
                 recent = self._recent_errors[-5:]

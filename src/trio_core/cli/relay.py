@@ -81,10 +81,13 @@ def relay(
         resolution=resolution_tuple,
         framerate=fps,
         verbose=verbose,
+        segment_duration=10.0,
     )
 
     typer.echo(f"Relay: {actual_source} -> {cloud}")
-    typer.echo(f"Transport: HTTP MPEG-TS | FPS: {fps} | Resolution: {resolution or 'native'}")
+    typer.echo(
+        f"Transport: HTTP MPEG-TS (segmented 10s) | FPS: {fps} | Resolution: {resolution or 'native'}"
+    )
     typer.echo("Press Ctrl+C to stop.\n")
 
     async def _run() -> None:
