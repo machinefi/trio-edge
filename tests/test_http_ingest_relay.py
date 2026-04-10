@@ -57,7 +57,7 @@ def test_derive_camera_id_is_deterministic(monkeypatch: pytest.MonkeyPatch):
     assert len(cam_a) == 36
 
 
-def test_build_ffmpeg_cmd_rtsp_uses_mpegts_copy(monkeypatch: pytest.MonkeyPatch):
+def test_build_ffmpeg_cmd_rtsp_applies_output_fps(monkeypatch: pytest.MonkeyPatch):
     relay = _relay_module()
     monkeypatch.setattr(relay, "detect_source_type", lambda source: "rtsp")
 
@@ -66,11 +66,15 @@ def test_build_ffmpeg_cmd_rtsp_uses_mpegts_copy(monkeypatch: pytest.MonkeyPatch)
             source="rtsp://camera/stream",
             cloud_url="https://trio-relay.machinefi.com",
             bearer_token="token",
-        )._build_ffmpeg_cmd(["pipe:1"])
+            framerate=15,
+        )._build_ffmpeg_cmd()
 
     assert "-f" in cmd
     assert "mpegts" in cmd
-    assert "copy" in cmd
+    assert "libx264" in cmd
+    assert "-r" in cmd
+    assert cmd[cmd.index("-r") + 1] == "15"
+    assert "pipe:1" in cmd
     assert "h264_mp4toannexb" not in " ".join(cmd)
 
 
@@ -84,11 +88,12 @@ def test_build_ffmpeg_cmd_webcam_macos_uses_mpegts(monkeypatch: pytest.MonkeyPat
             cloud_url="https://trio-relay.machinefi.com",
             bearer_token="token",
             framerate=30,
-        )._build_ffmpeg_cmd(["pipe:1"])
+        )._build_ffmpeg_cmd()
 
     assert "avfoundation" in cmd
     assert "libx264" in cmd
     assert "mpegts" in cmd
+    assert "pipe:1" in cmd
 
 
 class _FakeResponse:
@@ -124,6 +129,10 @@ class _FakeAsyncClient:
     async def __aexit__(self, exc_type, exc, tb) -> None:
         return None
 
+    async def get(self, url: str, **kwargs):
+        self._calls.append({"method": "GET", "url": url, **kwargs})
+        return self._responses.pop(0)
+
     async def post(self, url: str, **kwargs):
         self._calls.append({"method": "POST", "url": url, **kwargs})
         return self._responses.pop(0)
@@ -137,7 +146,9 @@ class _FakeAsyncClient:
 async def test_register_camera_posts_explicit_id_and_metadata(monkeypatch: pytest.MonkeyPatch):
     relay = _relay_module()
     calls: list[dict[str, object]] = []
-    responses = [_FakeResponse(201, {"id": "cam-123"})]
+    responses = [
+        _FakeResponse(201, {"id": "cam-123"}),
+    ]
     monkeypatch.setattr(
         relay.httpx,
         "AsyncClient",
@@ -155,18 +166,23 @@ async def test_register_camera_posts_explicit_id_and_metadata(monkeypatch: pytes
         returned = await client._register_camera(http_client)
 
     assert returned == "cam-123"
-    assert calls[0]["url"] == "https://trio-relay.machinefi.com/api/cameras"
-    assert calls[0]["headers"]["X-API-Key"] == "token-123"
-    assert calls[0]["json"]["id"] == "cam-123"
-    assert calls[0]["json"]["metadata"]["ingest_transport"] == "http_mpegts"
-    assert calls[0]["json"]["metadata"]["managed_by"] == "trio-edge"
+    assert len(calls) == 1
+    post_call = calls[0]
+    assert post_call["method"] == "POST"
+    assert post_call["url"] == "https://trio-relay.machinefi.com/api/cameras"
+    assert post_call["headers"]["X-API-Key"] == "token-123"
+    assert post_call["json"]["id"] == "cam-123"
+    assert post_call["json"]["metadata"]["ingest_transport"] == "http_mpegts"
+    assert post_call["json"]["metadata"]["managed_by"] == "trio-edge"
 
 
 @pytest.mark.asyncio
 async def test_register_camera_accepts_server_generated_id(monkeypatch: pytest.MonkeyPatch):
     relay = _relay_module()
     calls: list[dict[str, object]] = []
-    responses = [_FakeResponse(201, {"id": "server-generated"})]
+    responses = [
+        _FakeResponse(201, {"id": "server-generated"}),
+    ]
     monkeypatch.setattr(
         relay.httpx,
         "AsyncClient",
@@ -184,32 +200,58 @@ async def test_register_camera_accepts_server_generated_id(monkeypatch: pytest.M
         returned = await client._register_camera(http_client)
 
     assert returned == "server-generated"
+    assert len(calls) == 1
+    assert calls[0]["method"] == "POST"
 
 
 @pytest.mark.asyncio
-async def test_run_launches_ffmpeg_with_ingest_url_and_auth(
-    monkeypatch: pytest.MonkeyPatch,
-):
+async def test_register_camera_returns_existing_on_200(monkeypatch: pytest.MonkeyPatch):
     relay = _relay_module()
     calls: list[dict[str, object]] = []
-    responses = [_FakeResponse(201, {"id": "server-generated"})]
+    responses = [
+        _FakeResponse(200, {"id": "cam-123"}),
+    ]
     monkeypatch.setattr(
         relay.httpx,
         "AsyncClient",
         lambda **kwargs: _FakeAsyncClient(list(responses), calls),
     )
-    monkeypatch.setattr(relay, "detect_source_type", lambda source: "file")
 
-    captured_cmd: list[list[str]] = []
+    client = relay.HttpIngestRelay(
+        source="rtsp://camera/stream",
+        cloud_url="https://trio-relay.machinefi.com/",
+        bearer_token="token-123",
+        camera_id="cam-123",
+    )
 
+    async with relay.httpx.AsyncClient() as http_client:
+        returned = await client._register_camera(http_client)
+
+    assert returned == "cam-123"
+    assert len(calls) == 1
+    assert calls[0]["method"] == "POST"
+
+
+@pytest.mark.asyncio
+async def test_run_launches_ffmpeg_with_pipe_output_and_posts_segment(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    relay = _relay_module()
+
+    fake_stdout = type("Stdout", (), {})()
+    fake_stdout.read = AsyncMock(side_effect=[b"fake-ts-data", b""])
     fake_stderr = type("Stderr", (), {})()
     fake_stderr.read = AsyncMock(return_value=b"")
+    fake_stderr.readline = AsyncMock(return_value=b"")
     fake_process = type("Process", (), {})()
+    fake_process.stdout = fake_stdout
     fake_process.stderr = fake_stderr
     fake_process.returncode = 0
     fake_process.wait = AsyncMock(return_value=0)
     fake_process.terminate = lambda: None
     fake_process.kill = lambda: None
+
+    captured_cmd: list[list[str]] = []
 
     async def fake_create_subprocess_exec(*args, **kwargs):
         captured_cmd.append(list(args))
@@ -217,6 +259,49 @@ async def test_run_launches_ffmpeg_with_ingest_url_and_auth(
 
     monkeypatch.setattr(relay.shutil, "which", lambda _: "/usr/bin/ffmpeg")
     monkeypatch.setattr(relay.asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+    monkeypatch.setattr(relay, "detect_source_type", lambda source: "file")
+
+    post_calls: list[dict[str, object]] = []
+
+    class _SegmentClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def get(self, url, **kwargs):
+            return _FakeResponse(404)
+
+        async def post(self, url, **kwargs):
+            post_calls.append({"url": url, **kwargs})
+            return _FakeResponse(204)
+
+    reg_client_calls: list[dict[str, object]] = []
+
+    class _RegClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def get(self, url, **kwargs):
+            reg_client_calls.append({"method": "GET", "url": url, **kwargs})
+            return _FakeResponse(404)
+
+        async def post(self, url, **kwargs):
+            reg_client_calls.append({"method": "POST", "url": url, **kwargs})
+            return _FakeResponse(201, {"id": "server-generated"})
+
+    client_instances = [_RegClient(), _SegmentClient()]
+
+    def fake_async_client(**kwargs):
+        return client_instances.pop(0)
+
+    monkeypatch.setattr(relay.httpx, "AsyncClient", fake_async_client)
+
+    monkeypatch.setattr(relay, "_read_until_timeout", AsyncMock(side_effect=[b"fake-ts-data", b""]))
 
     client = relay.HttpIngestRelay(
         source="video.mp4",
@@ -229,13 +314,19 @@ async def test_run_launches_ffmpeg_with_ingest_url_and_auth(
 
     assert len(captured_cmd) == 1
     cmd = captured_cmd[0]
-    assert "https://trio-relay.machinefi.com/api/stream/ingest/server-generated" in cmd
-    assert "-method" in cmd
-    assert "POST" in cmd
-    headers_idx = cmd.index("-headers")
-    headers_val = cmd[headers_idx + 1]
-    assert "X-API-Key: token-123" in headers_val
-    assert "video/mp2t" in headers_val
+    assert "pipe:1" in cmd
+    assert "-method" not in cmd
+    assert "-headers" not in cmd
+    assert "https://trio-relay.machinefi.com/api/stream/ingest/server-generated" not in cmd
+
+    assert len(post_calls) >= 1
+    ingest_post = post_calls[0]
+    assert (
+        ingest_post["url"] == "https://trio-relay.machinefi.com/api/stream/ingest/server-generated"
+    )
+    assert ingest_post["headers"]["X-API-Key"] == "token-123"
+    assert ingest_post["headers"]["Content-Type"] == "video/mp2t"
+    assert ingest_post["content"] == b"fake-ts-data"
 
 
 def test_relay_cli_constructs_http_ingest_relay(monkeypatch: pytest.MonkeyPatch):
@@ -280,3 +371,163 @@ def test_relay_cli_constructs_http_ingest_relay(monkeypatch: pytest.MonkeyPatch)
     assert captured["run_called"] is True
     assert captured["teardown_called"] is True
     assert "HTTP MPEG-TS" in result.output
+
+
+@pytest.mark.asyncio
+async def test_segmented_post_loop_sends_chunks(monkeypatch: pytest.MonkeyPatch):
+    relay = _relay_module()
+
+    fake_stderr = type("Stderr", (), {})()
+    fake_stderr.readline = AsyncMock(return_value=b"")
+    fake_process = type("Process", (), {})()
+    fake_process.stderr = fake_stderr
+    fake_process.returncode = 0
+    fake_process.wait = AsyncMock(return_value=0)
+    fake_process.terminate = lambda: None
+    fake_process.kill = lambda: None
+
+    monkeypatch.setattr(relay.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+
+    async def fake_create_subprocess_exec(*args, **kwargs):
+        fake_process.stdout = kwargs.get("stdout")
+        return fake_process
+
+    monkeypatch.setattr(relay.asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+    monkeypatch.setattr(relay, "detect_source_type", lambda source: "file")
+
+    post_calls: list[dict[str, object]] = []
+
+    class _SegClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def get(self, url, **kwargs):
+            return _FakeResponse(404)
+
+        async def post(self, url, **kwargs):
+            post_calls.append({"url": url, **kwargs})
+            return _FakeResponse(204)
+
+    class _RegClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def get(self, url, **kwargs):
+            return _FakeResponse(404)
+
+        async def post(self, url, **kwargs):
+            return _FakeResponse(201, {"id": "cam-xyz"})
+
+    client_instances = [_RegClient(), _SegClient()]
+
+    def fake_async_client(**kwargs):
+        return client_instances.pop(0)
+
+    monkeypatch.setattr(relay.httpx, "AsyncClient", fake_async_client)
+
+    monkeypatch.setattr(
+        relay,
+        "_read_until_timeout",
+        AsyncMock(side_effect=[b"chunk1", b"chunk2", b"chunk3", b""]),
+    )
+
+    client = relay.HttpIngestRelay(
+        source="video.mp4",
+        cloud_url="https://trio-relay.machinefi.com",
+        bearer_token="tok",
+        camera_id="cam-xyz",
+    )
+
+    await client.run()
+
+    assert len(post_calls) == 3
+    for call in post_calls:
+        assert call["url"] == "https://trio-relay.machinefi.com/api/stream/ingest/cam-xyz"
+        assert call["headers"]["X-API-Key"] == "tok"
+        assert call["headers"]["Content-Type"] == "video/mp2t"
+    assert post_calls[0]["content"] == b"chunk1"
+    assert post_calls[1]["content"] == b"chunk2"
+    assert post_calls[2]["content"] == b"chunk3"
+
+
+@pytest.mark.asyncio
+async def test_segmented_post_stops_on_server_error(monkeypatch: pytest.MonkeyPatch):
+    relay = _relay_module()
+
+    fake_stderr = type("Stderr", (), {})()
+    fake_stderr.readline = AsyncMock(return_value=b"")
+    fake_process = type("Process", (), {})()
+    fake_process.stderr = fake_stderr
+    fake_process.returncode = 0
+    fake_process.wait = AsyncMock(return_value=0)
+    fake_process.terminate = lambda: None
+    fake_process.kill = lambda: None
+
+    monkeypatch.setattr(relay.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+
+    async def fake_create_subprocess_exec(*args, **kwargs):
+        fake_process.stdout = kwargs.get("stdout")
+        return fake_process
+
+    monkeypatch.setattr(relay.asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+    monkeypatch.setattr(relay, "detect_source_type", lambda source: "file")
+
+    post_calls: list[dict[str, object]] = []
+
+    class _SegClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def get(self, url, **kwargs):
+            return _FakeResponse(404)
+
+        async def post(self, url, **kwargs):
+            post_calls.append({"url": url, **kwargs})
+            return _FakeResponse(500, text="Internal Server Error")
+
+    class _RegClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def get(self, url, **kwargs):
+            return _FakeResponse(404)
+
+        async def post(self, url, **kwargs):
+            return _FakeResponse(201, {"id": "cam-err"})
+
+    client_instances = [_RegClient(), _SegClient()]
+
+    def fake_async_client(**kwargs):
+        return client_instances.pop(0)
+
+    monkeypatch.setattr(relay.httpx, "AsyncClient", fake_async_client)
+
+    monkeypatch.setattr(
+        relay,
+        "_read_until_timeout",
+        AsyncMock(side_effect=[b"chunk1", b"chunk2", b""]),
+    )
+
+    client = relay.HttpIngestRelay(
+        source="video.mp4",
+        cloud_url="https://trio-relay.machinefi.com",
+        bearer_token="tok",
+        camera_id="cam-err",
+    )
+
+    await client.run()
+
+    assert len(post_calls) == 1
+    assert post_calls[0]["content"] == b"chunk1"
