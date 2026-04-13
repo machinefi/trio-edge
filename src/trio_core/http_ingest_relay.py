@@ -525,6 +525,7 @@ class HttpIngestRelay:
             async with httpx.AsyncClient(
                 timeout=httpx.Timeout(connect=10.0, write=30.0, read=30.0, pool=10.0),
                 follow_redirects=True,
+                limits=httpx.Limits(max_keepalive_connections=0),
             ) as client:
                 uploader = _SegmentUploader(
                     client,
