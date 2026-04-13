@@ -16,7 +16,7 @@ def _default_model() -> str:
 class EngineConfig(BaseSettings):
     """TrioCore configuration. All fields can be set via TRIO_ env vars."""
 
-    model_config = {"env_prefix": "TRIO_"}
+    model_config = {"env_prefix": "TRIO_", "env_file": ".env"}
 
     # Model
     model: str = Field(

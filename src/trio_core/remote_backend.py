@@ -128,7 +128,7 @@ class RemoteHTTPBackend(BaseBackend):
 
         gen_tps = completion_tokens / max(elapsed, 1e-9)
 
-        logger.debug(
+        logger.info(
             "[Remote] generate: %d frames, %d+%d tokens, %.1f tps, %.0fms",
             frames.shape[0],
             prompt_tokens,
