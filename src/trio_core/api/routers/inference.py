@@ -64,7 +64,7 @@ def _get_vlm():
         from trio_core.config import EngineConfig
         from trio_core.engine import TrioCore
 
-        config = EngineConfig()
+        config = EngineConfig.from_env_file()
         engine = TrioCore(config)
         engine.load()
         _vlm_engine = engine

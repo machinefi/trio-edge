@@ -23,7 +23,7 @@ from typing import Generator
 
 import numpy as np
 
-from trio_core.backends import BaseBackend, GenerationResult, StreamChunk
+from trio_core.backends.base import BaseBackend, GenerationResult, StreamChunk
 from trio_core.device import DeviceInfo
 
 logger = logging.getLogger(__name__)

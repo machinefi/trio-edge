@@ -19,7 +19,7 @@ def bench(
     from trio_core.config import EngineConfig
     from trio_core.engine import TrioCore
 
-    config = EngineConfig()
+    config = EngineConfig.from_env_file()
     if not model:
         model, detected_backend = _require_gpu()
         if not backend:

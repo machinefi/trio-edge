@@ -103,7 +103,7 @@ async def lifespan(app: FastAPI):
     global _engine, _shutdown_event, _start_time
     _shutdown_event = asyncio.Event()
     _start_time = _time.monotonic()
-    config = app.state.config if hasattr(app.state, "config") else EngineConfig()
+    config = app.state.config if hasattr(app.state, "config") else EngineConfig.from_env_file()
     backend = getattr(app.state, "backend", None)
     _engine = TrioCore(config, backend=backend)
     logger.info("Loading model: %s", config.model)
@@ -187,7 +187,7 @@ def create_app(config: EngineConfig | None = None, backend: str | None = None) -
         version="0.3.0",
         lifespan=lifespan,
     )
-    app.state.config = config or EngineConfig()
+    app.state.config = config or EngineConfig.from_env_file()
     app.state.backend = backend
 
     # Global exception handler — return structured JSON, never raw 500

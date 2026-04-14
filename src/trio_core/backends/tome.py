@@ -12,8 +12,8 @@ from typing import Generator
 
 import numpy as np
 
-from trio_core.backends import GenerationResult, MLXBackend
-from trio_core.compressed_backend import CompressedMLXBackend
+from trio_core.backends.base import GenerationResult
+from trio_core.backends.mlx import MLXBackend, compute_compressed_grid
 from trio_core.native_vision import create_tome_vision
 
 logger = logging.getLogger(__name__)
@@ -151,7 +151,7 @@ class ToMeMLXBackend(MLXBackend):
 
         # Compute position IDs for compressed sequence (MRoPE models only)
         if adapter.uses_mrope:
-            compressed_grid = CompressedMLXBackend._compute_compressed_grid(
+            compressed_grid = compute_compressed_grid(
                 grid_thw,
                 original_count,
                 compressed_count,

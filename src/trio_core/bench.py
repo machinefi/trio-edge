@@ -484,7 +484,7 @@ def build_engine(
     engine = TrioCore(engine_config)
 
     if is_compress:
-        from trio_core.compressed_backend import CompressedMLXBackend
+        from trio_core.backends.compressed import CompressedMLXBackend
         from trio_core.token_compression import TokenCompressor
 
         ratio = kwargs["_compress"]

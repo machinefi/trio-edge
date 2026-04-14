@@ -200,7 +200,7 @@ def main():
         print(f"Loading model: {config.model}")
         engine.load()
     elif args.compress:
-        from trio_core.compressed_backend import CompressedMLXBackend
+        from trio_core.backends.compressed import CompressedMLXBackend
         from trio_core.token_compression import TokenCompressor
 
         compressor = TokenCompressor(strategy="similarity", ratio=args.compress)

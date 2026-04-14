@@ -176,7 +176,7 @@ class TestRemoteLoadPath:
         )
         engine = TrioCore(config)
 
-        with patch("trio_core.remote_backend.RemoteHTTPBackend") as MockBackend:
+        with patch("trio_core.backends.remote.RemoteHTTPBackend") as MockBackend:
             mock_instance = MagicMock()
             mock_instance.backend_name = "remote"
             MockBackend.return_value = mock_instance
@@ -209,10 +209,10 @@ class TestRemoteLoadPath:
 class TestBackendSwap:
     """Backend swap logic in resolve_backend: ToMe-only."""
 
-    @patch("trio_core.backends.auto_backend")
+    @patch("trio_core.backends.registry.auto_backend")
     def test_tome_only_swaps_to_tome_backend(self, mock_auto):
         """tome_enabled=True → ToMeMLXBackend."""
-        from trio_core.backends import resolve_backend
+        from trio_core.backends.registry import resolve_backend
 
         base_backend = MagicMock()
         base_backend.backend_name = "mlx"
@@ -226,7 +226,10 @@ class TestBackendSwap:
 
         mock_tb = MagicMock(return_value=mock_tome_instance)
         with patch.dict(
-            "sys.modules", {"trio_core.tome_backend": MagicMock(ToMeMLXBackend=mock_tb)}
+            "sys.modules",
+            {
+                "trio_core.backends.tome": MagicMock(ToMeMLXBackend=mock_tb),
+            },
         ):
             result = resolve_backend(config)
 

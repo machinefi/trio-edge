@@ -16,7 +16,8 @@ from typing import Generator
 
 import numpy as np
 
-from trio_core.backends import GenerationResult, MLXBackend, StreamChunk
+from trio_core.backends.base import GenerationResult, StreamChunk
+from trio_core.backends.mlx import MLXBackend, compute_compressed_grid
 from trio_core.token_compression import CompressionResult, TokenCompressor
 
 logger = logging.getLogger(__name__)
@@ -121,7 +122,7 @@ class CompressedMLXBackend(MLXBackend):
         effective_count = compressed_count
         compressed_grid = None
         if adapter.uses_mrope:
-            compressed_grid = self._compute_compressed_grid(
+            compressed_grid = compute_compressed_grid(
                 grid_thw,
                 original_count,
                 compressed_count,
@@ -227,43 +228,3 @@ class CompressedMLXBackend(MLXBackend):
             top_p=top_p,
             prompt_token_count=prompt_token_count,
         )
-
-    @staticmethod
-    def _compute_compressed_grid(
-        grid_thw, original_count: int, compressed_count: int, spatial_merge_size: int = 2
-    ):
-        """Compute grid_thw that produces exactly compressed_count tokens.
-
-        grid_thw values are pre-merge (before PatchMerger's NxN spatial merge).
-        Total visual tokens = T * (H/merge) * (W/merge).
-        We scale H, W to match the compressed count.
-        """
-        import mlx.core as mx
-
-        new_grids = []
-        for i in range(grid_thw.shape[0]):
-            t, h, w = [x.item() for x in grid_thw[i]]
-
-            h_grid = h // spatial_merge_size
-            w_grid = w // spatial_merge_size
-            target_per_t = compressed_count // max(t, 1)
-
-            if target_per_t <= 0:
-                target_per_t = 1
-
-            original_per_t = h_grid * w_grid
-            ratio = (target_per_t / max(original_per_t, 1)) ** 0.5
-            new_h_grid = max(1, round(h_grid * ratio))
-            new_w_grid = max(1, target_per_t // new_h_grid)
-
-            # Fine-tune to match exactly
-            while new_h_grid * new_w_grid * t > compressed_count and new_w_grid > 1:
-                new_w_grid -= 1
-            while new_h_grid * new_w_grid * t < compressed_count and new_w_grid < w_grid:
-                new_w_grid += 1
-
-            new_h = new_h_grid * spatial_merge_size
-            new_w = new_w_grid * spatial_merge_size
-            new_grids.append([t, new_h, new_w])
-
-        return mx.array(new_grids, dtype=grid_thw.dtype)

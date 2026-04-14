@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
@@ -16,7 +18,16 @@ def _default_model() -> str:
 class EngineConfig(BaseSettings):
     """TrioCore configuration. All fields can be set via TRIO_ env vars."""
 
-    model_config = {"env_prefix": "TRIO_", "env_file": ".env"}
+    model_config = {"env_prefix": "TRIO_"}
+
+    @classmethod
+    def from_env_file(
+        cls,
+        env_file: str | Path | None = ".env",
+        **overrides,
+    ) -> "EngineConfig":
+        """Load settings from an explicit env file plus process environment."""
+        return cls(_env_file=env_file, **overrides)
 
     # Model
     model: str = Field(

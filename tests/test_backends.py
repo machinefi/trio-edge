@@ -129,7 +129,7 @@ class TestBaseBackendHealth:
 
 class TestRemoteHTTPBackend:
     def test_init_sets_device_info(self):
-        from trio_core.remote_backend import RemoteHTTPBackend
+        from trio_core.backends.remote import RemoteHTTPBackend
 
         b = RemoteHTTPBackend(
             url="https://api.example.com/v1", api_key="sk-test", model="qwen-vl-plus"
@@ -144,7 +144,7 @@ class TestRemoteHTTPBackend:
     def test_load_creates_client(self):
         import sys
 
-        from trio_core.remote_backend import RemoteHTTPBackend
+        from trio_core.backends.remote import RemoteHTTPBackend
 
         mock_client = MagicMock()
         mock_openai_mod = MagicMock()
@@ -164,7 +164,7 @@ class TestRemoteHTTPBackend:
     def test_load_with_no_api_key(self):
         import sys
 
-        from trio_core.remote_backend import RemoteHTTPBackend
+        from trio_core.backends.remote import RemoteHTTPBackend
 
         mock_openai_mod = MagicMock()
 
@@ -178,7 +178,7 @@ class TestRemoteHTTPBackend:
         )
 
     def test_generate_builds_correct_messages(self):
-        from trio_core.remote_backend import RemoteHTTPBackend
+        from trio_core.backends.remote import RemoteHTTPBackend
 
         b = RemoteHTTPBackend(url="https://api.example.com/v1", model="qwen-vl-plus")
         mock_client = MagicMock()
@@ -218,7 +218,7 @@ class TestRemoteHTTPBackend:
         assert text_blocks[0]["text"] == "describe this"
 
     def test_generate_handles_empty_content(self):
-        from trio_core.remote_backend import RemoteHTTPBackend
+        from trio_core.backends.remote import RemoteHTTPBackend
 
         b = RemoteHTTPBackend(url="https://api.example.com/v1")
         mock_response = MagicMock()
@@ -240,7 +240,7 @@ class TestRemoteHTTPBackend:
         assert result.completion_tokens == 0
 
     def test_generate_handles_missing_usage(self):
-        from trio_core.remote_backend import RemoteHTTPBackend
+        from trio_core.backends.remote import RemoteHTTPBackend
 
         b = RemoteHTTPBackend(url="https://api.example.com/v1")
         mock_response = MagicMock()
@@ -261,7 +261,7 @@ class TestRemoteHTTPBackend:
         assert result.completion_tokens == 0
 
     def test_stream_generate_wraps_generate(self):
-        from trio_core.remote_backend import RemoteHTTPBackend
+        from trio_core.backends.remote import RemoteHTTPBackend
 
         b = RemoteHTTPBackend(url="https://api.example.com/v1")
         mock_response = MagicMock()
@@ -287,7 +287,7 @@ class TestRemoteHTTPBackend:
         assert chunks[0].completion_tokens == 5
 
     def test_health(self):
-        from trio_core.remote_backend import RemoteHTTPBackend
+        from trio_core.backends.remote import RemoteHTTPBackend
 
         b = RemoteHTTPBackend(url="https://api.example.com/v1", model="qwen-vl-plus")
         h = b.health()
