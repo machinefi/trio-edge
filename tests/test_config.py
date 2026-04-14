@@ -1,15 +1,12 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from trio_core.config import EngineConfig
 
 
 def test_engine_config_does_not_read_dotenv_implicitly(tmp_path, monkeypatch):
     env_file = tmp_path / ".env"
     env_file.write_text(
-        "TRIO_REMOTE_VLM_URL=https://example.invalid/v1\n"
-        "TRIO_REMOTE_VLM_API_KEY=secret\n",
+        "TRIO_REMOTE_VLM_URL=https://example.invalid/v1\nTRIO_REMOTE_VLM_API_KEY=secret\n",
         encoding="utf-8",
     )
     monkeypatch.chdir(tmp_path)
@@ -44,8 +41,7 @@ def test_engine_config_from_env_file_reads_explicit_dotenv(tmp_path, monkeypatch
 def test_engine_config_explicit_kwargs_override_env_file(tmp_path, monkeypatch):
     env_file = tmp_path / ".env"
     env_file.write_text(
-        "TRIO_REMOTE_VLM_URL=https://example.invalid/v1\n"
-        "TRIO_REMOTE_VLM_MODEL=test-model\n",
+        "TRIO_REMOTE_VLM_URL=https://example.invalid/v1\nTRIO_REMOTE_VLM_MODEL=test-model\n",
         encoding="utf-8",
     )
     monkeypatch.delenv("TRIO_REMOTE_VLM_URL", raising=False)
