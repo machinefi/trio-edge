@@ -169,7 +169,7 @@ class TrioCore(CallbackMixin):
 
         # Remote VLM: bypass local backend when remote URL is configured
         if self.config.remote_vlm_url:
-            from trio_core.remote_backend import RemoteHTTPBackend
+            from trio_core.backends.remote import RemoteHTTPBackend
 
             backend = RemoteHTTPBackend(
                 url=self.config.remote_vlm_url,

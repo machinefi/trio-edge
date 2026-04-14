@@ -75,7 +75,7 @@ ignore = ["E501", "E402", "E702"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 timeout = 30
-pythonpath = ["tests"]
+pythonpath = ["src", "tests"]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]

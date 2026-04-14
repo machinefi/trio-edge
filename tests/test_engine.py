@@ -176,7 +176,7 @@ class TestRemoteLoadPath:
         )
         engine = TrioCore(config)
 
-        with patch("trio_core.remote_backend.RemoteHTTPBackend") as MockBackend:
+        with patch("trio_core.backends.remote.RemoteHTTPBackend") as MockBackend:
             mock_instance = MagicMock()
             mock_instance.backend_name = "remote"
             MockBackend.return_value = mock_instance
@@ -228,7 +228,6 @@ class TestBackendSwap:
         with patch.dict(
             "sys.modules",
             {
-                "trio_core.tome_backend": MagicMock(ToMeMLXBackend=mock_tb),
                 "trio_core.backends.tome": MagicMock(ToMeMLXBackend=mock_tb),
             },
         ):

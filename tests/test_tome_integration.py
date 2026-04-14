@@ -1,4 +1,4 @@
-"""Tests for trio_core.tome_backend and trio_core.tome_vision — integration layer."""
+"""Tests for trio_core.backends.tome and trio_core.tome_vision."""
 
 import pytest
 
@@ -21,7 +21,7 @@ class TestToMeMLXBackendValidation:
         """Create a ToMeMLXBackend with a patched parent __init__."""
         from unittest.mock import patch
 
-        from trio_core.tome_backend import ToMeMLXBackend
+        from trio_core.backends.tome import ToMeMLXBackend
 
         with patch.object(ToMeMLXBackend.__bases__[0], "__init__", return_value=None):
             return ToMeMLXBackend("fake-model", **kwargs)
@@ -71,7 +71,7 @@ class TestToMeMLXBackendValidation:
 
 class TestOriginalTokenCount:
     def _count(self, grid_thw_list):
-        from trio_core.tome_backend import ToMeMLXBackend
+        from trio_core.backends.tome import ToMeMLXBackend
 
         grid_thw = mx.array(grid_thw_list, dtype=mx.int32)
         return ToMeMLXBackend._static_token_count(grid_thw)
@@ -164,7 +164,7 @@ class TestBackendName:
     def test_backend_name_returns_mlx_tome(self):
         from unittest.mock import patch
 
-        from trio_core.tome_backend import ToMeMLXBackend
+        from trio_core.backends.tome import ToMeMLXBackend
 
         with patch.object(ToMeMLXBackend.__bases__[0], "__init__", return_value=None):
             backend = ToMeMLXBackend("fake-model")
