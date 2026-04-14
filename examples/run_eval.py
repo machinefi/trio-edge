@@ -98,7 +98,7 @@ def main():
         engine.load()
     elif args.compress:
         # Use compressed backend — load manually to bypass auto_backend
-        from trio_core.compressed_backend import CompressedMLXBackend
+        from trio_core.backends.compressed import CompressedMLXBackend
         from trio_core.token_compression import TokenCompressor
 
         compressor = TokenCompressor(strategy=args.strategy, ratio=args.compress)

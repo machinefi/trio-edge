@@ -395,7 +395,7 @@ def main():
                 tic = time.perf_counter()
 
                 if is_compress:
-                    from trio_core.compressed_backend import CompressedMLXBackend
+                    from trio_core.backends.compressed import CompressedMLXBackend
                     from trio_core.token_compression import TokenCompressor
 
                     ratio = overrides["_compress"]
