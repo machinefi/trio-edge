@@ -226,7 +226,11 @@ class TestBackendSwap:
 
         mock_tb = MagicMock(return_value=mock_tome_instance)
         with patch.dict(
-            "sys.modules", {"trio_core.tome_backend": MagicMock(ToMeMLXBackend=mock_tb)}
+            "sys.modules",
+            {
+                "trio_core.tome_backend": MagicMock(ToMeMLXBackend=mock_tb),
+                "trio_core.backends.tome": MagicMock(ToMeMLXBackend=mock_tb),
+            },
         ):
             result = resolve_backend(config)
 

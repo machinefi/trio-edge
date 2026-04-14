@@ -1,222 +1,63 @@
-"""VLM backend abstraction — one interface, multiple runtimes.
+"""VLM backend using MLX on Apple Silicon.
 
-Backends:
-    MLXBackend          → mlx-vlm on Apple Silicon (Metal GPU)
-    TransformersBackend → HuggingFace Transformers on CUDA / CPU
-
-Usage:
-    from trio_core.backends import auto_backend
-
-    backend = auto_backend("mlx-community/Qwen2.5-VL-3B-Instruct-4bit")
-    backend.load()
-    result = backend.generate(frames, prompt, max_tokens=512)
+Uses mlx_vlm only for model loading (load + load_config).
+Preprocessing, generation, KV cache, and sampling are all internal.
 """
 
 from __future__ import annotations
 
 import logging
 import time
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from typing import Generator
 
 import numpy as np
 
-from trio_core.device import DeviceInfo, detect_device
+from trio_core.backends.base import BaseBackend, GenerationResult, StreamChunk, _TokenHandler
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class GenerationResult:
-    """Unified generation result across all backends."""
+def compute_compressed_grid(
+    grid_thw, original_count: int, compressed_count: int, spatial_merge_size: int = 2
+):
+    """Compute grid_thw that produces exactly compressed_count tokens.
 
-    text: str
-    prompt_tokens: int = 0
-    completion_tokens: int = 0
-    prompt_tps: float = 0.0
-    generation_tps: float = 0.0
-    peak_memory: float = 0.0
+    Shared between compressed and tome backends for MRoPE position ID
+    computation after visual token reduction.
 
-
-@dataclass
-class StreamChunk:
-    """A single chunk from streaming generation."""
-
-    text: str
-    finished: bool = False
-    prompt_tokens: int = 0
-    completion_tokens: int = 0
-
-
-class BaseBackend(ABC):
-    """Abstract VLM inference backend.
-
-    Subclasses must implement load(), generate(), and stream_generate().
-    The engine calls these methods — it never touches mlx or torch directly.
+    grid_thw values are pre-merge (before PatchMerger's NxN spatial merge).
+    Total visual tokens = T * (H/merge) * (W/merge).
+    We scale H, W to match the compressed count.
     """
+    import mlx.core as mx
 
-    def __init__(
-        self,
-        model_name: str,
-        device_info: DeviceInfo | None = None,
-        adapter_path: str | None = None,
-    ):
-        self.model_name = model_name
-        self.device_info = device_info or detect_device()
-        self.adapter_path = adapter_path
-        self._loaded = False
+    new_grids = []
+    for i in range(grid_thw.shape[0]):
+        t, h, w = [x.item() for x in grid_thw[i]]
 
-    @property
-    def loaded(self) -> bool:
-        return self._loaded
+        h_grid = h // spatial_merge_size
+        w_grid = w // spatial_merge_size
+        target_per_t = compressed_count // max(t, 1)
 
-    @property
-    @abstractmethod
-    def backend_name(self) -> str:
-        """Human-readable backend name."""
-        ...
+        if target_per_t <= 0:
+            target_per_t = 1
 
-    @abstractmethod
-    def load(self) -> None:
-        """Load model and processor. Must set self._loaded = True."""
-        ...
+        original_per_t = h_grid * w_grid
+        ratio = (target_per_t / max(original_per_t, 1)) ** 0.5
+        new_h_grid = max(1, round(h_grid * ratio))
+        new_w_grid = max(1, target_per_t // new_h_grid)
 
-    @abstractmethod
-    def generate(
-        self,
-        frames: np.ndarray,
-        prompt: str,
-        *,
-        max_tokens: int = 512,
-        temperature: float = 0.0,
-        top_p: float = 1.0,
-    ) -> GenerationResult:
-        """Run inference on video frames.
+        # Fine-tune to match exactly
+        while new_h_grid * new_w_grid * t > compressed_count and new_w_grid > 1:
+            new_w_grid -= 1
+        while new_h_grid * new_w_grid * t < compressed_count and new_w_grid < w_grid:
+            new_w_grid += 1
 
-        Args:
-            frames: (T, C, H, W) float32 numpy array.
-            prompt: User prompt / question about the video.
+        new_h = new_h_grid * spatial_merge_size
+        new_w = new_w_grid * spatial_merge_size
+        new_grids.append([t, new_h, new_w])
 
-        Returns:
-            GenerationResult with text and metrics.
-        """
-        ...
-
-    @abstractmethod
-    def stream_generate(
-        self,
-        frames: np.ndarray,
-        prompt: str,
-        *,
-        max_tokens: int = 512,
-        temperature: float = 0.0,
-        top_p: float = 1.0,
-    ) -> Generator[StreamChunk, None, None]:
-        """Stream inference token by token."""
-        ...
-
-    def health(self) -> dict:
-        return {
-            "backend": self.backend_name,
-            "model": self.model_name,
-            "loaded": self._loaded,
-            "device": self.device_info.device_name,
-            "accelerator": self.device_info.accelerator,
-            "memory_gb": self.device_info.memory_gb,
-        }
-
-    @staticmethod
-    def _frames_to_pil(frames: np.ndarray) -> list:
-        """Convert (T, C, H, W) float32 numpy to list of PIL Images."""
-        from PIL import Image
-
-        images = []
-        for i in range(frames.shape[0]):
-            frame = (frames[i].transpose(1, 2, 0) * 255).clip(0, 255).astype(np.uint8)
-            images.append(Image.fromarray(frame))
-        return images
-
-
-# ── Shared token handling ────────────────────────────────────────────────────
-
-
-class _TokenHandler:
-    """Unified tokenizer init, EOS detection, and incremental detokenization.
-
-    Eliminates repeated boilerplate across generate/stream/ar decode loops.
-    """
-
-    def __init__(self, processor, model_config):
-        self.tokenizer = processor.tokenizer if hasattr(processor, "tokenizer") else processor
-        self._has_detokenizer = hasattr(processor, "detokenizer")
-        if self._has_detokenizer:
-            self._detokenizer = processor.detokenizer
-            self._detokenizer.reset()
-
-        if hasattr(self.tokenizer, "stopping_criteria"):
-            self.tokenizer.stopping_criteria.reset(model_config.eos_token_id)
-
-        self._eos_token_id = getattr(model_config, "eos_token_id", None)
-        self._token_ids: list[int] = []
-        self._prev_text = ""
-
-    def should_stop(self, token: int) -> bool:
-        """Check stopping criteria and EOS."""
-        if hasattr(self.tokenizer, "stopping_criteria") and self.tokenizer.stopping_criteria(token):
-            return True
-        if self._eos_token_id is not None and not self._has_detokenizer:
-            if isinstance(self._eos_token_id, list):
-                return token in self._eos_token_id
-            return token == self._eos_token_id
-        return False
-
-    def add_token(self, token: int) -> str:
-        """Add token and return incremental text delta.
-
-        For non-streaming callers the delta can be ignored — finalize()
-        does a single full decode at the end, avoiding O(n²) repeated
-        decodes in the non-detokenizer path.
-        """
-        if self._has_detokenizer:
-            self._detokenizer.add_token(token)
-            return self._detokenizer.last_segment
-        self._token_ids.append(token)
-        return ""
-
-    def add_token_streaming(self, token: int) -> str:
-        """Add token and return incremental text delta (streaming variant).
-
-        Same as add_token() but always computes the delta text for
-        immediate yield. For the non-detokenizer fallback path this
-        decodes all accumulated tokens each call (O(n²) total, but
-        this path is rare — most MLX models have a detokenizer).
-        """
-        if self._has_detokenizer:
-            self._detokenizer.add_token(token)
-            return self._detokenizer.last_segment
-        self._token_ids.append(token)
-        new_text = self.tokenizer.decode(self._token_ids, skip_special_tokens=True)
-        delta = new_text[len(self._prev_text) :]
-        self._prev_text = new_text
-        return delta
-
-    def finalize(self) -> str:
-        """Return complete decoded text."""
-        if self._has_detokenizer:
-            self._detokenizer.finalize()
-            return self._detokenizer.text
-        return self.tokenizer.decode(self._token_ids, skip_special_tokens=True)
-
-    def finalize_delta(self) -> str:
-        """Return any remaining text not yet yielded (for streaming)."""
-        if self._has_detokenizer:
-            self._detokenizer.finalize()
-            return self._detokenizer.last_segment
-        return ""
-
-
-# ── MLX Backend ──────────────────────────────────────────────────────────────
+    return mx.array(new_grids, dtype=grid_thw.dtype)
 
 
 class MLXBackend(BaseBackend):
@@ -734,9 +575,9 @@ class MLXBackend(BaseBackend):
             add_generation_prompt=True,
         )
 
-        # Disable thinking mode (Qwen3.5 appends <think>\n by default)
-        if formatted.endswith("<think>\n"):
-            formatted = formatted[: -len("<think>\n")]
+        # Disable thinking mode (Qwen3.5 appends <think\n> by default)
+        if formatted.endswith("<think\n>"):
+            formatted = formatted[: -len("<think\n>")]
 
         inputs = self._call_processor(
             text=[formatted],
@@ -813,9 +654,9 @@ class MLXBackend(BaseBackend):
                     # Last resort: plain text without template
                     formatted = f"{image_tokens}{prompt}"
 
-        # Disable thinking mode (Qwen3.5 appends <think>\n by default)
-        if formatted.endswith("<think>\n"):
-            formatted = formatted[: -len("<think>\n")]
+        # Disable thinking mode (Qwen3.5 appends <think\n> by default)
+        if formatted.endswith("<think\n>"):
+            formatted = formatted[: -len("<think\n>")]
 
         inputs = self._call_processor(
             text=[formatted],
@@ -852,299 +693,3 @@ class MLXBackend(BaseBackend):
             inputs = self._processor(**kwargs, padding=True, return_tensors="pt")
             inputs = {k: v.numpy() if hasattr(v, "numpy") else v for k, v in inputs.items()}
         return inputs
-
-
-# ── Transformers Backend ─────────────────────────────────────────────────────
-
-
-class TransformersBackend(BaseBackend):
-    """VLM backend using HuggingFace Transformers on CUDA / CPU.
-
-    Supports any VLM loadable via AutoModelForImageTextToText, including:
-    Qwen2.5-VL, Qwen3-VL, Qwen3.5, Gemma 3, SmolVLM, Phi-4, InternVL, etc.
-    """
-
-    @property
-    def backend_name(self) -> str:
-        return "transformers"
-
-    def load(self) -> None:
-        import torch
-        from transformers import AutoModelForImageTextToText, AutoProcessor
-
-        device = "cuda" if self.device_info.accelerator == "cuda" else "cpu"
-        dtype = torch.float16 if device == "cuda" else torch.float32
-
-        logger.info("[Transformers] Loading model: %s (device=%s)", self.model_name, device)
-        t0 = time.monotonic()
-        self._processor = AutoProcessor.from_pretrained(self.model_name, trust_remote_code=True)
-        self._model = AutoModelForImageTextToText.from_pretrained(
-            self.model_name,
-            torch_dtype=dtype,
-            device_map=device,
-            trust_remote_code=True,
-        )
-        self._model.eval()
-        self._device = device
-        self._is_video_model = hasattr(self._model.config, "video_token_id")
-        self._loaded = True
-        logger.info("[Transformers] Model loaded in %.1fs", time.monotonic() - t0)
-
-    def generate(
-        self,
-        frames: np.ndarray,
-        prompt: str,
-        *,
-        max_tokens: int = 512,
-        temperature: float = 0.0,
-        top_p: float = 1.0,
-    ) -> GenerationResult:
-        import torch
-
-        inputs = self._prepare(frames, prompt)
-
-        t0 = time.monotonic()
-        prompt_len = inputs["input_ids"].shape[1]
-        with torch.no_grad():
-            outputs = self._model.generate(
-                **inputs,
-                max_new_tokens=max_tokens,
-                temperature=max(temperature, 1e-6),
-                top_p=top_p,
-                do_sample=temperature > 0,
-            )
-
-        new_tokens = outputs[0][prompt_len:]
-        text = self._processor.decode(new_tokens, skip_special_tokens=True)
-
-        elapsed = time.monotonic() - t0
-        n_tokens = len(new_tokens)
-
-        return GenerationResult(
-            text=text,
-            prompt_tokens=prompt_len,
-            completion_tokens=n_tokens,
-            generation_tps=n_tokens / max(elapsed, 1e-6),
-            peak_memory=0.0,
-        )
-
-    def stream_generate(
-        self,
-        frames: np.ndarray,
-        prompt: str,
-        *,
-        max_tokens: int = 512,
-        temperature: float = 0.0,
-        top_p: float = 1.0,
-    ) -> Generator[StreamChunk, None, None]:
-        import threading
-
-        from transformers import TextIteratorStreamer
-
-        inputs = self._prepare(frames, prompt)
-
-        streamer = TextIteratorStreamer(self._processor, skip_prompt=True, skip_special_tokens=True)
-
-        gen_kwargs = dict(
-            **inputs,
-            max_new_tokens=max_tokens,
-            temperature=max(temperature, 1e-6),
-            top_p=top_p,
-            do_sample=temperature > 0,
-            streamer=streamer,
-        )
-
-        thread = threading.Thread(target=self._model.generate, kwargs=gen_kwargs)
-        thread.start()
-
-        for text in streamer:
-            yield StreamChunk(text=text)
-
-        thread.join(timeout=300)  # 5 min safety timeout
-
-    def _prepare(self, frames: np.ndarray, prompt: str) -> dict:
-        """Prepare inputs for generate().
-
-        Qwen models use qwen_vl_utils for video processing.
-        All other models get frames converted to PIL images.
-        Returns a dict of tensors ready to pass to model.generate(**inputs).
-        """
-
-        # Single-frame requests should still use the image path even for
-        # video-capable models. Qwen's video utils expect a list/tuple of
-        # frames and can assert on one-frame numpy inputs that originate from
-        # analyze_frame().
-        if self._is_video_model and frames.shape[0] > 1:
-            return self._prepare_video(frames, prompt)
-
-        # Generic path: convert frames to PIL images
-        images = self._frames_to_pil(frames)
-
-        messages = [{"role": "user", "content": []}]
-        for img in images:
-            messages[0]["content"].append({"type": "image", "image": img})
-        messages[0]["content"].append({"type": "text", "text": prompt})
-
-        text = self._processor.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True,
-        )
-
-        inputs = self._processor(
-            text=[text],
-            images=images,
-            padding=True,
-            return_tensors="pt",
-        )
-
-        return {k: v.to(self._device) if hasattr(v, "to") else v for k, v in inputs.items()}
-
-    def _prepare_video(self, frames: np.ndarray, prompt: str) -> dict:
-        """Video-capable model preparation using qwen_vl_utils."""
-
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "video", "video": frames},
-                    {"type": "text", "text": prompt},
-                ],
-            }
-        ]
-
-        text = self._processor.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True,
-        )
-
-        try:
-            from qwen_vl_utils import process_vision_info
-
-            image_inputs, video_inputs, _ = process_vision_info(messages, return_video_kwargs=True)
-        except ImportError:
-            video_inputs = [frames]
-            image_inputs = None
-
-        inputs = self._processor(
-            text=[text],
-            images=image_inputs,
-            videos=video_inputs,
-            padding=True,
-            return_tensors="pt",
-        )
-
-        return {k: v.to(self._device) if hasattr(v, "to") else v for k, v in inputs.items()}
-
-
-# ── Auto Backend Selection ───────────────────────────────────────────────────
-
-_BACKEND_MAP: dict[str, type[BaseBackend]] = {
-    "mlx": MLXBackend,
-    "transformers": TransformersBackend,
-}
-
-
-def register_backend(name: str, cls: type[BaseBackend]) -> None:
-    """Register a backend class by name (e.g. from a plugin)."""
-    _BACKEND_MAP[name] = cls
-
-
-def auto_backend(
-    model_name: str,
-    *,
-    backend: str | None = None,
-    device_info: DeviceInfo | None = None,
-    adapter_path: str | None = None,
-) -> BaseBackend:
-    """Create the best backend for the current hardware.
-
-    Args:
-        model_name: HuggingFace model ID.
-        backend: Force a specific backend ("mlx" or "transformers").
-                 If None, auto-detect from hardware.
-        device_info: Pre-detected device info. If None, auto-detect.
-        adapter_path: Path to LoRA adapter directory (optional).
-
-    Returns:
-        Configured (but not loaded) backend instance.
-    """
-    if device_info is None:
-        device_info = detect_device()
-
-    chosen = backend or device_info.backend
-
-    if chosen not in _BACKEND_MAP:
-        logger.warning("Unknown backend '%s', falling back to transformers", chosen)
-        chosen = "transformers"
-
-    cls = _BACKEND_MAP[chosen]
-    logger.info(
-        "Auto-selected backend: %s (device=%s, accelerator=%s, memory=%.1fGB)",
-        chosen,
-        device_info.device_name,
-        device_info.accelerator,
-        device_info.memory_gb,
-    )
-    return cls(model_name, device_info=device_info, adapter_path=adapter_path)
-
-
-def resolve_backend(config, *, backend_override: str | None = None) -> BaseBackend:
-    """Create the right backend from an EngineConfig.
-
-    Handles feature flags (ToMe, Compressed) so the engine
-    doesn't need to know about backend subclasses.
-
-    Args:
-        config: EngineConfig instance.
-        backend_override: Force "mlx" or "transformers". None = auto.
-
-    Returns:
-        Configured (but not loaded) backend instance.
-    """
-    base = auto_backend(
-        config.model, backend=backend_override, adapter_path=getattr(config, "adapter_path", None)
-    )
-
-    if base.backend_name != "mlx":
-        return base
-
-    # Compress is exclusive with ToMe (no compound implementation)
-    if config.compress_enabled and config.tome_enabled:
-        logger.warning(
-            "compress_enabled ignored: tome takes priority (no compound mode).",
-        )
-
-    # ToMe
-    if config.tome_enabled:
-        from trio_core.tome_backend import ToMeMLXBackend
-
-        return ToMeMLXBackend(
-            config.model,
-            tome_r=config.tome_r,
-            metric=config.tome_metric,
-            min_keep_ratio=config.tome_min_keep_ratio,
-            adaptive=config.tome_adaptive,
-            content_aware=config.tome_content_aware,
-            device_info=base.device_info,
-            adapter_path=base.adapter_path,
-        )
-
-    # Compressed visual tokens
-    if config.compress_enabled:
-        from trio_core.compressed_backend import CompressedMLXBackend
-        from trio_core.token_compression import TokenCompressor
-
-        compressor = TokenCompressor(
-            strategy="similarity",
-            ratio=config.compress_ratio,
-        )
-        return CompressedMLXBackend(
-            config.model,
-            compressor,
-            device_info=base.device_info,
-            adapter_path=base.adapter_path,
-        )
-
-    return base
