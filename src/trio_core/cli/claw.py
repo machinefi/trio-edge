@@ -120,7 +120,7 @@ def claw(
                 config_kwargs["model"] = model
             if adapter:
                 config_kwargs["adapter_path"] = adapter
-            config_obj = EngineConfig(**config_kwargs)
+            config_obj = EngineConfig.from_env_file(**config_kwargs)
 
             typer.echo(f"Loading model: {config_obj.model} ...")
             engine = TrioCore(config_obj)

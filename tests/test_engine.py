@@ -209,10 +209,10 @@ class TestRemoteLoadPath:
 class TestBackendSwap:
     """Backend swap logic in resolve_backend: ToMe-only."""
 
-    @patch("trio_core.backends.auto_backend")
+    @patch("trio_core.backends.registry.auto_backend")
     def test_tome_only_swaps_to_tome_backend(self, mock_auto):
         """tome_enabled=True → ToMeMLXBackend."""
-        from trio_core.backends import resolve_backend
+        from trio_core.backends.registry import resolve_backend
 
         base_backend = MagicMock()
         base_backend.backend_name = "mlx"
