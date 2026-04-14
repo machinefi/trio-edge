@@ -52,6 +52,8 @@ def _setup_logging(verbose: bool = False, json_logs: bool = False) -> None:
     os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
     os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
 
+    logging.getLogger("trio_core").setLevel(logging.DEBUG if verbose else logging.INFO)
+
     if not verbose:
         logging.getLogger("httpx").setLevel(logging.WARNING)
 
