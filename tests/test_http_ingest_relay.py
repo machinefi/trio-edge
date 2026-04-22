@@ -177,7 +177,7 @@ async def test_register_camera_posts_explicit_id_and_metadata(monkeypatch: pytes
 
 
 @pytest.mark.asyncio
-async def test_register_camera_accepts_server_generated_id(monkeypatch: pytest.MonkeyPatch):
+async def test_register_camera_returns_client_camera_id(monkeypatch: pytest.MonkeyPatch):
     relay = _relay_module()
     calls: list[dict[str, object]] = []
     responses = [
@@ -199,7 +199,7 @@ async def test_register_camera_accepts_server_generated_id(monkeypatch: pytest.M
     async with relay.httpx.AsyncClient() as http_client:
         returned = await client._register_camera(http_client)
 
-    assert returned == "server-generated"
+    assert returned == "synthetic-id"
     assert len(calls) == 1
     assert calls[0]["method"] == "POST"
 
@@ -317,13 +317,11 @@ async def test_run_launches_ffmpeg_with_pipe_output_and_posts_segment(
     assert "pipe:1" in cmd
     assert "-method" not in cmd
     assert "-headers" not in cmd
-    assert "https://trio-relay.machinefi.com/api/stream/ingest/server-generated" not in cmd
+    assert "https://trio-relay.machinefi.com/api/stream/ingest/preferred-id" not in cmd
 
     assert len(post_calls) >= 1
     ingest_post = post_calls[0]
-    assert (
-        ingest_post["url"] == "https://trio-relay.machinefi.com/api/stream/ingest/server-generated"
-    )
+    assert ingest_post["url"] == "https://trio-relay.machinefi.com/api/stream/ingest/preferred-id"
     assert ingest_post["headers"]["X-API-Key"] == "token-123"
     assert ingest_post["headers"]["Content-Type"] == "video/mp2t"
     assert ingest_post["content"] == b"fake-ts-data"

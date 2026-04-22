@@ -222,7 +222,7 @@ class _FFmpegCommandBuilder:
         return args
 
     def _input_file(self) -> list[str]:
-        return ["-re", "-stream_loop", "-1", "-i", self._source]
+        return ["-re", "-i", self._source]
 
     def _resolution_args(self) -> list[str]:
         if not self._resolution:
@@ -547,6 +547,7 @@ class HttpIngestRelay:
                 await monitor_task
             except asyncio.CancelledError:
                 pass
+            await self._delete_ingest_session(camera_id)
 
     async def teardown(self) -> None:
         """Terminate the ffmpeg subprocess if still running."""
@@ -579,6 +580,28 @@ class HttpIngestRelay:
             },
         }
 
+    async def _delete_ingest_session(self, camera_id: str) -> None:
+        delete_url = _join_api_url(self.cloud_url, f"/api/stream/ingest/{camera_id}")
+        headers = self._auth_headers()
+        try:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(connect=5.0, read=5.0),
+                follow_redirects=True,
+            ) as client:
+                resp = await client.delete(delete_url, headers=headers)
+                if resp.status_code not in (204, 404):
+                    logger.warning(
+                        "Ingest session cleanup returned HTTP %d for camera %s",
+                        resp.status_code,
+                        camera_id,
+                    )
+        except Exception:
+            logger.debug(
+                "Failed to clean up ingest session for camera %s",
+                camera_id,
+                exc_info=True,
+            )
+
     async def _register_camera(self, client: httpx.AsyncClient) -> str:
         camera_id = self.resolved_camera_id()
 
@@ -592,18 +615,7 @@ class HttpIngestRelay:
                 f"Camera registration failed (HTTP {response.status_code}): {response.text[:200]}"
             )
 
-        returned_id = response.json().get("id")
-        if not returned_id:
-            raise CameraRegistrationError(
-                "Camera registration succeeded but response did not include a camera id"
-            )
-        if returned_id != camera_id:
-            logger.info(
-                "Cloud assigned camera id %s instead of requested %s",
-                returned_id,
-                camera_id,
-            )
-        return returned_id
+        return camera_id
 
     def _build_ffmpeg_cmd(self) -> list[str]:
         return _FFmpegCommandBuilder(

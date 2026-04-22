@@ -39,6 +39,9 @@ def relay(
         None, "--resolution", "-r", help="Video resolution WxH (e.g. 1280x720)"
     ),
     fps: int = typer.Option(1, "--fps", help="Target frame rate"),
+    segment_duration: float = typer.Option(
+        10.0, "--segment-duration", help="Segment duration in seconds for each upload chunk"
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show raw FFmpeg stderr output"),
     json_output: bool = typer.Option(
         False, "--json", help="Emit NDJSON progress to stderr for machine consumption"
@@ -84,14 +87,14 @@ def relay(
         resolution=resolution_tuple,
         framerate=fps,
         verbose=verbose,
-        segment_duration=10.0,
+        segment_duration=segment_duration,
         json_mode=json_output,
     )
 
     if not json_output:
         typer.echo(f"Relay: {actual_source} -> {cloud}")
         typer.echo(
-            f"Transport: HTTP MPEG-TS (segmented 10s) | FPS: {fps} | Resolution: {resolution or 'native'}"
+            f"Transport: HTTP MPEG-TS (segmented {segment_duration}s) | FPS: {fps} | Resolution: {resolution or 'native'}"
         )
         typer.echo("Press Ctrl+C to stop.\n")
 
