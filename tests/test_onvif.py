@@ -183,3 +183,174 @@ def test_get_rtsp_uri_returns_none_without_fallback(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(onvif, "_get_onvif_rtsp_uri", raise_runtime_error)
 
     assert get_rtsp_uri("192.168.1.18", 8000, "alice", "secret", fallback=False) is None
+
+
+def test_discover_cameras_falls_back_on_probe_oserror(monkeypatch: pytest.MonkeyPatch):
+    """If WS-Discovery probe raises OSError, subnet scan should still run."""
+    subnet_cameras = [CameraInfo(name="Subnet", ip="192.168.1.50", port=80)]
+
+    def raise_oserror(timeout: int) -> list[CameraInfo]:
+        raise OSError("Network is unreachable")
+
+    monkeypatch.setattr(onvif, "_discover_cameras_probe", raise_oserror)
+    monkeypatch.setattr(onvif, "_discover_cameras_subnet_scan", lambda timeout: subnet_cameras)
+
+    result = discover_cameras(timeout=2)
+    assert result == subnet_cameras
+
+
+def test_https_xaddr_without_port_defaults_to_443():
+    """HTTPS ONVIF endpoints with no explicit port should default to 443."""
+    response = """<?xml version="1.0" encoding="UTF-8"?>
+    <SOAP-ENV:Envelope xmlns:SOAP-ENV="http://www.w3.org/2003/05/soap-envelope">
+      <SOAP-ENV:Body>
+        <wsdd:ProbeMatches xmlns:wsdd="http://schemas.xmlsoap.org/ws/2005/04/discovery">
+          <wsdd:ProbeMatch>
+            <wsdd:XAddrs>https://192.168.1.30/onvif/device_service</wsdd:XAddrs>
+          </wsdd:ProbeMatch>
+        </wsdd:ProbeMatches>
+      </SOAP-ENV:Body>
+    </SOAP-ENV:Envelope>"""
+
+    camera = onvif._camera_info_from_probe_response(response, "192.168.1.30")
+    assert camera.port == 443
+    assert camera.onvif_url == "https://192.168.1.30/onvif/device_service"
+
+
+def test_http_xaddr_without_port_defaults_to_80():
+    """HTTP ONVIF endpoints with no explicit port should default to 80."""
+    response = """<?xml version="1.0" encoding="UTF-8"?>
+    <SOAP-ENV:Envelope xmlns:SOAP-ENV="http://www.w3.org/2003/05/soap-envelope">
+      <SOAP-ENV:Body>
+        <wsdd:ProbeMatches xmlns:wsdd="http://schemas.xmlsoap.org/ws/2005/04/discovery">
+          <wsdd:ProbeMatch>
+            <wsdd:XAddrs>http://192.168.1.31/onvif/device_service</wsdd:XAddrs>
+          </wsdd:ProbeMatch>
+        </wsdd:ProbeMatches>
+      </SOAP-ENV:Body>
+    </SOAP-ENV:Envelope>"""
+
+    camera = onvif._camera_info_from_probe_response(response, "192.168.1.31")
+    assert camera.port == 80
+
+
+def test_probe_rtsp_paths_does_not_send_fake_digest_auth(monkeypatch: pytest.MonkeyPatch):
+    """RTSP fallback probe must not send a syntactically invalid Digest auth header."""
+    captured_requests: list[str] = []
+
+    class FakeSocket:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def settimeout(self, timeout: float) -> None:
+            pass
+
+        def sendall(self, data: bytes) -> None:
+            captured_requests.append(data.decode())
+
+        def recv(self, size: int) -> bytes:
+            return b"RTSP/1.0 401 Unauthorized\r\nCSeq: 1\r\n\r\n"
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr("socket.create_connection", lambda *a, **kw: FakeSocket())
+
+    onvif._probe_rtsp_paths("192.168.1.40", 554, "admin", "secret")
+
+    assert len(captured_requests) >= 1
+    req = captured_requests[0]
+    assert "Authorization" not in req
+    assert "DESCRIBE rtsp://192.168.1.40:554/stream1" in req
+
+
+def test_get_rtsp_uri_logs_exception(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+):
+    """get_rtsp_uri should log exceptions instead of silently swallowing them."""
+
+    def raise_connection_error(host: str, port: int, user: str, password: str) -> str | None:
+        raise ConnectionError("camera refused")
+
+    monkeypatch.setattr(onvif, "_get_onvif_rtsp_uri", raise_connection_error)
+    monkeypatch.setattr(onvif, "_probe_rtsp_paths", lambda *a, **kw: None)
+
+    get_rtsp_uri("192.168.1.41", 8000, "admin", "secret")
+
+    assert "Failed to get RTSP URI" in caplog.text
+
+
+def test_unique_message_ids_per_probe(monkeypatch: pytest.MonkeyPatch):
+    """Each WS-Discovery probe should use a unique MessageID."""
+    sent_payloads: list[bytes] = []
+
+    class FakeSocket:
+        def __init__(self, family, socktype) -> None:
+            pass
+
+        def settimeout(self, timeout: int) -> None:
+            pass
+
+        def sendto(self, payload: bytes, addr) -> None:
+            sent_payloads.append(payload)
+
+        def recvfrom(self, size: int) -> tuple[bytes, tuple[str, int]]:
+            raise TimeoutError
+
+        def close(self) -> None:
+            pass
+
+    fake_socket_module = types.SimpleNamespace(
+        AF_INET=1,
+        SOCK_DGRAM=2,
+        timeout=TimeoutError,
+        getaddrinfo=lambda *args, **kwargs: [(None, None, None, None, ("239.255.255.250", 3702))],
+        socket=FakeSocket,
+    )
+    fake_time_module = types.SimpleNamespace(time=lambda: 0.0)
+
+    monkeypatch.setitem(sys.modules, "socket", fake_socket_module)
+    monkeypatch.setitem(sys.modules, "time", fake_time_module)
+
+    onvif._discover_cameras_probe(timeout=1)
+    onvif._discover_cameras_probe(timeout=1)
+
+    assert len(sent_payloads) == 2
+    msg1 = sent_payloads[0].decode()
+    msg2 = sent_payloads[1].decode()
+
+    import re as _re
+
+    id1 = _re.search(r"<w:MessageID>([^<]+)</w:MessageID>", msg1)
+    id2 = _re.search(r"<w:MessageID>([^<]+)</w:MessageID>", msg2)
+    assert id1 is not None and id2 is not None
+    assert id1.group(1) != id2.group(1)
+
+
+def test_name_from_scopes_uses_unquote():
+    """Scope names should be decoded with urllib.parse.unquote, not just %20 replacement."""
+    scopes = ["onvif://www.onvif.org/name/Front%2FGate%3A01"]
+    name = onvif._name_from_scopes(scopes, "192.168.1.42")
+    assert name == "Front/Gate:01"
+
+
+def test_get_local_ip_prefers_hostname_over_udp(monkeypatch: pytest.MonkeyPatch):
+    """_get_local_ip should try hostname resolution before falling back to UDP."""
+    hostname_called = [False]
+    udp_called = [False]
+
+    def fake_hostname() -> str | None:
+        hostname_called[0] = True
+        return "10.0.0.5"
+
+    def fake_udp() -> str | None:
+        udp_called[0] = True
+        return "8.8.8.8"
+
+    monkeypatch.setattr(onvif, "_get_local_ip_from_hostname", fake_hostname)
+    monkeypatch.setattr(onvif, "_get_local_ip_from_udp", fake_udp)
+
+    ip = onvif._get_local_ip()
+    assert ip == "10.0.0.5"
+    assert hostname_called[0] is True
+    assert udp_called[0] is False

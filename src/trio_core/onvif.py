@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 import re
+import uuid
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
-from urllib.parse import quote, urlparse, urlunsplit
+from urllib.parse import quote, unquote, urlparse, urlunsplit
 
 _ONVIF_SCOPE = "onvif://www.onvif.org"
 _DISCOVERY_PROBE = """<?xml version="1.0" encoding="UTF-8"?>
@@ -14,7 +16,7 @@ _DISCOVERY_PROBE = """<?xml version="1.0" encoding="UTF-8"?>
             xmlns:d="http://schemas.xmlsoap.org/ws/2005/04/discovery"
             xmlns:dn="http://www.onvif.org/ver10/network/wsdl">
   <e:Header>
-    <w:MessageID>uuid:trio-edge-discover</w:MessageID>
+    <w:MessageID>{message_id}</w:MessageID>
     <w:To>urn:schemas-xmlsoap-org:ws:2005:04:discovery</w:To>
     <w:Action>http://schemas.xmlsoap.org/ws/2005/04/discovery/Probe</w:Action>
   </e:Header>
@@ -41,9 +43,12 @@ def discover_cameras(timeout: int = 5) -> list[CameraInfo]:
     First tries WS-Discovery (UDP multicast). If that finds nothing, falls back
     to a direct TCP subnet scan probing common ONVIF ports.
     """
-    cameras = _discover_cameras_probe(timeout)
-    if cameras:
-        return cameras
+    try:
+        cameras = _discover_cameras_probe(timeout)
+        if cameras:
+            return cameras
+    except OSError:
+        pass
     return _discover_cameras_subnet_scan(timeout)
 
 
@@ -60,6 +65,7 @@ def get_rtsp_uri(
     except ImportError:
         rtsp_uri = None
     except Exception:
+        logging.getLogger(__name__).exception("Failed to get RTSP URI from %s:%s", host, port)
         rtsp_uri = None
 
     if rtsp_uri:
@@ -72,8 +78,20 @@ def get_rtsp_uri(
 _ONVIF_PORTS = [2020, 8000, 80, 8080]
 
 
-def _get_local_subnet() -> str | None:
-    """Return the local subnet prefix (e.g. '192.168.1') or None."""
+def _get_local_ip_from_hostname() -> str | None:
+    import socket
+
+    try:
+        hostname = socket.gethostname()
+        ip = socket.getaddrinfo(hostname, None, socket.AF_INET)[0][4][0]
+        if not ip.startswith("127."):
+            return ip
+    except Exception:
+        pass
+    return None
+
+
+def _get_local_ip_from_udp() -> str | None:
     import socket
 
     try:
@@ -81,9 +99,22 @@ def _get_local_subnet() -> str | None:
         s.connect(("8.8.8.8", 80))
         ip = s.getsockname()[0]
         s.close()
-        return ".".join(ip.split(".")[:3])
+        return ip
     except Exception:
         return None
+
+
+def _get_local_ip() -> str | None:
+    """Return the local IP address or None."""
+    return _get_local_ip_from_hostname() or _get_local_ip_from_udp()
+
+
+def _get_local_subnet() -> str | None:
+    """Return the local subnet prefix (e.g. '192.168.1') or None."""
+    ip = _get_local_ip()
+    if ip:
+        return ".".join(ip.split(".")[:3])
+    return None
 
 
 def _probe_onvif_host(ip: str, timeout: float = 1.0) -> CameraInfo | None:
@@ -139,7 +170,7 @@ def _discover_cameras_subnet_scan(timeout: int) -> list[CameraInfo]:
     with concurrent.futures.ThreadPoolExecutor(max_workers=50) as executor:
         futures = {executor.submit(_probe_onvif_host, ip, per_host_timeout): ip for ip in ips}
         try:
-            for future in concurrent.futures.as_completed(futures, timeout=max(timeout, 15)):
+            for future in concurrent.futures.as_completed(futures, timeout=timeout):
                 try:
                     result = future.result()
                     if result is not None:
@@ -150,18 +181,9 @@ def _discover_cameras_subnet_scan(timeout: int) -> list[CameraInfo]:
             pass
 
     # Filter out the local machine
-    local_subnet = _get_local_subnet()
-    if local_subnet:
-        import socket
-
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("8.8.8.8", 80))
-            local_ip = s.getsockname()[0]
-            s.close()
-            cameras = [c for c in cameras if c.ip != local_ip]
-        except Exception:
-            pass
+    local_ip = _get_local_ip()
+    if local_ip:
+        cameras = [c for c in cameras if c.ip != local_ip]
 
     return cameras
 
@@ -179,7 +201,12 @@ def _discover_cameras_probe(timeout: int) -> list[CameraInfo]:
     deadline = time.time() + timeout
 
     try:
-        sock.sendto(_DISCOVERY_PROBE.encode(), addr[4])
+        discovery_probe = _DISCOVERY_PROBE.format(message_id=f"uuid:{uuid.uuid4()}")
+        try:
+            sock.sendto(discovery_probe.encode(), addr[4])
+        except OSError:
+            sock.close()
+            return []
 
         while time.time() < deadline:
             try:
@@ -194,11 +221,62 @@ def _discover_cameras_probe(timeout: int) -> list[CameraInfo]:
             response = data.decode(errors="replace")
             camera = _camera_info_from_probe_response(response, ip)
             if camera is not None:
+                if not camera.rtsp_url:
+                    camera.rtsp_url = get_rtsp_uri(camera.ip, camera.port, "", "")
                 cameras.append(camera)
     finally:
         sock.close()
 
     return cameras
+
+
+def _get_onvif_rtsp_uri(host: str, port: int, user: str, password: str) -> str | None:
+    from onvif import ONVIFCamera
+
+    cam = ONVIFCamera(host, port, user, password)
+    media = cam.create_media_service()
+    profiles = media.GetProfiles()
+    if not profiles:
+        return None
+
+    for profile in profiles:
+        uri = media.GetStreamUri(
+            {
+                "StreamSetup": {
+                    "Stream": "RTP-Unicast",
+                    "Transport": {"Protocol": "RTSP"},
+                },
+                "ProfileToken": profile.token,
+            }
+        )
+        uri_str = getattr(uri, "Uri", None) or getattr(uri, "uri", None)
+        if uri_str:
+            return uri_str
+    return None
+
+
+_FALLBACK_RTSP_PATHS = [
+    "/stream1",
+    "/h264Preview_01_main",
+    "/live/ch00_0",
+    "/cam/realmonitor?channel=1&subtype=0",
+    "/ISAPI/Streaming/Channels/101",
+]
+
+
+def _build_fallback_rtsp_uri(
+    host: str,
+    user: str,
+    password: str,
+) -> str | None:
+    probe_result = _probe_rtsp_paths(host, 554, user, password)
+    if probe_result:
+        host_part = _format_host_for_netloc(host)
+        userinfo = quote(user, safe="")
+        if password or user:
+            userinfo = f"{userinfo}:{quote(password, safe='')}@"
+        return f"rtsp://{userinfo}{host_part}:554{probe_result}"
+    return None
 
 
 def _get_onvif_rtsp_uri(host: str, port: int, user: str, password: str) -> str | None:
@@ -261,8 +339,6 @@ def _probe_rtsp_paths(
             req = (
                 f"DESCRIBE rtsp://{host}:{port}{path} RTSP/1.0\r\n"
                 f"CSeq: 1\r\n"
-                f"Authorization: Digest "
-                f'username="{user}", realm="", nonce="", uri="rtsp://{host}:{port}{path}"\r\n'
                 f"Accept: application/sdp\r\n"
                 f"\r\n"
             )
@@ -275,7 +351,7 @@ def _probe_rtsp_paths(
                 return path
         except Exception:
             continue
-    return _FALLBACK_RTSP_PATHS[0]
+    return None
 
 
 def _inject_rtsp_credentials(url: str, user: str, password: str) -> str:
@@ -334,14 +410,22 @@ def _xaddr_from_probe_response(response: str) -> str | None:
     return match.group(0)
 
 
-def _camera_info_from_probe_response(response: str, ip: str) -> CameraInfo | None:
+def _camera_info_from_probe_response(response: str, ip: str) -> CameraInfo:
     scopes = _scopes_from_probe_response(response)
     onvif_url = _xaddr_from_probe_response(response)
-    port = urlparse(onvif_url).port if onvif_url else None
+    parsed = urlparse(onvif_url) if onvif_url else None
+    if parsed and parsed.port:
+        port = parsed.port
+    elif parsed and parsed.scheme == "https":
+        port = 443
+    elif parsed and parsed.scheme == "http":
+        port = 80
+    else:
+        port = 80
     return CameraInfo(
         name=_name_from_scopes(scopes, ip),
         ip=ip,
-        port=port or 80,
+        port=port,
         onvif_url=onvif_url,
         scopes=scopes or None,
         rtsp_url=None,
@@ -376,11 +460,11 @@ def _name_from_scopes(scopes: list[str] | None, ip: str) -> str:
 
     for scope in scopes:
         if "/name/" in scope:
-            candidate = scope.split("/name/")[-1].replace("%20", " ")
+            candidate = unquote(scope.split("/name/")[-1])
             if candidate:
                 return candidate
         if "/hardware/" in scope and name.startswith("Camera @"):
-            candidate = scope.split("/hardware/")[-1].replace("%20", " ")
+            candidate = unquote(scope.split("/hardware/")[-1])
             if candidate:
                 name = f"{candidate} @ {ip}"
     return name
