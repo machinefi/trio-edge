@@ -44,6 +44,7 @@ def _get_vlm_semaphore() -> _asyncio.Semaphore:
     logger.info("VLM API semaphore initialized: capacity=%d", capacity)
     return _vlm_semaphore
 
+
 import re as _re
 
 _THINK_RE = _re.compile(r"<think>.*?</think>", _re.DOTALL)
@@ -84,12 +85,12 @@ def _vlm_http_error(e: BaseException) -> HTTPException:
         sc = int(getattr(e, "status_code", 0) or 0)
         if 400 <= sc < 500:
             body = getattr(getattr(e, "response", None), "text", "") or str(e)
-            moderated = (
-                "data_inspection_failed" in body or "inappropriate" in body.lower()
-            )
+            moderated = "data_inspection_failed" in body or "inappropriate" in body.lower()
             logger.warning(
                 "VLM upstream rejected request (HTTP %d, moderated=%s): %s",
-                sc, moderated, str(e)[:200],
+                sc,
+                moderated,
+                str(e)[:200],
             )
             return HTTPException(
                 status_code=422,
@@ -454,10 +455,7 @@ def _format_yolo_detection_context(crops: list[dict], *, limit: int = 8) -> str:
 
     if not lines:
         return ""
-    return (
-        "YOLO detections to use as visual hints; verify against the image:\n"
-        + "\n".join(lines)
-    )
+    return "YOLO detections to use as visual hints; verify against the image:\n" + "\n".join(lines)
 
 
 def _format_zoom_panel_context(panels: list[dict]) -> str:
@@ -471,22 +469,16 @@ def _format_zoom_panel_context(panels: list[dict]) -> str:
         if isinstance(confidence, (int, float)):
             conf_text = f", confidence={float(confidence):.2f}"
         lines.append(
-            f"- {panel['label']}: class={panel['class']}, "
-            f"bbox={list(panel['bbox'])}{conf_text}"
+            f"- {panel['label']}: class={panel['class']}, bbox={list(panel['bbox'])}{conf_text}"
         )
     return (
         "The input image is a composite: the main full camera frame is on the "
         "left, and labeled zoom panels are on the right. Box labels in the "
         "full frame match the zoom panels. Use zoom panels for appearance "
         "details, but ground location and activity in the full frame.\n"
-        "Zoom panels:\n"
-        + "\n".join(lines)
-        + "\n\nBefore SCENE, include crop details exactly as:\n"
+        "Zoom panels:\n" + "\n".join(lines) + "\n\nBefore SCENE, include crop details exactly as:\n"
         "CROPS:\n"
-        + "\n".join(
-            f"{panel['label']}: {panel['class']}: [short phrase]"
-            for panel in panels
-        )
+        + "\n".join(f"{panel['label']}: {panel['class']}: [short phrase]" for panel in panels)
     )
 
 
@@ -497,9 +489,7 @@ def _extract_crop_descriptions(text: str, panels: list[dict]) -> list[str]:
         label = str(panel["label"])
         obj_class = str(panel["class"])
         found = ""
-        pattern = _re.compile(
-            rf"^\s*(?:[-*]\s*)?{_re.escape(label)}\s*[:.)-]\s*(.+)$"
-        )
+        pattern = _re.compile(rf"^\s*(?:[-*]\s*)?{_re.escape(label)}\s*[:.)-]\s*(.+)$")
         for line in lines:
             match = pattern.match(line.strip())
             if not match:
@@ -566,9 +556,7 @@ async def describe(req: DescribeRequest):
             frame = _decode_image(req.image_b64)
             frame_chw = _frame_to_chw(frame)
             engine = _get_vlm()
-            return engine.analyze_frame(
-                frame_chw, req.prompt, response_format=req.response_format
-            )
+            return engine.analyze_frame(frame_chw, req.prompt, response_format=req.response_format)
 
         try:
             result = await loop.run_in_executor(None, _sync_describe)

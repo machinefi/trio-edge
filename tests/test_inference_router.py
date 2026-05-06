@@ -103,9 +103,7 @@ async def test_crop_describe_uses_single_composite_vlm_call(monkeypatch):
     frame_arg = engine.analyze_frame.call_args.args[0]
     assert frame_arg.shape[0] == 3
     assert frame_arg.shape[2] > 120
-    assert response.crop_descriptions == [
-        "person: male in blue hoodie carrying backpack"
-    ]
+    assert response.crop_descriptions == ["person: male in blue hoodie carrying backpack"]
     assert response.entities["people_count"] == 1
 
 
