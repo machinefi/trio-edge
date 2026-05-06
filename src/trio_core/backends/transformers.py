@@ -58,9 +58,11 @@ class TransformersBackend(BaseBackend):
         max_tokens: int = 512,
         temperature: float = 0.0,
         top_p: float = 1.0,
+        response_format: dict | None = None,
     ) -> GenerationResult:
         import torch
 
+        del response_format  # remote-only spec; ignored by local transformers backend
         inputs = self._prepare(frames, prompt)
 
         t0 = time.monotonic()
@@ -96,11 +98,13 @@ class TransformersBackend(BaseBackend):
         max_tokens: int = 512,
         temperature: float = 0.0,
         top_p: float = 1.0,
+        response_format: dict | None = None,
     ) -> Generator[StreamChunk, None, None]:
         import threading
 
         from transformers import TextIteratorStreamer
 
+        del response_format
         inputs = self._prepare(frames, prompt)
 
         streamer = TextIteratorStreamer(self._processor, skip_prompt=True, skip_special_tokens=True)

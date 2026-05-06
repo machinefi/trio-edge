@@ -18,6 +18,7 @@ from __future__ import annotations
 import base64
 import logging
 import time
+from contextlib import nullcontext
 from io import BytesIO
 from typing import Generator
 
@@ -63,6 +64,10 @@ class RemoteHTTPBackend(BaseBackend):
         self._api_key = api_key
         self._remote_model = model
         self._client = None
+        # Stateless HTTP backend — no shared model state means no lock needed.
+        # Multiple HTTP requests run concurrently; the remote service handles
+        # its own scheduling. Overrides the default threading.Lock from BaseBackend.
+        self._lock = nullcontext()
 
     @property
     def backend_name(self) -> str:
@@ -90,6 +95,7 @@ class RemoteHTTPBackend(BaseBackend):
         max_tokens: int = 512,
         temperature: float = 0.0,
         top_p: float = 1.0,
+        response_format: dict | None = None,
     ) -> GenerationResult:
         t0 = time.monotonic()
         uris = _frames_to_data_uris(frames)
@@ -108,12 +114,17 @@ class RemoteHTTPBackend(BaseBackend):
 
         messages = [{"role": "user", "content": content}]
 
+        extra_kwargs: dict[str, object] = {}
+        if response_format is not None:
+            extra_kwargs["response_format"] = response_format
+
         response = self._client.chat.completions.create(
             model=self._remote_model,
             messages=messages,
             max_tokens=max_tokens,
             temperature=temperature,
             top_p=top_p,
+            **extra_kwargs,
         )
 
         choice = response.choices[0]
@@ -154,6 +165,7 @@ class RemoteHTTPBackend(BaseBackend):
         max_tokens: int = 512,
         temperature: float = 0.0,
         top_p: float = 1.0,
+        response_format: dict | None = None,
     ) -> Generator[StreamChunk, None, None]:
         """Stream from remote VLM API.
 
@@ -167,6 +179,7 @@ class RemoteHTTPBackend(BaseBackend):
             max_tokens=max_tokens,
             temperature=temperature,
             top_p=top_p,
+            response_format=response_format,
         )
         yield StreamChunk(
             text=result.text,

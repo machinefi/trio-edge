@@ -217,6 +217,58 @@ class TestRemoteHTTPBackend:
         assert len(text_blocks) == 1
         assert text_blocks[0]["text"] == "describe this"
 
+    def test_generate_forwards_response_format(self):
+        """response_format kwarg must reach the OpenAI SDK call when provided."""
+        from trio_core.backends.remote import RemoteHTTPBackend
+
+        b = RemoteHTTPBackend(url="https://api.example.com/v1")
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "{}"
+        mock_response.usage = None
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = mock_response
+        b._client = mock_client
+        b._loaded = True
+
+        schema = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "scene",
+                "strict": True,
+                "schema": {"type": "object", "properties": {"x": {"type": "string"}}},
+            },
+        }
+        frames = np.random.rand(1, 3, 64, 64).astype(np.float32)
+        b.generate(frames, "test", response_format=schema)
+
+        call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+        assert call_kwargs["response_format"] == schema
+
+    def test_generate_omits_response_format_when_none(self):
+        """When response_format is None, it must NOT appear in the SDK call kwargs.
+
+        Some OpenAI-compatible providers reject ``response_format=None`` even
+        though the SDK accepts it; safest to leave the key out entirely.
+        """
+        from trio_core.backends.remote import RemoteHTTPBackend
+
+        b = RemoteHTTPBackend(url="https://api.example.com/v1")
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "ok"
+        mock_response.usage = None
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = mock_response
+        b._client = mock_client
+        b._loaded = True
+
+        frames = np.random.rand(1, 3, 64, 64).astype(np.float32)
+        b.generate(frames, "test")  # no response_format arg
+
+        call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+        assert "response_format" not in call_kwargs
+
     def test_generate_handles_empty_content(self):
         from trio_core.backends.remote import RemoteHTTPBackend
 
