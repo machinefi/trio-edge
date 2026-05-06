@@ -7,7 +7,9 @@ Defines the abstract interface (BaseBackend) and shared data types
 from __future__ import annotations
 
 import logging
+import threading
 from abc import ABC, abstractmethod
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from typing import Generator
 
@@ -57,6 +59,11 @@ class BaseBackend(ABC):
         self.device_info = device_info or detect_device()
         self.adapter_path = adapter_path
         self._loaded = False
+        # Serializes generate() across threads. Local GPU backends need this
+        # because model state (KV cache, sampler) isn't reentrant. Stateless
+        # remote backends override with contextlib.nullcontext() so multiple
+        # HTTP calls run in parallel.
+        self._lock: AbstractContextManager[bool] = threading.Lock()
 
     @property
     def loaded(self) -> bool:
@@ -82,12 +89,16 @@ class BaseBackend(ABC):
         max_tokens: int = 512,
         temperature: float = 0.0,
         top_p: float = 1.0,
+        response_format: dict | None = None,
     ) -> GenerationResult:
         """Run inference on video frames.
 
         Args:
             frames: (T, C, H, W) float32 numpy array.
             prompt: User prompt / question about the video.
+            response_format: OpenAI-compatible structured-output spec
+                (e.g. ``{"type": "json_schema", "json_schema": {...}}``).
+                Honored by remote backends; ignored by local backends.
 
         Returns:
             GenerationResult with text and metrics.
@@ -103,6 +114,7 @@ class BaseBackend(ABC):
         max_tokens: int = 512,
         temperature: float = 0.0,
         top_p: float = 1.0,
+        response_format: dict | None = None,
     ) -> Generator[StreamChunk, None, None]:
         """Stream inference token by token."""
         ...

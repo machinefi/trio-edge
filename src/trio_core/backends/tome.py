@@ -226,8 +226,10 @@ class ToMeMLXBackend(MLXBackend):
         max_tokens: int = 512,
         temperature: float = 0.0,
         top_p: float = 1.0,
+        response_format: dict | None = None,
     ) -> GenerationResult:
         """Run inference with ToMe-compressed vision tokens."""
+        del response_format  # remote-only spec; ignored by ToMe local backend
         formatted, kwargs = self._prepare(frames, prompt)
 
         input_ids = kwargs.pop("input_ids")
@@ -260,7 +262,9 @@ class ToMeMLXBackend(MLXBackend):
         max_tokens: int = 512,
         temperature: float = 0.0,
         top_p: float = 1.0,
+        response_format: dict | None = None,
     ) -> Generator:
+        del response_format
         formatted, kwargs = self._prepare(frames, prompt)
 
         input_ids = kwargs.pop("input_ids")

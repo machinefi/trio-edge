@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -114,7 +113,9 @@ class TrioCore(CallbackMixin):
         self._backend: BaseBackend | None = None
         self._backend_override = backend  # "mlx", "transformers", or None for auto
         self._loaded = False
-        self._lock = threading.Lock()
+        # Generation serialization is owned by the backend (BaseBackend._lock).
+        # Local GPU backends use threading.Lock; RemoteHTTPBackend uses
+        # nullcontext so concurrent HTTP calls run in parallel.
         self._deduplicator = TemporalDeduplicator(threshold=self.config.dedup_threshold)
         self._motion_gate = (
             MotionGate(threshold=self.config.motion_threshold)
@@ -240,6 +241,7 @@ class TrioCore(CallbackMixin):
         *,
         max_tokens: int | None = None,
         temperature: float | None = None,
+        response_format: dict | None = None,
     ) -> VideoResult:
         """Analyze a video with the loaded VLM.
 
@@ -299,7 +301,9 @@ class TrioCore(CallbackMixin):
             metrics.frames_after_motion = frames.shape[0]
 
         # ── Phase 2: Inference ───────────────────────────────────────────
-        with self._lock:
+        # Backend owns its own lock — local GPU backends serialize, remote
+        # backends run in parallel.
+        with self._backend._lock:
             with p_inf:
                 self.run_callbacks("on_vlm_start")
                 gen_result = self._backend.generate(
@@ -308,6 +312,7 @@ class TrioCore(CallbackMixin):
                     max_tokens=max_tokens,
                     temperature=temperature,
                     top_p=self.config.top_p,
+                    response_format=response_format,
                 )
 
         # ── Phase 3: Postprocess ─────────────────────────────────────────
@@ -386,7 +391,7 @@ class TrioCore(CallbackMixin):
 
         def _run_sync():
             try:
-                with self._lock:
+                with self._backend._lock:
                     for chunk in self._backend.stream_generate(
                         frames,
                         prompt,
@@ -424,13 +429,20 @@ class TrioCore(CallbackMixin):
         *,
         max_tokens: int | None = None,
         temperature: float | None = None,
+        response_format: dict | None = None,
     ) -> VideoResult:
         """Analyze a single frame (image). Convenience wrapper."""
         if frame.ndim == 3:
             if frame.shape[2] in (1, 3, 4):
                 frame = frame.transpose(2, 0, 1)
             frame = frame[np.newaxis]
-        return self.analyze_video(frame, prompt, max_tokens=max_tokens, temperature=temperature)
+        return self.analyze_video(
+            frame,
+            prompt,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            response_format=response_format,
+        )
 
     def health(self) -> dict[str, Any]:
         """Return engine health status."""

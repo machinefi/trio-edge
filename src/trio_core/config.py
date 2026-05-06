@@ -142,6 +142,16 @@ class EngineConfig(BaseSettings):
         description="Model name for remote VLM API (e.g. qwen-vl-plus, qwen-vl-max)",
     )
 
+    # API-layer concurrency
+    vlm_api_concurrency: int = Field(
+        default=1,
+        ge=1,
+        description="Max concurrent VLM requests at the FastAPI handler. "
+        "Default 1 protects local GPU backends from contention. "
+        "Raise to 8-16 when remote_vlm_url is set, since the remote service "
+        "handles its own concurrency and the local lock is bypassed.",
+    )
+
     # Cache (Phase 2)
     cache_enabled: bool = Field(default=False, description="Enable video cache")
     cache_max_entries: int = Field(default=50, description="Max cache entries")
