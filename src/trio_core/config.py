@@ -144,12 +144,14 @@ class EngineConfig(BaseSettings):
 
     # API-layer concurrency
     vlm_api_concurrency: int = Field(
-        default=1,
+        default=16,
         ge=1,
         description="Max concurrent VLM requests at the FastAPI handler. "
-        "Default 1 protects local GPU backends from contention. "
-        "Raise to 8-16 when remote_vlm_url is set, since the remote service "
-        "handles its own concurrency and the local lock is bypassed.",
+        "Local backends still serialize generation via their own "
+        "BaseBackend._lock, so a higher value here is safe — extra requests "
+        "just wait at the lock. Remote backends use nullcontext(), so this "
+        "value caps the actual number of parallel HTTPS calls. Lower it "
+        "if a remote provider rate-limits aggressively.",
     )
 
     # Cache (Phase 2)
