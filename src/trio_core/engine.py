@@ -242,6 +242,7 @@ class TrioCore(CallbackMixin):
         max_tokens: int | None = None,
         temperature: float | None = None,
         response_format: dict | None = None,
+        model: str | None = None,
     ) -> VideoResult:
         """Analyze a video with the loaded VLM.
 
@@ -313,6 +314,7 @@ class TrioCore(CallbackMixin):
                     temperature=temperature,
                     top_p=self.config.top_p,
                     response_format=response_format,
+                    model=model,
                 )
 
         # ── Phase 3: Postprocess ─────────────────────────────────────────
@@ -430,6 +432,7 @@ class TrioCore(CallbackMixin):
         max_tokens: int | None = None,
         temperature: float | None = None,
         response_format: dict | None = None,
+        model: str | None = None,
     ) -> VideoResult:
         """Analyze a single frame (image). Convenience wrapper."""
         if frame.ndim == 3:
@@ -442,6 +445,7 @@ class TrioCore(CallbackMixin):
             max_tokens=max_tokens,
             temperature=temperature,
             response_format=response_format,
+            model=model,
         )
 
     def health(self) -> dict[str, Any]:

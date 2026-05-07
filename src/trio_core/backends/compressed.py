@@ -58,8 +58,10 @@ class CompressedMLXBackend(MLXBackend):
         temperature: float = 0.0,
         top_p: float = 1.0,
         response_format: dict | None = None,
+        model: str | None = None,
     ) -> GenerationResult:
         del response_format  # remote-only spec; ignored by compressed local backend
+        self._warn_model_override_once(model)
         tic = time.perf_counter()
         y, prompt_cache, prompt_token_count = self._custom_prefill(
             frames,
@@ -215,9 +217,11 @@ class CompressedMLXBackend(MLXBackend):
         temperature: float = 0.0,
         top_p: float = 1.0,
         response_format: dict | None = None,
+        model: str | None = None,
     ) -> Generator[StreamChunk, None, None]:
         """Real token-by-token streaming with compressed prefill."""
         del response_format
+        self._warn_model_override_once(model)
         y, prompt_cache, prompt_token_count = self._custom_prefill(
             frames,
             prompt,

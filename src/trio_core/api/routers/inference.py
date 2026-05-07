@@ -174,6 +174,26 @@ class DescribeRequest(BaseModel):
             "VLM backends. Ignored by local backends."
         ),
     )
+    max_tokens: int | None = Field(
+        default=None,
+        ge=1,
+        le=16384,
+        description=(
+            "Maximum tokens to generate. None falls back to engine default. "
+            "Structured-output prompts (e.g. JSON-schema) need a higher value "
+            "than free-form description."
+        ),
+    )
+    model: str | None = Field(
+        default=None,
+        max_length=128,
+        description=(
+            "Override the server-default VLM model for this request. Forwarded "
+            "to remote backends (the model name is passed straight to the "
+            "OpenAI-compatible chat.completions call). Local backends cannot "
+            "swap models per-request and will log a warning, then ignore."
+        ),
+    )
 
 
 class DescribeResponse(BaseModel):
@@ -207,6 +227,14 @@ class CropDescribeRequest(BaseModel):
         description=(
             "OpenAI-compatible structured-output spec, forwarded to remote "
             "VLM backends. Ignored by local backends."
+        ),
+    )
+    model: str | None = Field(
+        default=None,
+        max_length=128,
+        description=(
+            "Override the server-default VLM model for this request. Forwarded "
+            "to remote backends; ignored (with a warning) by local backends."
         ),
     )
 
@@ -556,7 +584,13 @@ async def describe(req: DescribeRequest):
             frame = _decode_image(req.image_b64)
             frame_chw = _frame_to_chw(frame)
             engine = _get_vlm()
-            return engine.analyze_frame(frame_chw, req.prompt, response_format=req.response_format)
+            return engine.analyze_frame(
+                frame_chw,
+                req.prompt,
+                max_tokens=req.max_tokens,
+                response_format=req.response_format,
+                model=req.model,
+            )
 
         try:
             result = await loop.run_in_executor(None, _sync_describe)
@@ -638,6 +672,7 @@ async def _crop_describe_inner(req: CropDescribeRequest):
             frame_chw,
             scene_prompt,
             response_format=req.response_format,
+            model=req.model,
         ),
     )
     text = _strip_thinking(result.text or "")

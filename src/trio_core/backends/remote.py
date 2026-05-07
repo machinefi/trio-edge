@@ -96,6 +96,7 @@ class RemoteHTTPBackend(BaseBackend):
         temperature: float = 0.0,
         top_p: float = 1.0,
         response_format: dict | None = None,
+        model: str | None = None,
     ) -> GenerationResult:
         t0 = time.monotonic()
         uris = _frames_to_data_uris(frames)
@@ -118,8 +119,9 @@ class RemoteHTTPBackend(BaseBackend):
         if response_format is not None:
             extra_kwargs["response_format"] = response_format
 
+        effective_model = model or self._remote_model
         response = self._client.chat.completions.create(
-            model=self._remote_model,
+            model=effective_model,
             messages=messages,
             max_tokens=max_tokens,
             temperature=temperature,
@@ -140,12 +142,13 @@ class RemoteHTTPBackend(BaseBackend):
         gen_tps = completion_tokens / max(elapsed, 1e-9)
 
         logger.info(
-            "[Remote] generate: %d frames, %d+%d tokens, %.1f tps, %.0fms",
+            "[Remote] generate: %d frames, %d+%d tokens, %.1f tps, %.0fms (model=%s)",
             frames.shape[0],
             prompt_tokens,
             completion_tokens,
             gen_tps,
             elapsed * 1000,
+            effective_model,
         )
 
         return GenerationResult(
@@ -166,6 +169,7 @@ class RemoteHTTPBackend(BaseBackend):
         temperature: float = 0.0,
         top_p: float = 1.0,
         response_format: dict | None = None,
+        model: str | None = None,
     ) -> Generator[StreamChunk, None, None]:
         """Stream from remote VLM API.
 
@@ -180,6 +184,7 @@ class RemoteHTTPBackend(BaseBackend):
             temperature=temperature,
             top_p=top_p,
             response_format=response_format,
+            model=model,
         )
         yield StreamChunk(
             text=result.text,

@@ -269,6 +269,50 @@ class TestRemoteHTTPBackend:
         call_kwargs = mock_client.chat.completions.create.call_args.kwargs
         assert "response_format" not in call_kwargs
 
+    def test_generate_uses_per_request_model_override(self):
+        """When ``model`` is passed to generate(), the OpenAI call uses it.
+
+        This is what lets the cortex client route VLM and segmentation
+        requests to different upstream models without a server reload.
+        """
+        from trio_core.backends.remote import RemoteHTTPBackend
+
+        b = RemoteHTTPBackend(url="https://api.example.com/v1", model="qwen-vl-plus")
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "ok"
+        mock_response.usage = None
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = mock_response
+        b._client = mock_client
+        b._loaded = True
+
+        frames = np.random.rand(1, 3, 64, 64).astype(np.float32)
+        b.generate(frames, "test", model="qwen3.6-plus")
+
+        call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+        assert call_kwargs["model"] == "qwen3.6-plus"
+
+    def test_generate_falls_back_to_configured_model(self):
+        """When ``model`` is omitted, the OpenAI call uses the configured one."""
+        from trio_core.backends.remote import RemoteHTTPBackend
+
+        b = RemoteHTTPBackend(url="https://api.example.com/v1", model="qwen-vl-plus")
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "ok"
+        mock_response.usage = None
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = mock_response
+        b._client = mock_client
+        b._loaded = True
+
+        frames = np.random.rand(1, 3, 64, 64).astype(np.float32)
+        b.generate(frames, "test")  # no model override
+
+        call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+        assert call_kwargs["model"] == "qwen-vl-plus"
+
     def test_generate_handles_empty_content(self):
         from trio_core.backends.remote import RemoteHTTPBackend
 
