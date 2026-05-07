@@ -498,10 +498,12 @@ class MLXBackend(BaseBackend):
         temperature: float = 0.0,
         top_p: float = 1.0,
         response_format: dict | None = None,
+        model: str | None = None,
     ) -> GenerationResult:
         # response_format is a remote-only structured-output spec; local
         # MLX inference doesn't honor it — ignored.
         del response_format
+        self._warn_model_override_once(model)
         formatted, kwargs = self._prepare(frames, prompt)
         input_ids = kwargs.pop("input_ids")
         pixel_values = kwargs.pop("pixel_values")
@@ -525,8 +527,10 @@ class MLXBackend(BaseBackend):
         temperature: float = 0.0,
         top_p: float = 1.0,
         response_format: dict | None = None,
+        model: str | None = None,
     ) -> Generator[StreamChunk, None, None]:
         del response_format
+        self._warn_model_override_once(model)
         formatted, kwargs = self._prepare(frames, prompt)
         input_ids = kwargs.pop("input_ids")
         pixel_values = kwargs.pop("pixel_values")

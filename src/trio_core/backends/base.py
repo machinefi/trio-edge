@@ -64,6 +64,29 @@ class BaseBackend(ABC):
         # remote backends override with contextlib.nullcontext() so multiple
         # HTTP calls run in parallel.
         self._lock: AbstractContextManager[bool] = threading.Lock()
+        self._model_override_warned = False
+
+    def _warn_model_override_once(self, requested: str | None) -> None:
+        """Local backends call this when a per-request ``model`` is set.
+
+        Local GPU backends load one model at startup and cannot swap per
+        request, so the override is ignored. We log a single warning per
+        backend instance to avoid log spam in production paths that pass a
+        model name on every call.
+        """
+        if not requested or requested == self.model_name:
+            return
+        if self._model_override_warned:
+            return
+        self._model_override_warned = True
+        logger.warning(
+            "%s backend cannot swap model per request; ignoring model=%r and "
+            "using loaded model %r. (Per-request override is honored only by "
+            "RemoteHTTPBackend.)",
+            self.backend_name,
+            requested,
+            self.model_name,
+        )
 
     @property
     def loaded(self) -> bool:
@@ -90,6 +113,7 @@ class BaseBackend(ABC):
         temperature: float = 0.0,
         top_p: float = 1.0,
         response_format: dict | None = None,
+        model: str | None = None,
     ) -> GenerationResult:
         """Run inference on video frames.
 
@@ -99,6 +123,10 @@ class BaseBackend(ABC):
             response_format: OpenAI-compatible structured-output spec
                 (e.g. ``{"type": "json_schema", "json_schema": {...}}``).
                 Honored by remote backends; ignored by local backends.
+            model: Per-request override of the backend's configured model.
+                Honored by ``RemoteHTTPBackend`` (passed through to the
+                upstream chat.completions call); local backends cannot swap
+                models per-request and log a one-shot warning, then ignore.
 
         Returns:
             GenerationResult with text and metrics.
@@ -115,6 +143,7 @@ class BaseBackend(ABC):
         temperature: float = 0.0,
         top_p: float = 1.0,
         response_format: dict | None = None,
+        model: str | None = None,
     ) -> Generator[StreamChunk, None, None]:
         """Stream inference token by token."""
         ...
