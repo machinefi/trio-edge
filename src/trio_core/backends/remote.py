@@ -97,6 +97,7 @@ class RemoteHTTPBackend(BaseBackend):
         top_p: float = 1.0,
         response_format: dict | None = None,
         model: str | None = None,
+        extra_body: dict | None = None,
     ) -> GenerationResult:
         t0 = time.monotonic()
         uris = _frames_to_data_uris(frames)
@@ -118,6 +119,8 @@ class RemoteHTTPBackend(BaseBackend):
         extra_kwargs: dict[str, object] = {}
         if response_format is not None:
             extra_kwargs["response_format"] = response_format
+        if extra_body is not None:
+            extra_kwargs["extra_body"] = extra_body
 
         effective_model = model or self._remote_model
         response = self._client.chat.completions.create(
@@ -170,6 +173,7 @@ class RemoteHTTPBackend(BaseBackend):
         top_p: float = 1.0,
         response_format: dict | None = None,
         model: str | None = None,
+        extra_body: dict | None = None,
     ) -> Generator[StreamChunk, None, None]:
         """Stream from remote VLM API.
 

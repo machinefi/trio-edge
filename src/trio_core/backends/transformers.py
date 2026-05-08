@@ -60,10 +60,11 @@ class TransformersBackend(BaseBackend):
         top_p: float = 1.0,
         response_format: dict | None = None,
         model: str | None = None,
+        extra_body: dict | None = None,
     ) -> GenerationResult:
         import torch
 
-        del response_format  # remote-only spec; ignored by local transformers backend
+        del response_format, extra_body  # remote-only specs; ignored by local transformers backend
         self._warn_model_override_once(model)
         inputs = self._prepare(frames, prompt)
 

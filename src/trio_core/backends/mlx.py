@@ -499,10 +499,11 @@ class MLXBackend(BaseBackend):
         top_p: float = 1.0,
         response_format: dict | None = None,
         model: str | None = None,
+        extra_body: dict | None = None,
     ) -> GenerationResult:
-        # response_format is a remote-only structured-output spec; local
-        # MLX inference doesn't honor it — ignored.
-        del response_format
+        # response_format / extra_body are remote-only specs; local MLX
+        # inference doesn't honor them — ignored.
+        del response_format, extra_body
         self._warn_model_override_once(model)
         formatted, kwargs = self._prepare(frames, prompt)
         input_ids = kwargs.pop("input_ids")

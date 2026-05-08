@@ -59,8 +59,9 @@ class CompressedMLXBackend(MLXBackend):
         top_p: float = 1.0,
         response_format: dict | None = None,
         model: str | None = None,
+        extra_body: dict | None = None,
     ) -> GenerationResult:
-        del response_format  # remote-only spec; ignored by compressed local backend
+        del response_format, extra_body  # remote-only specs; ignored by compressed local backend
         self._warn_model_override_once(model)
         tic = time.perf_counter()
         y, prompt_cache, prompt_token_count = self._custom_prefill(
