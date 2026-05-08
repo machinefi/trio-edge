@@ -108,6 +108,106 @@ async def test_crop_describe_uses_single_composite_vlm_call(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_crop_describe_uses_summary_field_from_scene_schema(monkeypatch):
+    """SCENE_SCHEMA output (lowercase `summary`) should populate description.
+
+    Previously the entities branch only looked at uppercase `DESCRIPTION` /
+    `SCENE` keys and fell through to a "0 people, N vehicles: ..." parts
+    template, throwing away the model's natural-language summary.
+    """
+    engine = MagicMock()
+    engine._profile = SimpleNamespace(merge_factor=32)
+    engine.analyze_frame.return_value = VideoResult(
+        text=(
+            '{"summary":"A car wash area with vehicles in motion and parked.",'
+            '"people_count":0,"vehicle_count":3,'
+            '"persons":[],'
+            '"vehicles":['
+            '{"type":"sedan","color":"black","make":"unknown","action":"parked","is_known":false},'
+            '{"type":"suv","color":"white","make":"toyota","action":"parked","is_known":true},'
+            '{"type":"sedan","color":"red","make":"hyundai","action":"moving","is_known":false}'
+            "],"
+            '"scene_type":"car_wash_area","activity_level":"moderate"}'
+        ),
+        metrics=InferenceMetrics(latency_ms=100.0),
+    )
+    monkeypatch.setattr(inference, "_get_vlm", lambda: engine)
+
+    req = inference.CropDescribeRequest(image_b64=_image_b64(), crops=[], max_crops=0)
+    response = await inference._crop_describe_inner(req)
+
+    assert response.description == "A car wash area with vehicles in motion and parked."
+    assert response.entities["scene_type"] == "car_wash_area"
+    # `summary` is read without popping so cortex's own override still sees it
+    assert response.entities.get("summary")
+
+
+@pytest.mark.asyncio
+async def test_crop_describe_truncated_json_does_not_dump_raw_garbage(monkeypatch, caplog):
+    """Truncated JSON (no closing brace) must not leak into description.
+
+    Regression: the `else: desc = clean[:300]` fallback was storing 300-char
+    raw JSON slices into observations.description, ending mid-token.
+    """
+    engine = MagicMock()
+    engine._profile = SimpleNamespace(merge_factor=32)
+    truncated = (
+        '{\n  "summary": "A scene description",\n'
+        '  "scene_type": "car_wash_area",\n'
+        '  "vehicles": [\n    {\n      "action": "parked",\n      "is_know'
+    )
+    engine.analyze_frame.return_value = VideoResult(
+        text=truncated, metrics=InferenceMetrics(latency_ms=100.0)
+    )
+    monkeypatch.setattr(inference, "_get_vlm", lambda: engine)
+
+    req = inference.CropDescribeRequest(image_b64=_image_b64(), crops=[], max_crops=0)
+    with caplog.at_level("WARNING", logger="trio.inference"):
+        response = await inference._crop_describe_inner(req)
+
+    assert response.description == ""
+    assert "{" not in response.description
+    assert any("truncation suspected" in rec.message for rec in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_crop_describe_malformed_json_does_not_dump_raw_garbage(monkeypatch, caplog):
+    """JSON with a closing brace but invalid syntax also must not leak raw text."""
+    engine = MagicMock()
+    engine._profile = SimpleNamespace(merge_factor=32)
+    # Trailing comma — has both `{` and `}` so json.loads is attempted and fails.
+    malformed = '{"summary": "x", "vehicles": [{"action": "parked",}]}'
+    engine.analyze_frame.return_value = VideoResult(
+        text=malformed, metrics=InferenceMetrics(latency_ms=100.0)
+    )
+    monkeypatch.setattr(inference, "_get_vlm", lambda: engine)
+
+    req = inference.CropDescribeRequest(image_b64=_image_b64(), crops=[], max_crops=0)
+    with caplog.at_level("WARNING", logger="trio.inference"):
+        response = await inference._crop_describe_inner(req)
+
+    assert response.description == ""
+    assert any("JSON parse failed" in rec.message for rec in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_crop_describe_plain_prose_still_uses_300_char_slice(monkeypatch):
+    """Plain prose (not JSON-shaped) should still fall through to clean[:300]."""
+    engine = MagicMock()
+    engine._profile = SimpleNamespace(merge_factor=32)
+    engine.analyze_frame.return_value = VideoResult(
+        text="A quiet street at dawn with no visible activity.",
+        metrics=InferenceMetrics(latency_ms=100.0),
+    )
+    monkeypatch.setattr(inference, "_get_vlm", lambda: engine)
+
+    req = inference.CropDescribeRequest(image_b64=_image_b64(), crops=[], max_crops=0)
+    response = await inference._crop_describe_inner(req)
+
+    assert response.description == "A quiet street at dawn with no visible activity."
+
+
+@pytest.mark.asyncio
 async def test_crop_describe_max_crops_zero_keeps_single_full_frame(monkeypatch):
     engine = MagicMock()
     engine._profile = SimpleNamespace(merge_factor=32)

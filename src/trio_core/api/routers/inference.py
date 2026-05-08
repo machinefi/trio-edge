@@ -705,11 +705,28 @@ async def _crop_describe_inner(req: CropDescribeRequest):
 
     # Try to extract JSON (from any format)
     s, e = clean.find("{"), clean.rfind("}")
+    json_parse_failed = False
     if s >= 0 and e > s:
         try:
             entities = json.loads(clean[s : e + 1])
-        except json.JSONDecodeError:
-            pass
+        except json.JSONDecodeError as exc:
+            json_parse_failed = True
+            logger.warning(
+                "crop_describe: JSON parse failed (%s) text_len=%d head=%r tail=%r",
+                exc.msg,
+                len(clean),
+                clean[:80],
+                clean[-80:],
+            )
+    elif clean.startswith("{"):
+        # No closing brace at all — almost certainly truncation.
+        json_parse_failed = True
+        logger.warning(
+            "crop_describe: JSON-shaped text has no closing brace (truncation suspected) text_len=%d head=%r tail=%r",
+            len(clean),
+            clean[:80],
+            clean[-80:],
+        )
     entities = _normalize_entities(entities)
 
     # Extract description — combine SCENE + ACTIVITIES + NOTABLE into rich description
@@ -749,6 +766,10 @@ async def _crop_describe_inner(req: CropDescribeRequest):
             desc = entities.pop("DESCRIPTION")
         elif "SCENE" in entities:
             desc = entities.pop("SCENE")
+        elif isinstance(entities.get("summary"), str) and entities["summary"]:
+            # SCENE_SCHEMA output (lowercase `summary`); read without popping
+            # so callers that re-parse the entities dict still see it.
+            desc = entities["summary"]
         else:
             parts = []
             for p in entities.get("persons") or []:
@@ -764,6 +785,12 @@ async def _crop_describe_inner(req: CropDescribeRequest):
             )
             if parts:
                 desc += ": " + ", ".join(parts[:5])
+    elif json_parse_failed:
+        # The model emitted JSON-shaped text but it didn't parse. Slicing
+        # `clean[:300]` would store raw garbage in observations.description
+        # (and trip downstream substring-matching). Prefer empty desc — the
+        # fallback below will still synthesize a minimal `entities` dict.
+        desc = ""
     else:
         desc = clean[:300] if clean else ""
 
