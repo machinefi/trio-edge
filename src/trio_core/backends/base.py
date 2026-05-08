@@ -114,6 +114,7 @@ class BaseBackend(ABC):
         top_p: float = 1.0,
         response_format: dict | None = None,
         model: str | None = None,
+        extra_body: dict | None = None,
     ) -> GenerationResult:
         """Run inference on video frames.
 
@@ -127,6 +128,9 @@ class BaseBackend(ABC):
                 Honored by ``RemoteHTTPBackend`` (passed through to the
                 upstream chat.completions call); local backends cannot swap
                 models per-request and log a one-shot warning, then ignore.
+            extra_body: Backend-specific kwargs forwarded as the OpenAI
+                SDK ``extra_body`` (e.g. DashScope's ``enable_thinking``).
+                Honored by ``RemoteHTTPBackend``; ignored by local backends.
 
         Returns:
             GenerationResult with text and metrics.
@@ -144,6 +148,7 @@ class BaseBackend(ABC):
         top_p: float = 1.0,
         response_format: dict | None = None,
         model: str | None = None,
+        extra_body: dict | None = None,
     ) -> Generator[StreamChunk, None, None]:
         """Stream inference token by token."""
         ...

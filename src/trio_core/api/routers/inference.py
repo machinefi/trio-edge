@@ -194,6 +194,14 @@ class DescribeRequest(BaseModel):
             "swap models per-request and will log a warning, then ignore."
         ),
     )
+    extra_body: dict | None = Field(
+        default=None,
+        description=(
+            "Backend-specific kwargs forwarded as the OpenAI SDK extra_body "
+            "(e.g. DashScope's enable_thinking). Honored by RemoteHTTPBackend; "
+            "ignored by local backends."
+        ),
+    )
 
 
 class DescribeResponse(BaseModel):
@@ -590,6 +598,7 @@ async def describe(req: DescribeRequest):
                 max_tokens=req.max_tokens,
                 response_format=req.response_format,
                 model=req.model,
+                extra_body=req.extra_body,
             )
 
         try:
