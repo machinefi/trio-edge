@@ -227,7 +227,7 @@ class CropDescribeRequest(BaseModel):
     )
     scene_prompt: str = Field(
         default="",
-        max_length=4096,
+        max_length=32768,
         description="Custom scene prompt (optional, uses default if empty)",
     )
     response_format: dict | None = Field(
