@@ -108,6 +108,41 @@ async def test_crop_describe_uses_single_composite_vlm_call(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_crop_describe_forwards_max_tokens_and_extra_body(monkeypatch):
+    """Regression: req.max_tokens and req.extra_body were silently dropped
+    before reaching engine.analyze_frame, so structured-JSON prompts hit
+    the engine default (512) and truncated mid-output. Cortex observed
+    2131 'Expecting , delimiter' parse failures in /tmp/vlm.log over a
+    single night because of this. Forwarding both keeps crop-describe
+    consistent with /describe at the same router."""
+    engine = MagicMock()
+    engine._profile = SimpleNamespace(merge_factor=32)
+    engine.analyze_frame.return_value = VideoResult(
+        text='{"summary":"x","scene_type":"s","activity_level":"quiet"}',
+        metrics=InferenceMetrics(latency_ms=10.0),
+    )
+    monkeypatch.setattr(inference, "_get_vlm", lambda: engine)
+
+    req = inference.CropDescribeRequest(
+        image_b64=_image_b64(),
+        crops=[],
+        max_crops=0,
+        max_tokens=4096,
+        extra_body={"enable_thinking": False},
+    )
+
+    await inference._crop_describe_inner(req)
+
+    assert engine.analyze_frame.call_count == 1
+    kwargs = engine.analyze_frame.call_args.kwargs
+    assert kwargs["max_tokens"] == 4096, (
+        "max_tokens must reach analyze_frame; default-512 truncation was the "
+        "root cause of the JSON parse failures."
+    )
+    assert kwargs["extra_body"] == {"enable_thinking": False}
+
+
+@pytest.mark.asyncio
 async def test_crop_describe_uses_summary_field_from_scene_schema(monkeypatch):
     """SCENE_SCHEMA output (lowercase `summary`) should populate description.
 
