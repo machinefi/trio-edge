@@ -8,6 +8,15 @@ from trio_core.cli._shared import _setup_logging, app
 from trio_core.cli.cam import _resolve_rtsp_url
 from trio_core.http_ingest_relay import HttpIngestRelay, RelayError
 
+# Signals that trigger graceful relay shutdown. SIGTERM is essential
+# because the production wrapper script wraps each launch in
+# `timeout --signal=TERM --kill-after=10 360s`; without a handler,
+# Python's default terminates the process before the segment
+# TemporaryDirectory context manager runs, leaking files in /tmp.
+def _shutdown_signals():
+    import signal
+    return (signal.SIGINT, signal.SIGTERM)
+
 
 @app.command(help="Stream a video feed to Trio Cloud.")
 def relay(
@@ -103,14 +112,14 @@ def relay(
         main_task = asyncio.create_task(relay_obj.run())
         shutdown_triggered = False
 
-        def _on_sigint() -> None:
+        def _on_shutdown_signal() -> None:
             nonlocal shutdown_triggered
             shutdown_triggered = True
             main_task.cancel()
 
-        import signal
-
-        loop.add_signal_handler(signal.SIGINT, _on_sigint)
+        shutdown_signals = _shutdown_signals()
+        for sig in shutdown_signals:
+            loop.add_signal_handler(sig, _on_shutdown_signal)
         try:
             await main_task
         except asyncio.CancelledError:
@@ -118,7 +127,8 @@ def relay(
         finally:
             if shutdown_triggered:
                 typer.echo("\nStopping relay...")
-            loop.remove_signal_handler(signal.SIGINT)
+            for sig in shutdown_signals:
+                loop.remove_signal_handler(sig)
             await relay_obj.teardown()
             if shutdown_triggered:
                 typer.echo("Disconnected.")
