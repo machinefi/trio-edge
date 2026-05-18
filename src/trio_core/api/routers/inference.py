@@ -245,6 +245,25 @@ class CropDescribeRequest(BaseModel):
             "to remote backends; ignored (with a warning) by local backends."
         ),
     )
+    max_tokens: int | None = Field(
+        default=None,
+        ge=1,
+        le=16384,
+        description=(
+            "Maximum tokens to generate. None falls back to engine default "
+            "(512), which is too small for the structured-JSON scene schema "
+            "and silently truncates responses mid-output — observed as "
+            "'Expecting , delimiter' parse failures in cortex."
+        ),
+    )
+    extra_body: dict | None = Field(
+        default=None,
+        description=(
+            "Backend-specific kwargs forwarded as the OpenAI SDK extra_body "
+            "(e.g. DashScope's enable_thinking). Honored by RemoteHTTPBackend; "
+            "ignored by local backends."
+        ),
+    )
 
 
 class CropDescribeResponse(BaseModel):
@@ -680,8 +699,10 @@ async def _crop_describe_inner(req: CropDescribeRequest):
             engine.analyze_frame,
             frame_chw,
             scene_prompt,
+            max_tokens=req.max_tokens,
             response_format=req.response_format,
             model=req.model,
+            extra_body=req.extra_body,
         ),
     )
     text = _strip_thinking(result.text or "")
