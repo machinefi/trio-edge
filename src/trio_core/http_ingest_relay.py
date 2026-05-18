@@ -79,9 +79,7 @@ def _clean_stale_segment_tmpdirs(
         try:
             _shutil.rmtree(path, ignore_errors=True)
             removed += 1
-            logger.info(
-                "Cleaned stale segment tmpdir %s (age=%.0fs)", path, age
-            )
+            logger.info("Cleaned stale segment tmpdir %s (age=%.0fs)", path, age)
         except OSError:
             logger.debug("Failed to clean %s", path, exc_info=True)
     return removed
@@ -547,9 +545,7 @@ class _SegmentUploader:
         finally:
             await queue.put(None)
 
-    async def _upload_queued(
-        self, queue: asyncio.Queue[_SegmentFile | None]
-    ) -> bool:
+    async def _upload_queued(self, queue: asyncio.Queue[_SegmentFile | None]) -> bool:
         # Transient upload failures (5xx, timeout, transport error) are
         # logged and skipped — the segment file is unlinked and we move on
         # to the next one. Only FATAL outcomes (401/403 — bad/revoked key)
@@ -590,9 +586,7 @@ class _SegmentUploader:
         content = await asyncio.to_thread(segment.path.read_bytes)
         try:
             resp = await asyncio.wait_for(
-                self._client.post(
-                    self._ingest_url, content=content, headers=self._headers
-                ),
+                self._client.post(self._ingest_url, content=content, headers=self._headers),
                 timeout=self._upload_timeout_seconds,
             )
         except asyncio.TimeoutError:

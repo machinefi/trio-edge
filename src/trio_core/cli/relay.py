@@ -8,6 +8,7 @@ from trio_core.cli._shared import _setup_logging, app
 from trio_core.cli.cam import _resolve_rtsp_url
 from trio_core.http_ingest_relay import HttpIngestRelay, RelayError
 
+
 # Signals that trigger graceful relay shutdown. SIGTERM is essential
 # because the production wrapper script wraps each launch in
 # `timeout --signal=TERM --kill-after=10 360s`; without a handler,
@@ -15,6 +16,7 @@ from trio_core.http_ingest_relay import HttpIngestRelay, RelayError
 # TemporaryDirectory context manager runs, leaking files in /tmp.
 def _shutdown_signals():
     import signal
+
     return (signal.SIGINT, signal.SIGTERM)
 
 
