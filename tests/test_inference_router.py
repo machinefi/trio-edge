@@ -62,16 +62,10 @@ def test_normalize_entities_schema_mode_preserves_empty_make():
     # invent fields or backfill empty `make` with description. Previously
     # `setdefault("brand", "")` injected a brand key the schema forbids,
     # and an empty `make` survived as empty rather than being recovered.
-    raw = {
-        "vehicles": [
-            {"id": "nv0", "type": "suv", "action": "parked", "make": ""}
-        ]
-    }
+    raw = {"vehicles": [{"id": "nv0", "type": "suv", "action": "parked", "make": ""}]}
     entities = inference._normalize_entities(raw, schema_mode=True)
 
-    assert entities["vehicles"] == [
-        {"id": "nv0", "type": "suv", "action": "parked", "make": ""}
-    ]
+    assert entities["vehicles"] == [{"id": "nv0", "type": "suv", "action": "parked", "make": ""}]
     assert "brand" not in entities["vehicles"][0]
 
 
@@ -290,7 +284,10 @@ async def test_crop_describe_schema_mode_skips_yolo_context_prepend(monkeypatch)
         crops=[{"bbox": [0, 0, 10, 10], "class": "car", "confidence": 0.9}],
         max_crops=0,
         scene_prompt=caller_prompt,
-        response_format={"type": "json_schema", "json_schema": {"name": "scene", "strict": True, "schema": {}}},
+        response_format={
+            "type": "json_schema",
+            "json_schema": {"name": "scene", "strict": True, "schema": {}},
+        },
     )
 
     await inference._crop_describe_inner(req)

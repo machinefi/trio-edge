@@ -699,11 +699,7 @@ async def _crop_describe_inner(req: CropDescribeRequest):
 
     if zoom_panels:
         scene_prompt = _format_zoom_panel_context(zoom_panels) + "\n\n" + scene_prompt
-    elif (
-        req.crops
-        and req.response_format is None
-        and "YOLO detections" not in scene_prompt
-    ):
+    elif req.crops and req.response_format is None and "YOLO detections" not in scene_prompt:
         # Schema callers (cortex) already enumerate detections in their own
         # prompt — auto-prepending a second YOLO bbox table duplicates the
         # visual hint and the differing format confuses the model.
