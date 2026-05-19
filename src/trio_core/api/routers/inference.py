@@ -560,7 +560,11 @@ def _extract_crop_descriptions(text: str, panels: list[dict]) -> list[str]:
 
 
 def _normalize_entity_item(kind: str, item) -> dict:
-    """Normalize model-emitted entity items (strings or dicts) to a standard dict."""
+    """Normalize a free-text-mode entity item into the default-prompt shape.
+
+    Only called when no caller-supplied JSON schema is in effect. With a schema,
+    the caller owns the wire shape and trio-core must not invent fields.
+    """
     if isinstance(item, dict):
         norm = dict(item)
     else:
@@ -581,10 +585,19 @@ def _normalize_entity_item(kind: str, item) -> dict:
     return norm
 
 
-def _normalize_entities(entities: dict | None) -> dict:
-    """Normalize parsed entities payload into the shape downstream code expects."""
+def _normalize_entities(entities: dict | None, *, schema_mode: bool = False) -> dict:
+    """Normalize parsed entities payload into the shape downstream code expects.
+
+    When ``schema_mode`` is True the caller passed a json_schema response_format
+    so the wire shape is contractually fixed: we return the parsed dict
+    unchanged. Otherwise we apply the legacy free-text fallback that wraps
+    string entities into dicts for the default scene_prompt path.
+    """
     if not isinstance(entities, dict):
         return {}
+
+    if schema_mode:
+        return dict(entities)
 
     res = dict(entities)
     for k in ("persons", "vehicles", "animals"):
@@ -686,7 +699,10 @@ async def _crop_describe_inner(req: CropDescribeRequest):
 
     if zoom_panels:
         scene_prompt = _format_zoom_panel_context(zoom_panels) + "\n\n" + scene_prompt
-    elif req.crops and "YOLO detections" not in scene_prompt:
+    elif req.crops and req.response_format is None and "YOLO detections" not in scene_prompt:
+        # Schema callers (cortex) already enumerate detections in their own
+        # prompt — auto-prepending a second YOLO bbox table duplicates the
+        # visual hint and the differing format confuses the model.
         yolo_context = _format_yolo_detection_context(req.crops)
         if yolo_context:
             scene_prompt = yolo_context + "\n\n" + scene_prompt
@@ -748,7 +764,7 @@ async def _crop_describe_inner(req: CropDescribeRequest):
             clean[:80],
             clean[-80:],
         )
-    entities = _normalize_entities(entities)
+    entities = _normalize_entities(entities, schema_mode=req.response_format is not None)
 
     # Extract description — combine SCENE + ACTIVITIES + NOTABLE into rich description
     scene_line = ""

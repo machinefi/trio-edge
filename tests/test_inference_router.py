@@ -57,6 +57,28 @@ def test_normalize_entities_converts_string_persons_to_dicts():
     ]
 
 
+def test_normalize_entities_schema_mode_preserves_empty_make():
+    # Regression: with a caller-supplied json_schema, trio-core must not
+    # invent fields or backfill empty `make` with description. Previously
+    # `setdefault("brand", "")` injected a brand key the schema forbids,
+    # and an empty `make` survived as empty rather than being recovered.
+    raw = {"vehicles": [{"id": "nv0", "type": "suv", "action": "parked", "make": ""}]}
+    entities = inference._normalize_entities(raw, schema_mode=True)
+
+    assert entities["vehicles"] == [{"id": "nv0", "type": "suv", "action": "parked", "make": ""}]
+    assert "brand" not in entities["vehicles"][0]
+
+
+def test_normalize_entities_schema_mode_drops_extra_keys_in_passthrough():
+    # Schema mode must not iterate animals (or any key the caller's schema
+    # didn't declare). Pass-through means: whatever the model emitted is
+    # what downstream consumers see, no trio-core invention.
+    raw = {"vehicles": [{"id": "nv0", "make": "Audi"}], "animals": []}
+    entities = inference._normalize_entities(raw, schema_mode=True)
+
+    assert entities == raw
+
+
 def _image_b64(width: int = 120, height: int = 80) -> str:
     image = np.zeros((height, width, 3), dtype=np.uint8)
     image[:] = (20, 40, 60)
@@ -240,6 +262,63 @@ async def test_crop_describe_plain_prose_still_uses_300_char_slice(monkeypatch):
     response = await inference._crop_describe_inner(req)
 
     assert response.description == "A quiet street at dawn with no visible activity."
+
+
+@pytest.mark.asyncio
+async def test_crop_describe_schema_mode_skips_yolo_context_prepend(monkeypatch):
+    # Schema callers (cortex) already enumerate their own DETECTIONS block in
+    # scene_prompt. trio-core must not auto-prepend a second YOLO bbox table
+    # — the duplicate hints degrade attribute extraction.
+    engine = MagicMock()
+    engine._profile = SimpleNamespace(merge_factor=32)
+    engine.analyze_frame.return_value = VideoResult(
+        text='{"summary":"x","scene_type":"car_wash","activity_level":"quiet",'
+        '"persons":[],"vehicles":[],"no_significant_change":false}',
+        metrics=InferenceMetrics(latency_ms=100.0),
+    )
+    monkeypatch.setattr(inference, "_get_vlm", lambda: engine)
+
+    caller_prompt = "Use DETECTIONS as row anchors.\nDETECTIONS:\n  id=nv0 vehicle bbox=[0,0,10,10]"
+    req = inference.CropDescribeRequest(
+        image_b64=_image_b64(),
+        crops=[{"bbox": [0, 0, 10, 10], "class": "car", "confidence": 0.9}],
+        max_crops=0,
+        scene_prompt=caller_prompt,
+        response_format={
+            "type": "json_schema",
+            "json_schema": {"name": "scene", "strict": True, "schema": {}},
+        },
+    )
+
+    await inference._crop_describe_inner(req)
+
+    sent_prompt = engine.analyze_frame.call_args.args[1]
+    assert "YOLO detections to use as visual hints" not in sent_prompt
+    assert sent_prompt == caller_prompt
+
+
+@pytest.mark.asyncio
+async def test_crop_describe_default_prompt_still_gets_yolo_context(monkeypatch):
+    # Without response_format the legacy free-text scene_prompt benefits from
+    # the auto-prepended YOLO context. Preserve that path.
+    engine = MagicMock()
+    engine._profile = SimpleNamespace(merge_factor=32)
+    engine.analyze_frame.return_value = VideoResult(
+        text="SCENE: x\nACTIVITIES: y\nNOTABLE: nothing unusual",
+        metrics=InferenceMetrics(latency_ms=100.0),
+    )
+    monkeypatch.setattr(inference, "_get_vlm", lambda: engine)
+
+    req = inference.CropDescribeRequest(
+        image_b64=_image_b64(),
+        crops=[{"bbox": [0, 0, 10, 10], "class": "car", "confidence": 0.9}],
+        max_crops=0,
+    )
+
+    await inference._crop_describe_inner(req)
+
+    sent_prompt = engine.analyze_frame.call_args.args[1]
+    assert "YOLO detections to use as visual hints" in sent_prompt
 
 
 @pytest.mark.asyncio
